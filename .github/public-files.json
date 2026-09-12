@@ -16,6 +16,7 @@
     "compose.dev.yaml",
     "compose.yaml",
     "evals/baselines/live/gate11-live-v1-c9a0cafa5a1c81b8b3164ff1bf07d29fbe1ea360.json",
+    "evals/baselines/quality/e410-agent-v1.json",
     "evals/baselines/research_v3.json",
     "evals/baselines/retrieval_v1_policy.json",
     "evals/datasets/live_eval_v1_manifest.json",
