@@ -106,7 +106,7 @@ def _allowed_path(value: str) -> bool:
     if not value or "\\" in value or any(ord(c) < 32 or ord(c) == 127 for c in value):
         return False
     path = PurePosixPath(value)
-    if path.is_absolute() or path.as_posix() != value or ".." in path.parts:
+    if not path.parts or path.is_absolute() or path.as_posix() != value or ".." in path.parts:
         return False
     parts = tuple(part.casefold() for part in path.parts)
     if any(part in FORBIDDEN_PARTS for part in parts):

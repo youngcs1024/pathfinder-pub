@@ -129,6 +129,14 @@ def test_invalid_manifests_fail_closed(repository, payload):
     assert main(["--repository", str(repository)]) == 1
 
 
+@pytest.mark.parametrize("name", [".", "..", "src/../private.py", "src//extra.py", "/private.py"])
+def test_noncanonical_inventory_paths_are_rejected_without_exception_text(repository, name, capsys):
+    inventory(repository, set(REQUIRED) | {name})
+    git(repository, "add", "--", MANIFEST)
+    assert main(["--repository", str(repository)]) == 1
+    assert "invalid_manifest" in capsys.readouterr().out
+
+
 def test_empty_prompt_fails_even_with_complete_inventory(repository, capsys):
     path = "src/app/agents/prompts/system.md"
     (repository / path).write_text("")
