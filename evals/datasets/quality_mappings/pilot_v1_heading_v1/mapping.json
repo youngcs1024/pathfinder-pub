@@ -1,0 +1,2165 @@
+{
+  "schema_version": 1,
+  "mapping_version": "quality-pilot-heading-mapping-v1",
+  "execution_source_sha": "d577706bfeb41b270cb1dbf2050f407c72d6c029",
+  "dataset_version": "quality-pilot-v1",
+  "dataset_digest": "sha256:5966c860858074251fafa7275912ef5f0db73746d80528b0d5377e181d7cc3ea",
+  "normalization_version": "nfc-lf-v1",
+  "chunking_version": "heading-paragraph-utf8-budget-800-v1",
+  "rules_digest": "sha256:6110f41d40dceaefc80e004970f85d5fa1e0ac6b2130fe045bb425d2961a9b0b",
+  "sources": [
+    {
+      "source_alias": "resume_alpha",
+      "normalized_text_digest": "sha256:ac50947635c64d6fe495223fd383777a2e274b29c42eb0e715eae727545a9a1d",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:fd33a797426c530d60403949af155865f0e792ccd528fbd0365113f638a3221f",
+          "codepoint_count": 66,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 66,
+              "chunk_start": 0,
+              "chunk_end": 66
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 66,
+              "chunk_start": 0,
+              "chunk_end": 66
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:c00f5c73ab724cc87328659118906667550ab72af2a279034f550331fb0d1d28",
+          "codepoint_count": 78,
+          "candidate_spans": [
+            {
+              "source_start": 68,
+              "source_end": 146,
+              "chunk_start": 0,
+              "chunk_end": 78
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 68,
+              "source_end": 146,
+              "chunk_start": 0,
+              "chunk_end": 78
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:e2ddb6feb4d8becc086d7457af2fe30a5e4bc49b2d99d2558ad789a636ed8b90",
+          "codepoint_count": 72,
+          "candidate_spans": [
+            {
+              "source_start": 148,
+              "source_end": 220,
+              "chunk_start": 0,
+              "chunk_end": 72
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 148,
+              "source_end": 220,
+              "chunk_start": 0,
+              "chunk_end": 72
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 3,
+          "content_digest": "sha256:42ccf3cfcc38de89f5feb763fa260a5d0c721e581ca65f728a865f5bf910ead8",
+          "codepoint_count": 57,
+          "candidate_spans": [
+            {
+              "source_start": 222,
+              "source_end": 279,
+              "chunk_start": 0,
+              "chunk_end": 57
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 222,
+              "source_end": 279,
+              "chunk_start": 0,
+              "chunk_end": 57
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 4,
+          "content_digest": "sha256:7017da94e4e8c028b17db534d531a5553071cd78e8cb5f38b3e469ec5b230c1b",
+          "codepoint_count": 60,
+          "candidate_spans": [
+            {
+              "source_start": 281,
+              "source_end": 341,
+              "chunk_start": 0,
+              "chunk_end": 60
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 281,
+              "source_end": 341,
+              "chunk_start": 0,
+              "chunk_end": 60
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 5,
+          "content_digest": "sha256:595095bbd61675afa1dfaa6708ee955eb7645b6c2fe3cfe3ea20c60ad72977c2",
+          "codepoint_count": 47,
+          "candidate_spans": [
+            {
+              "source_start": 343,
+              "source_end": 390,
+              "chunk_start": 0,
+              "chunk_end": 47
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 343,
+              "source_end": 390,
+              "chunk_start": 0,
+              "chunk_end": 47
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 6,
+          "content_digest": "sha256:465d10f3feee3ae5e5d821c30f5777b95f5822a35b79cb090123196122b7cfb4",
+          "codepoint_count": 59,
+          "candidate_spans": [
+            {
+              "source_start": 392,
+              "source_end": 451,
+              "chunk_start": 0,
+              "chunk_end": 59
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 392,
+              "source_end": 451,
+              "chunk_start": 0,
+              "chunk_end": 59
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 7,
+          "content_digest": "sha256:13f73ae17c3ada1c4b8fd83ee99f50615fa08be828f087f2506e5b24ff5dd42c",
+          "codepoint_count": 66,
+          "candidate_spans": [
+            {
+              "source_start": 453,
+              "source_end": 519,
+              "chunk_start": 0,
+              "chunk_end": 66
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 453,
+              "source_end": 519,
+              "chunk_start": 0,
+              "chunk_end": 66
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_beta",
+      "normalized_text_digest": "sha256:918726cb4ccf5b68556f4fb94b2f87c3ff1cc698d90374e8b4e3a0759bb8e8cb",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:d0427c907671519a540f40905dc1f92df099673e968430acf2a51980157fc233",
+          "codepoint_count": 65,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 65,
+              "chunk_start": 0,
+              "chunk_end": 65
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 65,
+              "chunk_start": 0,
+              "chunk_end": 65
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:6df1996a1cb09fe7a116f5c66ab6011dfa6439251f7824b03c0bcc81d801638f",
+          "codepoint_count": 86,
+          "candidate_spans": [
+            {
+              "source_start": 67,
+              "source_end": 153,
+              "chunk_start": 0,
+              "chunk_end": 86
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 67,
+              "source_end": 153,
+              "chunk_start": 0,
+              "chunk_end": 86
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:93dd872c33243c8ff84bc6e47f2fec25446e6ccb72a6a1fc515f1f8680505253",
+          "codepoint_count": 58,
+          "candidate_spans": [
+            {
+              "source_start": 155,
+              "source_end": 213,
+              "chunk_start": 0,
+              "chunk_end": 58
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 155,
+              "source_end": 213,
+              "chunk_start": 0,
+              "chunk_end": 58
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 3,
+          "content_digest": "sha256:f3351a8d537dafa5d1e6d8966af5b04fb0bbdd045028e3adffe7c27498bab1ff",
+          "codepoint_count": 59,
+          "candidate_spans": [
+            {
+              "source_start": 215,
+              "source_end": 274,
+              "chunk_start": 0,
+              "chunk_end": 59
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 215,
+              "source_end": 274,
+              "chunk_start": 0,
+              "chunk_end": 59
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 4,
+          "content_digest": "sha256:cd860e0aca3c9866ee1cb2814f696530fe0a2d6589b49a04449dfb9542a188f4",
+          "codepoint_count": 57,
+          "candidate_spans": [
+            {
+              "source_start": 276,
+              "source_end": 333,
+              "chunk_start": 0,
+              "chunk_end": 57
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 276,
+              "source_end": 333,
+              "chunk_start": 0,
+              "chunk_end": 57
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 5,
+          "content_digest": "sha256:08d8533b3eb33931f044188413f224ab5825cde70aa63e71bbcd7918c019b3f7",
+          "codepoint_count": 34,
+          "candidate_spans": [
+            {
+              "source_start": 335,
+              "source_end": 369,
+              "chunk_start": 0,
+              "chunk_end": 34
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 335,
+              "source_end": 369,
+              "chunk_start": 0,
+              "chunk_end": 34
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 6,
+          "content_digest": "sha256:48b5cb2c2f5e979781b1cd3192840a4c98cd9d8024aad3158fe5459b20f1cb5a",
+          "codepoint_count": 51,
+          "candidate_spans": [
+            {
+              "source_start": 371,
+              "source_end": 422,
+              "chunk_start": 0,
+              "chunk_end": 51
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 371,
+              "source_end": 422,
+              "chunk_start": 0,
+              "chunk_end": 51
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 7,
+          "content_digest": "sha256:cd3bd36f631b252be8904bc736daca97985ccb18395af77df557eac75cc726b9",
+          "codepoint_count": 49,
+          "candidate_spans": [
+            {
+              "source_start": 424,
+              "source_end": 473,
+              "chunk_start": 0,
+              "chunk_end": 49
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 424,
+              "source_end": 473,
+              "chunk_start": 0,
+              "chunk_end": 49
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_gamma",
+      "normalized_text_digest": "sha256:4d2961d96b8f6d0131f9175895b04929e89b330ab51826eb803bc169904d8b00",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:d3eb8c49ea82c846309034478484f7217104cb36b03444088362a7b8952e1cc7",
+          "codepoint_count": 70,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 70,
+              "chunk_start": 0,
+              "chunk_end": 70
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 70,
+              "chunk_start": 0,
+              "chunk_end": 70
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:717540d9e085afa374ed23ed0f78b93b079197f9e2076d56480d40d4f4af88f7",
+          "codepoint_count": 79,
+          "candidate_spans": [
+            {
+              "source_start": 72,
+              "source_end": 151,
+              "chunk_start": 0,
+              "chunk_end": 79
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 72,
+              "source_end": 151,
+              "chunk_start": 0,
+              "chunk_end": 79
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:4a5de2f62a1d78a0766bff688e7a4117c4fb627ecca33af8f03fd3c55e1b195a",
+          "codepoint_count": 70,
+          "candidate_spans": [
+            {
+              "source_start": 153,
+              "source_end": 223,
+              "chunk_start": 0,
+              "chunk_end": 70
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 153,
+              "source_end": 223,
+              "chunk_start": 0,
+              "chunk_end": 70
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 3,
+          "content_digest": "sha256:7209dd32ea9ac395b6bbf361175659c69264fc7d3ded50f718d9e6e4fabe6958",
+          "codepoint_count": 56,
+          "candidate_spans": [
+            {
+              "source_start": 225,
+              "source_end": 281,
+              "chunk_start": 0,
+              "chunk_end": 56
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 225,
+              "source_end": 281,
+              "chunk_start": 0,
+              "chunk_end": 56
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 4,
+          "content_digest": "sha256:73a40285bc27d1cee1459f2f0f89eb67508ca79156d9736a0d7e87216ed0bb4a",
+          "codepoint_count": 68,
+          "candidate_spans": [
+            {
+              "source_start": 283,
+              "source_end": 351,
+              "chunk_start": 0,
+              "chunk_end": 68
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 283,
+              "source_end": 351,
+              "chunk_start": 0,
+              "chunk_end": 68
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 5,
+          "content_digest": "sha256:0a35f6c3da05086c31af5141c47229da51b60b2bc50ebbeeced0d18874536953",
+          "codepoint_count": 38,
+          "candidate_spans": [
+            {
+              "source_start": 353,
+              "source_end": 391,
+              "chunk_start": 0,
+              "chunk_end": 38
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 353,
+              "source_end": 391,
+              "chunk_start": 0,
+              "chunk_end": 38
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        },
+        {
+          "ordinal": 6,
+          "content_digest": "sha256:ace93768e8abc6af5f791b047e34af5a7c613bf74cc35760ecd210bda03c2baf",
+          "codepoint_count": 42,
+          "candidate_spans": [
+            {
+              "source_start": 393,
+              "source_end": 435,
+              "chunk_start": 0,
+              "chunk_end": 42
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 393,
+              "source_end": 435,
+              "chunk_start": 0,
+              "chunk_end": 42
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex"
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "unit_id": "alpha_versions",
+      "source_alias": "resume_alpha",
+      "status": "complete",
+      "covered_codepoints": 68,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "alpha_strength",
+      "source_alias": "resume_alpha",
+      "status": "complete",
+      "covered_codepoints": 65,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "alpha_task",
+      "source_alias": "resume_alpha",
+      "status": "complete",
+      "covered_codepoints": 43,
+      "chunk_ordinals": [
+        3
+      ]
+    },
+    {
+      "unit_id": "alpha_result",
+      "source_alias": "resume_alpha",
+      "status": "complete",
+      "covered_codepoints": 46,
+      "chunk_ordinals": [
+        4
+      ]
+    },
+    {
+      "unit_id": "alpha_gap",
+      "source_alias": "resume_alpha",
+      "status": "complete",
+      "covered_codepoints": 38,
+      "chunk_ordinals": [
+        5
+      ]
+    },
+    {
+      "unit_id": "alpha_distractor",
+      "source_alias": "resume_alpha",
+      "status": "complete",
+      "covered_codepoints": 43,
+      "chunk_ordinals": [
+        6
+      ]
+    },
+    {
+      "unit_id": "alpha_injection",
+      "source_alias": "resume_alpha",
+      "status": "complete",
+      "covered_codepoints": 48,
+      "chunk_ordinals": [
+        7
+      ]
+    },
+    {
+      "unit_id": "beta_versions",
+      "source_alias": "resume_beta",
+      "status": "complete",
+      "covered_codepoints": 76,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "beta_strength",
+      "source_alias": "resume_beta",
+      "status": "complete",
+      "covered_codepoints": 51,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "beta_task",
+      "source_alias": "resume_beta",
+      "status": "complete",
+      "covered_codepoints": 45,
+      "chunk_ordinals": [
+        3
+      ]
+    },
+    {
+      "unit_id": "beta_result",
+      "source_alias": "resume_beta",
+      "status": "complete",
+      "covered_codepoints": 43,
+      "chunk_ordinals": [
+        4
+      ]
+    },
+    {
+      "unit_id": "beta_gap",
+      "source_alias": "resume_beta",
+      "status": "complete",
+      "covered_codepoints": 25,
+      "chunk_ordinals": [
+        5
+      ]
+    },
+    {
+      "unit_id": "beta_partial",
+      "source_alias": "resume_beta",
+      "status": "complete",
+      "covered_codepoints": 41,
+      "chunk_ordinals": [
+        6
+      ]
+    },
+    {
+      "unit_id": "beta_distractor",
+      "source_alias": "resume_beta",
+      "status": "complete",
+      "covered_codepoints": 34,
+      "chunk_ordinals": [
+        7
+      ]
+    },
+    {
+      "unit_id": "gamma_versions",
+      "source_alias": "resume_gamma",
+      "status": "complete",
+      "covered_codepoints": 69,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "gamma_strength",
+      "source_alias": "resume_gamma",
+      "status": "complete",
+      "covered_codepoints": 63,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "gamma_task",
+      "source_alias": "resume_gamma",
+      "status": "complete",
+      "covered_codepoints": 42,
+      "chunk_ordinals": [
+        3
+      ]
+    },
+    {
+      "unit_id": "gamma_result",
+      "source_alias": "resume_gamma",
+      "status": "complete",
+      "covered_codepoints": 54,
+      "chunk_ordinals": [
+        4
+      ]
+    },
+    {
+      "unit_id": "gamma_gap",
+      "source_alias": "resume_gamma",
+      "status": "complete",
+      "covered_codepoints": 29,
+      "chunk_ordinals": [
+        5
+      ]
+    },
+    {
+      "unit_id": "gamma_partial",
+      "source_alias": "resume_gamma",
+      "status": "complete",
+      "covered_codepoints": 31,
+      "chunk_ordinals": [
+        6
+      ]
+    },
+    {
+      "unit_id": "backend_requirements",
+      "source_alias": "role_backend",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "java_requirements",
+      "source_alias": "role_java",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "data_requirements",
+      "source_alias": "role_data",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "conflict_a",
+      "source_alias": "web_conflict",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "conflict_b",
+      "source_alias": "web_conflict",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "deadline_window",
+      "source_alias": "web_deadline",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "revision_old",
+      "source_alias": "web_revision",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "revision_new",
+      "source_alias": "web_revision",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "injection_role",
+      "source_alias": "web_injection",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "web_attack",
+      "source_alias": "web_injection",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    }
+  ],
+  "judgments": [
+    {
+      "case_id": "mixed_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 4,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "mixed_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 6,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "strength_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 4,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 4,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 4,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "multi_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 5,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 5,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 5,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "gap_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 6,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "answer_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 6,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 3,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 4,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "web_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 4,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 6,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 7,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 4,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "distractor_beta",
+      "source_alias": "resume_beta",
+      "chunk_ordinal": 7,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 1,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 2,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 4,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_alpha",
+      "source_alias": "resume_alpha",
+      "chunk_ordinal": 7,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 3,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 4,
+      "relevance": "relevant",
+      "reason": "task_context",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 5,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    },
+    {
+      "case_id": "injection_gamma",
+      "source_alias": "resume_gamma",
+      "chunk_ordinal": 6,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex"
+    }
+  ]
+}

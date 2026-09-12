@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pathfinder</title>
+    <link rel="stylesheet" href="/static/pathfinder.css">
+    <script src="/static/pathfinder.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">Research &amp; action</p>
+        <h1>Pathfinder</h1>
+      </div>
+      <div id="session-actions"></div>
+    </header>
+    <main>
+      <section id="problem-panel" class="panel problem" hidden aria-live="assertive"></section>
+      <section id="login-panel" class="panel" hidden>
+        <h2>Sign in</h2>
+        <p>Use an existing Supabase email/password account. This browser keeps the session in memory only.</p>
+        <form id="login-form">
+          <label>Email <input id="email" name="email" type="email" autocomplete="username" required></label>
+          <label>Password <input id="password" name="password" type="password" autocomplete="current-password" required></label>
+          <button type="submit">Sign in</button>
+        </form>
+      </section>
+      <section id="app-panel" hidden>
+        <div class="grid controls">
+          <section class="panel">
+            <h2>Workspace</h2>
+            <label>Active workspace <select id="workspace-select"></select></label>
+            <p id="workspace-meta" class="muted"></p>
+          </section>
+          <section class="panel">
+            <h2>Create run</h2>
+            <form id="run-form">
+              <label>Mode
+                <select id="run-mode" name="mode">
+                  <option value="research">Research</option>
+                  <option value="application">Application</option>
+                </select>
+              </label>
+              <label>Query <textarea id="run-query" name="query" required maxlength="2000"></textarea></label>
+              <label>Resume document ID <input id="resume-document-id" name="resume_document_id" type="text" inputmode="text"></label>
+              <p id="resume-guidance" class="muted">Optional for research.</p>
+              <button id="create-run" type="submit">Create new task</button>
+              <button id="retry-submission" type="button" hidden>Retry this submission</button>
+              <button id="retry-run-read" type="button" hidden>Retry reading current state</button>
+              <p id="submission-status" class="muted" aria-live="polite"></p>
+              <p class="muted">Retry uses the original inputs, even after editing this form. Refreshing, leaving this page, logging out, or switching workspace loses the retry information. The original task may already exist; recovery after refresh is not automatic.</p>
+            </form>
+          </section>
+        </div>
+        <button id="retry-events" type="button" hidden>Resume event reads</button>
+        <section id="run-panel" class="panel" hidden></section>
+        <div class="grid results">
+          <section id="timeline-panel" class="panel" hidden></section>
+          <section id="action-panel" class="panel" hidden></section>
+        </div>
+      </section>
+    </main>
+    <footer>Database rows remain the product authority; this page is an operator projection.</footer>
+  </body>
+</html>

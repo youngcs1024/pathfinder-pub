@@ -1,0 +1,275 @@
+{
+  "provenance": "agent_authored_teaching_only",
+  "human_pilot_count": 0,
+  "examples": [
+    {
+      "case_id": "wrong_citation",
+      "title": "错误引用",
+      "output_file": "wrong_citation.txt",
+      "source_evidence": {
+        "source_a": "候选人在课程项目中使用 PostgreSQL。",
+        "source_b": "岗位要求熟悉 Python。"
+      },
+      "fact_texts": {
+        "fact_one": "候选人在课程项目中使用 PostgreSQL。"
+      },
+      "annotation": {
+        "schema_version": 1,
+        "experiment_id": "agent_teaching_e47",
+        "case_id": "wrong_citation",
+        "repeat_index": 0,
+        "output_digest": "sha256:a66dbff0842d95c3ec643bf0db5eca0ae128286d914260a2212b4570100aa532",
+        "reviewer_id": "agent_teaching_author",
+        "rubric_version": "quality-human-candidate-v1",
+        "facts": [
+          {
+            "fact_id": "fact_one",
+            "judgment": "supported"
+          }
+        ],
+        "citations": [
+          {
+            "fact_id": "fact_one",
+            "citation_id": "source_b",
+            "judgment": "unsupported"
+          }
+        ],
+        "covered_unit_ids": [],
+        "missing_unit_ids": [],
+        "unassessed_fact_count": 0,
+        "unassessed_citation_count": 0,
+        "business_result": "failure",
+        "insufficiency": "appropriate",
+        "draft_usability": "major_edits",
+        "reason_codes": [
+          "citation_wrong_source"
+        ],
+        "disagreements": [],
+        "assessment_complete": true
+      }
+    },
+    {
+      "case_id": "partial_support",
+      "title": "部分支持",
+      "output_file": "partial_support.txt",
+      "source_evidence": {
+        "source_a": "候选人在课程项目中使用 PostgreSQL。"
+      },
+      "fact_texts": {
+        "fact_one": "课程项目使用 PostgreSQL。",
+        "fact_two": "将查询延迟降低50%。"
+      },
+      "annotation": {
+        "schema_version": 1,
+        "experiment_id": "agent_teaching_e47",
+        "case_id": "partial_support",
+        "repeat_index": 0,
+        "output_digest": "sha256:ea5bafad669780a0d66ec883406ba2e1d1cb9679c49e5052e83041d7d0acb15f",
+        "reviewer_id": "agent_teaching_author",
+        "rubric_version": "quality-human-candidate-v1",
+        "facts": [
+          {
+            "fact_id": "fact_one",
+            "judgment": "supported"
+          },
+          {
+            "fact_id": "fact_two",
+            "judgment": "unsupported"
+          }
+        ],
+        "citations": [
+          {
+            "fact_id": "fact_one",
+            "citation_id": "source_a",
+            "judgment": "supported"
+          },
+          {
+            "fact_id": "fact_two",
+            "citation_id": "source_a",
+            "judgment": "unsupported"
+          }
+        ],
+        "covered_unit_ids": [],
+        "missing_unit_ids": [],
+        "unassessed_fact_count": 0,
+        "unassessed_citation_count": 0,
+        "business_result": "failure",
+        "insufficiency": "overclaim",
+        "draft_usability": "major_edits",
+        "reason_codes": [
+          "unsupported_metric"
+        ],
+        "disagreements": [],
+        "assessment_complete": true
+      }
+    },
+    {
+      "case_id": "exaggerated_experience",
+      "title": "夸大经历",
+      "output_file": "exaggerated_experience.txt",
+      "source_evidence": {
+        "source_a": "候选人只参与 PostgreSQL 课程练习，从未负责生产数据库。"
+      },
+      "fact_texts": {
+        "fact_one": "负责过生产 PostgreSQL 数据库。"
+      },
+      "annotation": {
+        "schema_version": 1,
+        "experiment_id": "agent_teaching_e47",
+        "case_id": "exaggerated_experience",
+        "repeat_index": 0,
+        "output_digest": "sha256:956d625a349073fe37493ea2d30085289d32b56f443b58b4e804e045cc135a71",
+        "reviewer_id": "agent_teaching_author",
+        "rubric_version": "quality-human-candidate-v1",
+        "facts": [
+          {
+            "fact_id": "fact_one",
+            "judgment": "contradicted"
+          }
+        ],
+        "citations": [
+          {
+            "fact_id": "fact_one",
+            "citation_id": "source_a",
+            "judgment": "contradicted"
+          }
+        ],
+        "covered_unit_ids": [],
+        "missing_unit_ids": [],
+        "unassessed_fact_count": 0,
+        "unassessed_citation_count": 0,
+        "business_result": "failure",
+        "insufficiency": "overclaim",
+        "draft_usability": "unusable",
+        "reason_codes": [
+          "experience_contradicted"
+        ],
+        "disagreements": [],
+        "assessment_complete": true
+      }
+    },
+    {
+      "case_id": "appropriate_refusal",
+      "title": "正确拒答",
+      "output_file": "appropriate_refusal.txt",
+      "source_evidence": {
+        "source_a": "候选人在课程项目中使用 PostgreSQL。"
+      },
+      "fact_texts": {
+        "fact_one": "现有资料未提供生产数据库年限。"
+      },
+      "annotation": {
+        "schema_version": 1,
+        "experiment_id": "agent_teaching_e47",
+        "case_id": "appropriate_refusal",
+        "repeat_index": 0,
+        "output_digest": "sha256:f550a3d9a90a233fb31bfbae4bc68bccb016c55fc969a13dc3fdd2662a25357e",
+        "reviewer_id": "agent_teaching_author",
+        "rubric_version": "quality-human-candidate-v1",
+        "facts": [
+          {
+            "fact_id": "fact_one",
+            "judgment": "supported"
+          }
+        ],
+        "citations": [],
+        "covered_unit_ids": [],
+        "missing_unit_ids": [],
+        "unassessed_fact_count": 0,
+        "unassessed_citation_count": 0,
+        "business_result": "success",
+        "insufficiency": "appropriate",
+        "draft_usability": "not_applicable",
+        "reason_codes": [
+          "bounded_answer"
+        ],
+        "disagreements": [],
+        "assessment_complete": true
+      }
+    },
+    {
+      "case_id": "unnecessary_refusal",
+      "title": "不必要拒答",
+      "output_file": "unnecessary_refusal.txt",
+      "source_evidence": {
+        "source_a": "候选人在课程项目中使用 PostgreSQL。"
+      },
+      "fact_texts": {
+        "fact_one": "资料未说明是否使用过 PostgreSQL。"
+      },
+      "annotation": {
+        "schema_version": 1,
+        "experiment_id": "agent_teaching_e47",
+        "case_id": "unnecessary_refusal",
+        "repeat_index": 0,
+        "output_digest": "sha256:b57ca93d19a2440d5cf246311ca25c277d4ad0db7db0363467f6b14672bbf45b",
+        "reviewer_id": "agent_teaching_author",
+        "rubric_version": "quality-human-candidate-v1",
+        "facts": [
+          {
+            "fact_id": "fact_one",
+            "judgment": "contradicted"
+          }
+        ],
+        "citations": [],
+        "covered_unit_ids": [],
+        "missing_unit_ids": [],
+        "unassessed_fact_count": 0,
+        "unassessed_citation_count": 0,
+        "business_result": "failure",
+        "insufficiency": "unnecessary_refusal",
+        "draft_usability": "not_applicable",
+        "reason_codes": [
+          "available_evidence_ignored"
+        ],
+        "disagreements": [],
+        "assessment_complete": true
+      }
+    },
+    {
+      "case_id": "normal_citation",
+      "title": "正常引用",
+      "output_file": "normal_citation.txt",
+      "source_evidence": {
+        "source_a": "候选人在课程项目中使用 PostgreSQL。"
+      },
+      "fact_texts": {
+        "fact_one": "课程项目使用过 PostgreSQL。"
+      },
+      "annotation": {
+        "schema_version": 1,
+        "experiment_id": "agent_teaching_e47",
+        "case_id": "normal_citation",
+        "repeat_index": 0,
+        "output_digest": "sha256:503d745c3ddb0d5a8756a9671e8b42c01f9f16cb9ab46fc03a22ec5d5b9ef3f7",
+        "reviewer_id": "agent_teaching_author",
+        "rubric_version": "quality-human-candidate-v1",
+        "facts": [
+          {
+            "fact_id": "fact_one",
+            "judgment": "supported"
+          }
+        ],
+        "citations": [
+          {
+            "fact_id": "fact_one",
+            "citation_id": "source_a",
+            "judgment": "supported"
+          }
+        ],
+        "covered_unit_ids": [],
+        "missing_unit_ids": [],
+        "unassessed_fact_count": 0,
+        "unassessed_citation_count": 0,
+        "business_result": "success",
+        "insufficiency": "appropriate",
+        "draft_usability": "usable",
+        "reason_codes": [
+          "evidence_used"
+        ],
+        "disagreements": [],
+        "assessment_complete": true
+      }
+    }
+  ]
+}

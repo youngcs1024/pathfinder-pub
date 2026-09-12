@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "algorithm": "nfkc-casefold-space-alias-number-char5-jaccard-v1",
+  "threshold": 0.8,
+  "dataset_digest": "sha256:9066313e3bcccf0318cb136574ce0d2eb75c613199972f9d4a2338b4b90f11fb",
+  "coverage_digest": "sha256:f9000ae274e46cf12612ba6764597e0f6ff1124821c1a3f24cec58c99d7a1d13",
+  "pairs": []
+}

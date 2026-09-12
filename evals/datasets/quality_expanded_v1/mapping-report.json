@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "mapping_digest": "sha256:e75bffb64d1cb5232077d998f670617bb08be9167f42a77cf5759291de67c1a2",
+  "total_units": 80,
+  "complete_units": 60,
+  "partial_units": 0,
+  "unmapped_units": 0,
+  "not_applicable_units": 20,
+  "total_chunks": 106,
+  "ambiguous_chunks": 0,
+  "unresolved_chunks": 0,
+  "pending_review_chunks": 0,
+  "relevant_contexts": 55,
+  "irrelevant_contexts": 41,
+  "unjudged_contexts": 0,
+  "mapping_complete": true,
+  "review_complete": true
+}

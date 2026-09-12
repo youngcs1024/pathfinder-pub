@@ -1,0 +1,62 @@
+[
+  {
+    "id": "wrong_citation",
+    "source": "练习员丁使用工具X；另段仅说参加课程。",
+    "claim": "练习员丁使用工具X。",
+    "reference": "仅引用参加课程段",
+    "fact": "supported",
+    "citation": "unsupported",
+    "insufficiency": "appropriate",
+    "purpose": "teaching_only_not_pilot"
+  },
+  {
+    "id": "partial_support",
+    "source": "练习员丁使用工具X，未记录处理速度。",
+    "claim": "练习员丁用工具X使处理速度翻倍。拆分后本条只判断翻倍。",
+    "reference": "工具X段",
+    "fact": "unsupported",
+    "citation": "unsupported",
+    "insufficiency": "overclaim",
+    "purpose": "teaching_only_not_pilot"
+  },
+  {
+    "id": "inflated_experience",
+    "source": "练习员丁没有担任项目负责人。",
+    "claim": "练习员丁担任项目负责人。",
+    "reference": "职责段",
+    "fact": "contradicted",
+    "citation": "contradicted",
+    "insufficiency": "overclaim",
+    "purpose": "teaching_only_not_pilot"
+  },
+  {
+    "id": "correct_refusal",
+    "source": "记录明确注明未记录考试分数。",
+    "claim": "材料不能提供具体分数。",
+    "reference": "未记录分数段",
+    "fact": "supported",
+    "citation": "supported",
+    "insufficiency": "appropriate",
+    "purpose": "teaching_only_not_pilot"
+  },
+  {
+    "id": "unnecessary_refusal",
+    "source": "练习员丁在练习中编写过查询。",
+    "claim": "材料没有查询经历，无法回答是否写过查询。",
+    "reference": "查询经历段",
+    "fact": "contradicted",
+    "citation": "contradicted",
+    "insufficiency": "unnecessary_refusal",
+    "purpose": "teaching_only_not_pilot"
+  },
+  {
+    "id": "normal_citation",
+    "source": "练习员丁使用工具X。",
+    "claim": "练习员丁使用工具X。",
+    "reference": "工具X段",
+    "fact": "supported",
+    "citation": "supported",
+    "insufficiency": "appropriate",
+    "purpose": "teaching_only_not_pilot"
+  }
+]

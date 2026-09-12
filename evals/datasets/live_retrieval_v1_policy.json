@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "dataset_version": "live-retrieval-v1",
+  "dataset_digest": "sha256:8d2850aac4f9061fa8cbd9a90e8781c58c076e45b966bada0a1126c5c785d357",
+  "case_set_digest": "sha256:716da36138a7ff1cd2221462e25e885e11a0142fb328e3c39dd5adde085a7ede",
+  "embedding_profile": "qwen-beijing-text-embedding-v4-1536-v1",
+  "embedding_dimension": 1536,
+  "normalization_version": "nfc-lf-v1",
+  "chunking_version": "heading-paragraph-utf8-budget-800-v1",
+  "retrieval_top_k": 5,
+  "expected_primary_candidate_pool_size": 24,
+  "query_count": 20,
+  "thresholds": {
+    "minimum_macro_recall_at_1": 0.5,
+    "minimum_macro_recall_at_3": 0.75,
+    "minimum_macro_recall_at_5": 0.85,
+    "minimum_mean_reciprocal_rank": 0.6
+  },
+  "hard_invariants": {
+    "workspace_leakage_count": 0,
+    "allowlist_leakage_count": 0
+  },
+  "irrelevant_context_policy": "record_only_no_acceptance_threshold"
+}

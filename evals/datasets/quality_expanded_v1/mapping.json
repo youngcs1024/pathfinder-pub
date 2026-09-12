@@ -1,0 +1,4178 @@
+{
+  "schema_version": 1,
+  "mapping_version": "quality-expanded-heading-mapping-v1",
+  "execution_source_sha": "c7b724bd30e85dd3cb4b21cca0c2112b92979cd3",
+  "dataset_version": "quality-expanded-v1",
+  "dataset_digest": "sha256:9066313e3bcccf0318cb136574ce0d2eb75c613199972f9d4a2338b4b90f11fb",
+  "normalization_version": "nfc-lf-v1",
+  "chunking_version": "heading-paragraph-utf8-budget-800-v1",
+  "rules_digest": "sha256:3b6619af958a58e80a5da6e21f450b048cd33548c41882273abbd706c842c70b",
+  "sources": [
+    {
+      "source_alias": "resume_wheel_abi",
+      "normalized_text_digest": "sha256:4a4770601c3c60438dd663e3d06eb7827642d64deb8f4a9c33dbd159dcc6ae97",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:16edbee118074b0265329ace7842221f4b8be2f26269dcd3aa88fb5e5b616089",
+          "codepoint_count": 18,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 18,
+              "chunk_start": 0,
+              "chunk_end": 18
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 18,
+              "chunk_start": 0,
+              "chunk_end": 18
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:24d2e47899c96afe2c3066d317b905273cd6e196c2209778e91a491b53e2a855",
+          "codepoint_count": 63,
+          "candidate_spans": [
+            {
+              "source_start": 20,
+              "source_end": 83,
+              "chunk_start": 0,
+              "chunk_end": 63
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 20,
+              "source_end": 83,
+              "chunk_start": 0,
+              "chunk_end": 63
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_sql_dialect",
+      "normalized_text_digest": "sha256:43a3cf68b9313c894667041081b5a0f823a5335df0641cc08afd8c1ae97125bc",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:5bbcf9b3e715472992c0971d9d434b3184e04ee6cb87336dbbb12d29fe24fc0f",
+          "codepoint_count": 20,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 20,
+              "chunk_start": 0,
+              "chunk_end": 20
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 20,
+              "chunk_start": 0,
+              "chunk_end": 20
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:686bf391ce8225616d35dd70e60490eb8b41d31c8d3ac94cc4203c2b562bf9cd",
+          "codepoint_count": 70,
+          "candidate_spans": [
+            {
+              "source_start": 22,
+              "source_end": 92,
+              "chunk_start": 0,
+              "chunk_end": 70
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 22,
+              "source_end": 92,
+              "chunk_start": 0,
+              "chunk_end": 70
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_jdk_target",
+      "normalized_text_digest": "sha256:67651b6d2c042708d041d6679b7ed5409235e0bb8bf011b2a40a1f4503929ef0",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:43be2a9d9a5c0d4b4b013a9c4ffb8c2be5edd9200879c79eb994389da5f1132e",
+          "codepoint_count": 19,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 19,
+              "chunk_start": 0,
+              "chunk_end": 19
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 19,
+              "chunk_start": 0,
+              "chunk_end": 19
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:6f136f218754fcbe8488a0d2be4480e6fc5288d4d6c1226aeba9f2dd3816f249",
+          "codepoint_count": 65,
+          "candidate_spans": [
+            {
+              "source_start": 21,
+              "source_end": 86,
+              "chunk_start": 0,
+              "chunk_end": 65
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 21,
+              "source_end": 86,
+              "chunk_start": 0,
+              "chunk_end": 65
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_http_protocol",
+      "normalized_text_digest": "sha256:5e432b431ee7fe6c85009e8026249c39ef99c65d30c346c2df68a00c1bb1b505",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:bfeb5653b1e2c86e2f21d2acd710c7fc85646d086a8347175e94f4c856964792",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:9e432a9299ef8344441c31df7e2f5fc6c9a4ab4afae62c1b1678150504523add",
+          "codepoint_count": 60,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 84,
+              "chunk_start": 0,
+              "chunk_end": 60
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 84,
+              "chunk_start": 0,
+              "chunk_end": 60
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_unicode_bytes",
+      "normalized_text_digest": "sha256:a723bd95078fe066c009418423b7d7d154880d475b9712376e76d3c13b5b45cd",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:bc39e1d319aa7d261843f6b4b9027b9f8a2c6900bf837d5011dd7a731986488c",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:3d5c400edc38238d4b1f62aabad4fdec7356f25282d4c9ca4ae5ac51b9269ae1",
+          "codepoint_count": 56,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 80,
+              "chunk_start": 0,
+              "chunk_end": 56
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 80,
+              "chunk_start": 0,
+              "chunk_end": 56
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_oci_manifest",
+      "normalized_text_digest": "sha256:6e1f83f4064f6ea2f6fcb9f29450d1185c328e19bf92f04ce0e88aee8cca3ec4",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:e5cf4a947391322de94ff2dd9952dd1d991ffecd5e04f52d8624bbfe48ad60ac",
+          "codepoint_count": 21,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:1de58f3b21b584e85138589299f1340c04d8ebeb2575744ee0bc294f44bdcefe",
+          "codepoint_count": 73,
+          "candidate_spans": [
+            {
+              "source_start": 23,
+              "source_end": 96,
+              "chunk_start": 0,
+              "chunk_end": 73
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 23,
+              "source_end": 96,
+              "chunk_start": 0,
+              "chunk_end": 73
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_pager_shadow",
+      "normalized_text_digest": "sha256:827f1af82a76035b663ab59272dd28e01806428b110b1dd36033609138784cdd",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:3213e977e69bad8651f6498f9f3d2bd25810c4a18bcb12ef8151c17826bcb8a8",
+          "codepoint_count": 21,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:3616757fb5415cbdce3fd5098c2b60fed0e8dbf80c64fa87d5e3553c082e43fd",
+          "codepoint_count": 42,
+          "candidate_spans": [
+            {
+              "source_start": 23,
+              "source_end": 65,
+              "chunk_start": 0,
+              "chunk_end": 42
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 23,
+              "source_end": 65,
+              "chunk_start": 0,
+              "chunk_end": 42
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_index_proposal",
+      "normalized_text_digest": "sha256:07d1d5fc48c50bf45498cbe0a4dc99c538b5a245e98eaea407b426c5d39c282f",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:48eda61f31778309c4db625157b20479f319854aab02fbf842dc6f135752a8be",
+          "codepoint_count": 23,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:7fb5f01ea23210227b9b3a03e4a080d18c7a4e00621ae69a5e14d48bef6a2c03",
+          "codepoint_count": 53,
+          "candidate_spans": [
+            {
+              "source_start": 25,
+              "source_end": 78,
+              "chunk_start": 0,
+              "chunk_end": 53
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 25,
+              "source_end": 78,
+              "chunk_start": 0,
+              "chunk_end": 53
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_review_comment",
+      "normalized_text_digest": "sha256:ba6c32e0a5c29e81ed2be6637056bcf69b9334e696c4bcdd015fe4bd33ae4b32",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:1d8e9e487b8703b9f44fd4456489c011d94e8b5539e214b93b82905621e2183b",
+          "codepoint_count": 23,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:0831bf6482fdcd975fcaef882ff909b9e397aee24a956146e6f63275775f932e",
+          "codepoint_count": 50,
+          "candidate_spans": [
+            {
+              "source_start": 25,
+              "source_end": 75,
+              "chunk_start": 0,
+              "chunk_end": 50
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 25,
+              "source_end": 75,
+              "chunk_start": 0,
+              "chunk_end": 50
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_restore_observer",
+      "normalized_text_digest": "sha256:6807af78c0df5ddc6b0046b0277f3ea9651ecbd1913637834cab1f3f1a38aaf3",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:37fd4a6187eda51ecb0323ea541f8e8422c4671b588b465d5bfc461a2a75dcaf",
+          "codepoint_count": 25,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 25,
+              "chunk_start": 0,
+              "chunk_end": 25
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 25,
+              "chunk_start": 0,
+              "chunk_end": 25
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:87ca6d3ddc2862f7176d2ff72792c1c7e057a053bc13f7271ff5a16f253c0f1f",
+          "codepoint_count": 45,
+          "candidate_spans": [
+            {
+              "source_start": 27,
+              "source_end": 72,
+              "chunk_start": 0,
+              "chunk_end": 45
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 27,
+              "source_end": 72,
+              "chunk_start": 0,
+              "chunk_end": 45
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_benchmark_runner",
+      "normalized_text_digest": "sha256:260e913fe117fadded33e0c478dac1237711dc087ae49dcc80f07525e5fb8a82",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:e90213be1b246cf455fb9e5f3e959a59b93b8cea547164107d18af623c940205",
+          "codepoint_count": 25,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 25,
+              "chunk_start": 0,
+              "chunk_end": 25
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 25,
+              "chunk_start": 0,
+              "chunk_end": 25
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:6cd2b1ea1bbaf48680e2b100861ee3a093ac3358ff85601f7e5fe7dbee5ae943",
+          "codepoint_count": 47,
+          "candidate_spans": [
+            {
+              "source_start": 27,
+              "source_end": 74,
+              "chunk_start": 0,
+              "chunk_end": 47
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 27,
+              "source_end": 74,
+              "chunk_start": 0,
+              "chunk_end": 47
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_handoff_boundary",
+      "normalized_text_digest": "sha256:2abadf1db0580e13b8afa576db08020aeaad91aec54cf00edd192e1c7a461bfc",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:429b5cec73928ab67c4dd457cd44ce4ff805a345b5f5ac4f52e20d21167f5e66",
+          "codepoint_count": 25,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 25,
+              "chunk_start": 0,
+              "chunk_end": 25
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 25,
+              "chunk_start": 0,
+              "chunk_end": 25
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:d0888a8212c014b81bd785cf9269fa7252d409e93d7f74a0a0ed06c4eedbb655",
+          "codepoint_count": 46,
+          "candidate_spans": [
+            {
+              "source_start": 27,
+              "source_end": 73,
+              "chunk_start": 0,
+              "chunk_end": 46
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 27,
+              "source_end": 73,
+              "chunk_start": 0,
+              "chunk_end": 46
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_grant_approval",
+      "normalized_text_digest": "sha256:9a7070d6d2449b8606259a8ddfc072bcf7cf47bbaf78c4f86d4979fc4f669a35",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:8bc556dfc27bca13bf6b165e28f4d3b8af57f07c75f60d20d63b3ac713cc65d8",
+          "codepoint_count": 23,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:600f1fe3948a5aed0b58095b4938504c6b852ddce974d37b6af46df3ed1d1446",
+          "codepoint_count": 44,
+          "candidate_spans": [
+            {
+              "source_start": 25,
+              "source_end": 69,
+              "chunk_start": 0,
+              "chunk_end": 44
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 25,
+              "source_end": 69,
+              "chunk_start": 0,
+              "chunk_end": 44
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_cache_ttl",
+      "normalized_text_digest": "sha256:fee536304e99f57639a62115b2d093d4f9dce0ff851271bbbf4fc615736b76f5",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:410a138c3162200a2d46c49991680a575a556400ffc7c30254dbe8fa53a3761e",
+          "codepoint_count": 18,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 18,
+              "chunk_start": 0,
+              "chunk_end": 18
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 18,
+              "chunk_start": 0,
+              "chunk_end": 18
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:075fdc21b7df2957bab6881b19ecaaa276601fc3e0b4fd899be93f938c65630b",
+          "codepoint_count": 39,
+          "candidate_spans": [
+            {
+              "source_start": 20,
+              "source_end": 59,
+              "chunk_start": 0,
+              "chunk_end": 39
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 20,
+              "source_end": 59,
+              "chunk_start": 0,
+              "chunk_end": 39
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:2dfee463f3246c48187e67b15f6996cb2f059a790395675833dcee85bd704953",
+          "codepoint_count": 48,
+          "candidate_spans": [
+            {
+              "source_start": 61,
+              "source_end": 109,
+              "chunk_start": 0,
+              "chunk_end": 48
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 61,
+              "source_end": 109,
+              "chunk_start": 0,
+              "chunk_end": 48
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_csv_reconcile",
+      "normalized_text_digest": "sha256:4bcc00cd3c1584f029a6b001189d90bb0bff5702a8372521fd387ca28d7c5780",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:f5651c96f6e554198659f88f9bc5f5a995cce102f31706d5c8c26d90be0590cd",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:720d23542a6726b32ddcbc7e003c85567a65fbec469d3e4f6a4b0a62c9a74dbb",
+          "codepoint_count": 37,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 61,
+              "chunk_start": 0,
+              "chunk_end": 37
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 61,
+              "chunk_start": 0,
+              "chunk_end": 37
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:e9a5d0a0e0f381085fdecfc0bc2dd053f836c269494d43cdb6fc70ca8ddde7fc",
+          "codepoint_count": 39,
+          "candidate_spans": [
+            {
+              "source_start": 63,
+              "source_end": 102,
+              "chunk_start": 0,
+              "chunk_end": 39
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 63,
+              "source_end": 102,
+              "chunk_start": 0,
+              "chunk_end": 39
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_accessibility",
+      "normalized_text_digest": "sha256:5a846a26e86263aef755edaceea16b0763baf55880521aed2abc2d2fd07aed50",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:13dfad573542afcba96771f3649164e48d19b81a4fc5952dc7691904175dea5c",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:b6d4a2b1e94513c85dd55546be4e39427abf405696987d183a29979d001d0787",
+          "codepoint_count": 34,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 58,
+              "chunk_start": 0,
+              "chunk_end": 34
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 58,
+              "chunk_start": 0,
+              "chunk_end": 34
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:d7b80fae0e2437cb7256b81e7129c432e31ad2f0c5e6a75c93dd2a20760ce20a",
+          "codepoint_count": 38,
+          "candidate_spans": [
+            {
+              "source_start": 60,
+              "source_end": 98,
+              "chunk_start": 0,
+              "chunk_end": 38
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 60,
+              "source_end": 98,
+              "chunk_start": 0,
+              "chunk_end": 38
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_checksum_import",
+      "normalized_text_digest": "sha256:6a4ae42e2ad59e9cfbfd1ec56e4f54b3eac2689cb08c51d083ff712469a95288",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:87ac411911657c34ea5d4c0f9cf18e08196bc2bc1a3adadc55d28074645e5eef",
+          "codepoint_count": 24,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:a50504f0bc3f983282fbf22e5f21f5356a37db1a6616e44d9e627387376510c9",
+          "codepoint_count": 43,
+          "candidate_spans": [
+            {
+              "source_start": 26,
+              "source_end": 69,
+              "chunk_start": 0,
+              "chunk_end": 43
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 26,
+              "source_end": 69,
+              "chunk_start": 0,
+              "chunk_end": 43
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:ea9921238c9c50e64b8fcb4a1317b6ef37a5e52b14b2262930774df6232857be",
+          "codepoint_count": 41,
+          "candidate_spans": [
+            {
+              "source_start": 71,
+              "source_end": 112,
+              "chunk_start": 0,
+              "chunk_end": 41
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 71,
+              "source_end": 112,
+              "chunk_start": 0,
+              "chunk_end": 41
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_sensor_units",
+      "normalized_text_digest": "sha256:6b20692764a54da20477d695a2fdfd98cfd065c93d4aef910638d12bc3cfc7b7",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:bfb8d41df470a1313e5ed824a63f3463b4b2f47fa7e540e72436cf2e73541a42",
+          "codepoint_count": 21,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:1937f683a85d2013e3b31667cbc1e5be0c85d81c9d3427f6c4d476260a3f3954",
+          "codepoint_count": 34,
+          "candidate_spans": [
+            {
+              "source_start": 23,
+              "source_end": 57,
+              "chunk_start": 0,
+              "chunk_end": 34
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 23,
+              "source_end": 57,
+              "chunk_start": 0,
+              "chunk_end": 34
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:154cce9fa54ea6a099cfa7dbf58a3576df139e5efc22581796d73917a001427e",
+          "codepoint_count": 41,
+          "candidate_spans": [
+            {
+              "source_start": 59,
+              "source_end": 100,
+              "chunk_start": 0,
+              "chunk_end": 41
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 59,
+              "source_end": 100,
+              "chunk_start": 0,
+              "chunk_end": 41
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_retention_audit",
+      "normalized_text_digest": "sha256:eef4b28df8eb446cea6a46f9d2b427e95de14966ee4bbc7a6fd71d4bb401f601",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:86a522ace383334e5a85737b7bf0d765ebaab9da03fbea913f50c71c182f4d99",
+          "codepoint_count": 24,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:c02041d81dae5c754053f62cc508cf5e91d68f74fcb7c01ceaf6de9690acc4e5",
+          "codepoint_count": 32,
+          "candidate_spans": [
+            {
+              "source_start": 26,
+              "source_end": 58,
+              "chunk_start": 0,
+              "chunk_end": 32
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 26,
+              "source_end": 58,
+              "chunk_start": 0,
+              "chunk_end": 32
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:2925947cd8cb848590d11232cce0e20d9d4ecf960aa4284e9dd74cef7d304371",
+          "codepoint_count": 43,
+          "candidate_spans": [
+            {
+              "source_start": 60,
+              "source_end": 103,
+              "chunk_start": 0,
+              "chunk_end": 43
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 60,
+              "source_end": 103,
+              "chunk_start": 0,
+              "chunk_end": 43
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_locale_fallback",
+      "normalized_text_digest": "sha256:02a91d78f6c2da4d75073a84bbf6c0ce0eae8a9c94459a55417bbf49915bc96b",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:013fb19af037cb7cfc38d071a1cb65c2746204bf413496b112524b1d6a59c18f",
+          "codepoint_count": 24,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:a3006a263a4410dda9bec9d2cec46f3c478541605efee57e83306cc988ec1d4f",
+          "codepoint_count": 43,
+          "candidate_spans": [
+            {
+              "source_start": 26,
+              "source_end": 69,
+              "chunk_start": 0,
+              "chunk_end": 43
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 26,
+              "source_end": 69,
+              "chunk_start": 0,
+              "chunk_end": 43
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:c882808ce821cec31e3d489d4961e5d3ae89f5329c448b235ecadde6900cc570",
+          "codepoint_count": 44,
+          "candidate_spans": [
+            {
+              "source_start": 71,
+              "source_end": 115,
+              "chunk_start": 0,
+              "chunk_end": 44
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 71,
+              "source_end": 115,
+              "chunk_start": 0,
+              "chunk_end": 44
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_sharding_gap",
+      "normalized_text_digest": "sha256:fa8bdcf50fbe240e596c0ce93a0749194c6eaa89afe066517519ed00e6d9dc95",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:4e75808f7736644c3a9742e53526b42fa91237f648265cd01ca563924f6d5263",
+          "codepoint_count": 21,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:674377b612661a7100f1048bbd764ca45328861209e4f1f1a0086a02f1a80f5f",
+          "codepoint_count": 39,
+          "candidate_spans": [
+            {
+              "source_start": 23,
+              "source_end": 62,
+              "chunk_start": 0,
+              "chunk_end": 39
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 23,
+              "source_end": 62,
+              "chunk_start": 0,
+              "chunk_end": 39
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_gpu_gap",
+      "normalized_text_digest": "sha256:4b154c0e59f5b65bea92835a84089c4cd5c4c1793275db11a3b6d28897a52251",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:80348871b05780469d651ee86c85a34d8b4ec96f241504777bb3d3a32ff08c9a",
+          "codepoint_count": 16,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 16,
+              "chunk_start": 0,
+              "chunk_end": 16
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 16,
+              "chunk_start": 0,
+              "chunk_end": 16
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:2ea2401dda92142a8d8b9046d4ca9a116343623b5fab46a4fb6be8c2ef5b8c56",
+          "codepoint_count": 45,
+          "candidate_spans": [
+            {
+              "source_start": 18,
+              "source_end": 63,
+              "chunk_start": 0,
+              "chunk_end": 45
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 18,
+              "source_end": 63,
+              "chunk_start": 0,
+              "chunk_end": 45
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_ios_gap",
+      "normalized_text_digest": "sha256:3b6a4bcc19386590da48df915ed94ce54b658a1c5ea935b7ab763420d333e1f0",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:850c06128906c8836552c983474354f57182b0ec6b8bea39216e1eb130e0c340",
+          "codepoint_count": 16,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 16,
+              "chunk_start": 0,
+              "chunk_end": 16
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 16,
+              "chunk_start": 0,
+              "chunk_end": 16
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:25e75bb8eee12d70f5060e8ce230d2ca8e3fb7674448c4667e9ba241cc939c8b",
+          "codepoint_count": 51,
+          "candidate_spans": [
+            {
+              "source_start": 18,
+              "source_end": 69,
+              "chunk_start": 0,
+              "chunk_end": 51
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 18,
+              "source_end": 69,
+              "chunk_start": 0,
+              "chunk_end": 51
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_rotation_gap",
+      "normalized_text_digest": "sha256:a1a74c3f5bf2391336503461c21438fd66549f490f0d82a8456dba21553d984c",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:a9a051243634cf7b4f5ef79206fff7dc7235ae2e5c157898dc6da0ffb356162a",
+          "codepoint_count": 21,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:b1b8c9a16cf6e6106951c29137597a5c2e6783575b096455dc51166408e93acb",
+          "codepoint_count": 36,
+          "candidate_spans": [
+            {
+              "source_start": 23,
+              "source_end": 59,
+              "chunk_start": 0,
+              "chunk_end": 36
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 23,
+              "source_end": 59,
+              "chunk_start": 0,
+              "chunk_end": 36
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_streaming_gap",
+      "normalized_text_digest": "sha256:a6d01b6025d677c91ea0abc7458c2550643c1b99f3007df86d3a7f2843c2c022",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:76af9381d72fcc1f74781e105e584aab6e070b64ae079e5c6c3bac5a6d53fd4d",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:0be9d0aca68fcbede45c9bff7e2e5a059d02e56a571f6e9a5e1dd87f4dc762d8",
+          "codepoint_count": 40,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 64,
+              "chunk_start": 0,
+              "chunk_end": 40
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 64,
+              "chunk_start": 0,
+              "chunk_end": 40
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_airgap_gap",
+      "normalized_text_digest": "sha256:342f684ed86f8d7c7e3cd5af5ecdc3a23f9323fb11af4c8fe8cfc383bd5da454",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:425e26c80f6f40d43edb2c69f2efc95edd7d90a8bf063c9ad77d242df6bb10b7",
+          "codepoint_count": 19,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 19,
+              "chunk_start": 0,
+              "chunk_end": 19
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 19,
+              "chunk_start": 0,
+              "chunk_end": 19
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:f890cac58294382ced24e185c7bf9ba9056832421e68b451e69b451c303c3c51",
+          "codepoint_count": 40,
+          "candidate_spans": [
+            {
+              "source_start": 21,
+              "source_end": 61,
+              "chunk_start": 0,
+              "chunk_end": 40
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 21,
+              "source_end": 61,
+              "chunk_start": 0,
+              "chunk_end": 40
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_device_gap",
+      "normalized_text_digest": "sha256:df1f4dd8e6d0ffce0b042c48c94cfd1e25b7b680434526497b7e055358254dc6",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:6fca14ff905fb82bca5223d2206becbf19005d962d5a765ffac35f4938a4e047",
+          "codepoint_count": 19,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 19,
+              "chunk_start": 0,
+              "chunk_end": 19
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 19,
+              "chunk_start": 0,
+              "chunk_end": 19
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:0d740c8a593c6d5e965eb475ac5526ab80d5e77c3920ab10dbd77e2c43ef51fe",
+          "codepoint_count": 36,
+          "candidate_spans": [
+            {
+              "source_start": 21,
+              "source_end": 57,
+              "chunk_start": 0,
+              "chunk_end": 36
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 21,
+              "source_end": 57,
+              "chunk_start": 0,
+              "chunk_end": 36
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_start_unknown",
+      "normalized_text_digest": "sha256:79772d0ca19405609f1d659c4021a8cd37c07abe66994c4dfe6b3a5d5d1a3fc8",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:ae692fc6893f55e0e807b13aad4d27c45d3d91af2c2f653eccf9e128f73e69cc",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:52f29ab97c61a7764ba2d79d19e834979ea89c4df693907a20aa5cc45330cbb7",
+          "codepoint_count": 42,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 66,
+              "chunk_start": 0,
+              "chunk_end": 42
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 66,
+              "chunk_start": 0,
+              "chunk_end": 42
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_language_score",
+      "normalized_text_digest": "sha256:3deb56b6a37125fd39939d2c5c5eab0f53d454eb714092f2d74e7de61e0f6c9c",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:8269a15c94bb7f94f8babd262c13a0ee52cda8fd3782c8e5838e40c9427924f7",
+          "codepoint_count": 23,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:ddd39be4a0b79bf4949378438012a0ff050bba8cc5712a5dca9764aadbb5b4f9",
+          "codepoint_count": 35,
+          "candidate_spans": [
+            {
+              "source_start": 25,
+              "source_end": 60,
+              "chunk_start": 0,
+              "chunk_end": 35
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 25,
+              "source_end": 60,
+              "chunk_start": 0,
+              "chunk_end": 35
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_throughput_omission",
+      "normalized_text_digest": "sha256:0eb11ce057c5d544c3026b5d0ee91f2fd6a443c807ffce146241842435844aca",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:083307b4d6e251b5c44df101cc02c9c863cd897fcd3e07b4264331c3d6d6d80e",
+          "codepoint_count": 28,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 28,
+              "chunk_start": 0,
+              "chunk_end": 28
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 28,
+              "chunk_start": 0,
+              "chunk_end": 28
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:7c0c43fad577527d70dce0b861239e8ea9d4062a9e1f9a49855c957084d912b1",
+          "codepoint_count": 45,
+          "candidate_spans": [
+            {
+              "source_start": 30,
+              "source_end": 75,
+              "chunk_start": 0,
+              "chunk_end": 45
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 30,
+              "source_end": 75,
+              "chunk_start": 0,
+              "chunk_end": 45
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_license_present",
+      "normalized_text_digest": "sha256:dddf0ec8a791cfaf04a2897347e5157647476978c51cf3872316d563fddd765f",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:0950e6b0398ad77b1d7835aed6bb15878de112b6d0856dff85d807207ca96714",
+          "codepoint_count": 24,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:f8e3479c185e2dfce27fc8d7ee93efe3251c83cf166d5182efcc991b723dc013",
+          "codepoint_count": 47,
+          "candidate_spans": [
+            {
+              "source_start": 26,
+              "source_end": 73,
+              "chunk_start": 0,
+              "chunk_end": 47
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 26,
+              "source_end": 73,
+              "chunk_start": 0,
+              "chunk_end": 47
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_team_award",
+      "normalized_text_digest": "sha256:5dd95782f72dbf0087bd737e11d1de3f61c4f059260b14010489012e19bbde47",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:431ce16ce3c5948e4d2cf408e7bea06ec89240805883800c8babddcad1c1aded",
+          "codepoint_count": 19,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 19,
+              "chunk_start": 0,
+              "chunk_end": 19
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 19,
+              "chunk_start": 0,
+              "chunk_end": 19
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:bb4c0dd323d783b39e2d46dfc942974888f5f58e4bc49fb0b780decb021ea270",
+          "codepoint_count": 30,
+          "candidate_spans": [
+            {
+              "source_start": 21,
+              "source_end": 51,
+              "chunk_start": 0,
+              "chunk_end": 30
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 21,
+              "source_end": 51,
+              "chunk_start": 0,
+              "chunk_end": 30
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:531eb85cc46fb8f7c78274326c68ef781e0eab8398a20e2dd4cb0cd3a347f71f",
+          "codepoint_count": 31,
+          "candidate_spans": [
+            {
+              "source_start": 53,
+              "source_end": 84,
+              "chunk_start": 0,
+              "chunk_end": 31
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 53,
+              "source_end": 84,
+              "chunk_start": 0,
+              "chunk_end": 31
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_fork_history",
+      "normalized_text_digest": "sha256:1b37f8cdeda62c6d5218813521e1d1a0d67866c46fe7c1c23a5c4f244c109952",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:c8b6cbb6c2562fa6aee494d525ac16b0ccf2dc7b3dd9d0349cb36ce53d2da220",
+          "codepoint_count": 21,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 21,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:a95a9a24c134cf266a638558031f33c7b3822bafbdcae9ead9ebf7d338efaa31",
+          "codepoint_count": 42,
+          "candidate_spans": [
+            {
+              "source_start": 23,
+              "source_end": 65,
+              "chunk_start": 0,
+              "chunk_end": 42
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 23,
+              "source_end": 65,
+              "chunk_start": 0,
+              "chunk_end": 42
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_two_employers",
+      "normalized_text_digest": "sha256:587d60612259794c5c500e694ad66b8c2641e0de798c4e9d3d6cf54e6b06608b",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:a75f1699bb3e5c17a1df77a6e0bca2266ad49c42c832011f73a881ba7159c31c",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:9569984ae908ff6cae93ea2904efd06e9a38ff38c09c1020c0b7ba2886bbafc3",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 46,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 46,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:29d03744659e0dfa603197752aecee48043437126fde86695382a9423dafabac",
+          "codepoint_count": 35,
+          "candidate_spans": [
+            {
+              "source_start": 48,
+              "source_end": 83,
+              "chunk_start": 0,
+              "chunk_end": 35
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 48,
+              "source_end": 83,
+              "chunk_start": 0,
+              "chunk_end": 35
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_mentor_metrics",
+      "normalized_text_digest": "sha256:4371e9f0e6a538ab7501fbd6a1b8806ea2fb41add516b016b83e9898634d2ef1",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:b6e14d501f8e08285f9c3b30934630ff228cf4a0326a30b15a0c4c0a7092da84",
+          "codepoint_count": 23,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:e7f0b0a91eccdacdaaaac6906745f89dfb59ca1fbba16c0b2f850365dcb1dd19",
+          "codepoint_count": 30,
+          "candidate_spans": [
+            {
+              "source_start": 25,
+              "source_end": 55,
+              "chunk_start": 0,
+              "chunk_end": 30
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 25,
+              "source_end": 55,
+              "chunk_start": 0,
+              "chunk_end": 30
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:0e73c3d1752b5598adb16968b98094bdedc1b298bbd13a714494b01d386cfb14",
+          "codepoint_count": 39,
+          "candidate_spans": [
+            {
+              "source_start": 57,
+              "source_end": 96,
+              "chunk_start": 0,
+              "chunk_end": 39
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 57,
+              "source_end": 96,
+              "chunk_start": 0,
+              "chunk_end": 39
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_course_vs_job",
+      "normalized_text_digest": "sha256:255c5570686fdf83ee4f5a6bfb442bf970424c2097bc10500be47a5de44e736a",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:7a85a434ef52c46243dd211ab60c9181e7fc1bd4b490ac113845f2df482f846f",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:7d2ffacc5a41afb1191bd5233540f7fe6f13568f93b5d77b20d80152bd95aabc",
+          "codepoint_count": 46,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 70,
+              "chunk_start": 0,
+              "chunk_end": 46
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 70,
+              "chunk_start": 0,
+              "chunk_end": 46
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_patent_namesake",
+      "normalized_text_digest": "sha256:20d8da8e65f4a5e0a5066e00ee18afcc4541897aae05f17c96d652e43cf03967",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:4a5d5fa88c87f25a6a834f1e1853e5e5c5d581a566746836c11aca0ddfe554a8",
+          "codepoint_count": 24,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 24,
+              "chunk_start": 0,
+              "chunk_end": 24
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:91792893f46a17ae0a7e2ff38600bc55a1f13d205ac4e76435beb597d6ea5947",
+          "codepoint_count": 44,
+          "candidate_spans": [
+            {
+              "source_start": 26,
+              "source_end": 70,
+              "chunk_start": 0,
+              "chunk_end": 44
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 26,
+              "source_end": 70,
+              "chunk_start": 0,
+              "chunk_end": 44
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_resume_role",
+      "normalized_text_digest": "sha256:834f0152fc0a67a548d6ccab440f0bc5aa46a7030dd3cecb7874274f61811812",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:7d3fe67e716fb55e839b3551086722f11cdd2e3422ef57294877a9a413135660",
+          "codepoint_count": 20,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 20,
+              "chunk_start": 0,
+              "chunk_end": 20
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 20,
+              "chunk_start": 0,
+              "chunk_end": 20
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:a91790c253c0c5799354d8f7c539e947ed419b966907fddffe4ad310132e28cd",
+          "codepoint_count": 26,
+          "candidate_spans": [
+            {
+              "source_start": 22,
+              "source_end": 48,
+              "chunk_start": 0,
+              "chunk_end": 26
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 22,
+              "source_end": 48,
+              "chunk_start": 0,
+              "chunk_end": 26
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:4103d6e0f40e96f038275960a791c415d12b3feb4faae64cb8ed2c5c1bc7c08d",
+          "codepoint_count": 36,
+          "candidate_spans": [
+            {
+              "source_start": 50,
+              "source_end": 86,
+              "chunk_start": 0,
+              "chunk_end": 36
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 50,
+              "source_end": 86,
+              "chunk_start": 0,
+              "chunk_end": 36
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_resume_submit",
+      "normalized_text_digest": "sha256:55e62fe8e84ab276639e556f624ad46540aa930d33459b9842de9c255913ddf5",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:62d6d3b67b7a5609a29ab1c41c8a16c22ca641b0cfe661c48c4d77ec8b0824f6",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:b5668d190b41e7f8700832f048cb5af7400cb6093b235ee6a42850f777196b8f",
+          "codepoint_count": 21,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 45,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 45,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:d7ed6a9bc1773b56411256016b002566bda0d62290ed643c971c6aab04f43fe5",
+          "codepoint_count": 33,
+          "candidate_spans": [
+            {
+              "source_start": 47,
+              "source_end": 80,
+              "chunk_start": 0,
+              "chunk_end": 33
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 47,
+              "source_end": 80,
+              "chunk_start": 0,
+              "chunk_end": 33
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_resume_target",
+      "normalized_text_digest": "sha256:a7294541089f0a005016419967b96e347f087c3464895bf6b11e5b2c507da4e5",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:f901a6ec093af8d046aae17457f8fa0d5049b81aa4620cd9055f4372380f799a",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:2e9eeb6336ed4330aba192cb753da2f4e4cd9e2db55766e1ea2e10c2956427b2",
+          "codepoint_count": 21,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 45,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 45,
+              "chunk_start": 0,
+              "chunk_end": 21
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:aa58cc96c459beb435a253b1f22b560145e71dcf096020cf51287ca7de53f85e",
+          "codepoint_count": 45,
+          "candidate_spans": [
+            {
+              "source_start": 47,
+              "source_end": 92,
+              "chunk_start": 0,
+              "chunk_end": 45
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 47,
+              "source_end": 92,
+              "chunk_start": 0,
+              "chunk_end": 45
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_resume_tool",
+      "normalized_text_digest": "sha256:e6f1280a2d5c740132f9a884c9272cefad7b6070c8409ac0d6533557426622c7",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:ce6bcd41042da2800ee77f10a9e6a2b0de42d8e4394a10d0dc44d50c9e4e3bdd",
+          "codepoint_count": 20,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 20,
+              "chunk_start": 0,
+              "chunk_end": 20
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 20,
+              "chunk_start": 0,
+              "chunk_end": 20
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:5349d8f5790a86dbd963eb5b8690451f2b90e2ee96b0e54e32a83f3c3e24dc53",
+          "codepoint_count": 32,
+          "candidate_spans": [
+            {
+              "source_start": 22,
+              "source_end": 54,
+              "chunk_start": 0,
+              "chunk_end": 32
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 22,
+              "source_end": 54,
+              "chunk_start": 0,
+              "chunk_end": 32
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 2,
+          "content_digest": "sha256:a37fd87b8d56e8996ead2af160b965663767d625f2b8d1ad4ba22260ffe84e5c",
+          "codepoint_count": 53,
+          "candidate_spans": [
+            {
+              "source_start": 56,
+              "source_end": 109,
+              "chunk_start": 0,
+              "chunk_end": 53
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 56,
+              "source_end": 109,
+              "chunk_start": 0,
+              "chunk_end": 53
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_scope_foreign",
+      "normalized_text_digest": "sha256:169e4aaeeb3c0c1ca7c9ab8dfcb5fe632a4139f67c8df6c8ca34fdbd6048bc04",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:8bd315ab6720b87102db711c7cda09cca6ab0c42ba0d25a3ac1d3aabfcd2f44c",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:4949d10d25cfbe0520d3827e925139567809f0a1fa29c84d393005161ae45c80",
+          "codepoint_count": 38,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 62,
+              "chunk_start": 0,
+              "chunk_end": 38
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 62,
+              "chunk_start": 0,
+              "chunk_end": 38
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_scope_revoked",
+      "normalized_text_digest": "sha256:55267fa392202eb0747ee048d7c6c3ca98096635f221373a39443394c3b8c05d",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:1485fb551d649da62455760fbb187eac907d07f888451e89fd5e72a100d6e910",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:f1b74ac379a4c4bf43a2b275d8b68e013d5a08ddeb67d703676e8a8953424792",
+          "codepoint_count": 37,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 61,
+              "chunk_start": 0,
+              "chunk_end": 37
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 61,
+              "chunk_start": 0,
+              "chunk_end": 37
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_scope_unlisted",
+      "normalized_text_digest": "sha256:a139e89ec7770e95bea1623b38f11fad94f3d555eb77ab134d9dd03c973e7bb1",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:1a80af848af54bf722585b33b165f288c6646f45330b4813ce0f86d456c44587",
+          "codepoint_count": 23,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 23,
+              "chunk_start": 0,
+              "chunk_end": 23
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:2aec91aeb8b959b0e40c4d2dadbc1c47804dd33fd4d9bc8f05e365b437c9fbb2",
+          "codepoint_count": 32,
+          "candidate_spans": [
+            {
+              "source_start": 25,
+              "source_end": 57,
+              "chunk_start": 0,
+              "chunk_end": 32
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 25,
+              "source_end": 57,
+              "chunk_start": 0,
+              "chunk_end": 32
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_scope_profile",
+      "normalized_text_digest": "sha256:0352e4756009ecbd743c91ba6995a9d2f95d437ca1f2947ca929c2411bd6f0af",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:172c1cab248af38d6e591eed1e0e226d98843428a53f99df9e95aeefb70f7620",
+          "codepoint_count": 22,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 22,
+              "chunk_start": 0,
+              "chunk_end": 22
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:9503ec28e09eb4f58dfcbb5b93d9b9c12e62f3d9ae74b4a371869ae7bd38d7c2",
+          "codepoint_count": 41,
+          "candidate_spans": [
+            {
+              "source_start": 24,
+              "source_end": 65,
+              "chunk_start": 0,
+              "chunk_end": 41
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 24,
+              "source_end": 65,
+              "chunk_start": 0,
+              "chunk_end": 41
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    },
+    {
+      "source_alias": "resume_scope_deleted_member",
+      "normalized_text_digest": "sha256:bccb5553e656fa54925835726ab0788cbacff7f97196da396b52b08f0b38e554",
+      "chunks": [
+        {
+          "ordinal": 0,
+          "content_digest": "sha256:00a7f39673fc8d2b55c8015f1138e4bc04047cf5fc3dad31ccb33425dc2f35e1",
+          "codepoint_count": 29,
+          "candidate_spans": [
+            {
+              "source_start": 0,
+              "source_end": 29,
+              "chunk_start": 0,
+              "chunk_end": 29
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 0,
+              "source_end": 29,
+              "chunk_start": 0,
+              "chunk_end": 29
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        },
+        {
+          "ordinal": 1,
+          "content_digest": "sha256:5180e9aa840db36db3294aeadc8bee7644057f8142eb4d7c5c2d63f1f8e2ab4d",
+          "codepoint_count": 46,
+          "candidate_spans": [
+            {
+              "source_start": 31,
+              "source_end": 77,
+              "chunk_start": 0,
+              "chunk_end": 46
+            }
+          ],
+          "spans": [
+            {
+              "source_start": 31,
+              "source_end": 77,
+              "chunk_start": 0,
+              "chunk_end": 46
+            }
+          ],
+          "resolution": "reviewed",
+          "reviewer_id": "codex_agent"
+        }
+      ]
+    }
+  ],
+  "units": [
+    {
+      "unit_id": "wheel_abi_resume_1",
+      "source_alias": "resume_wheel_abi",
+      "status": "complete",
+      "covered_codepoints": 54,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "sql_dialect_resume_1",
+      "source_alias": "resume_sql_dialect",
+      "status": "complete",
+      "covered_codepoints": 61,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "jdk_target_resume_1",
+      "source_alias": "resume_jdk_target",
+      "status": "complete",
+      "covered_codepoints": 56,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "http_protocol_resume_1",
+      "source_alias": "resume_http_protocol",
+      "status": "complete",
+      "covered_codepoints": 51,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "unicode_bytes_resume_1",
+      "source_alias": "resume_unicode_bytes",
+      "status": "complete",
+      "covered_codepoints": 47,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "oci_manifest_resume_1",
+      "source_alias": "resume_oci_manifest",
+      "status": "complete",
+      "covered_codepoints": 64,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "pager_shadow_resume_1",
+      "source_alias": "resume_pager_shadow",
+      "status": "complete",
+      "covered_codepoints": 33,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "index_proposal_resume_1",
+      "source_alias": "resume_index_proposal",
+      "status": "complete",
+      "covered_codepoints": 44,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "review_comment_resume_1",
+      "source_alias": "resume_review_comment",
+      "status": "complete",
+      "covered_codepoints": 41,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "restore_observer_resume_1",
+      "source_alias": "resume_restore_observer",
+      "status": "complete",
+      "covered_codepoints": 36,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "benchmark_runner_resume_1",
+      "source_alias": "resume_benchmark_runner",
+      "status": "complete",
+      "covered_codepoints": 38,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "handoff_boundary_resume_1",
+      "source_alias": "resume_handoff_boundary",
+      "status": "complete",
+      "covered_codepoints": 37,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "grant_approval_resume_1",
+      "source_alias": "resume_grant_approval",
+      "status": "complete",
+      "covered_codepoints": 35,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "cache_ttl_resume_1",
+      "source_alias": "resume_cache_ttl",
+      "status": "complete",
+      "covered_codepoints": 31,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "cache_ttl_resume_2",
+      "source_alias": "resume_cache_ttl",
+      "status": "complete",
+      "covered_codepoints": 39,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "csv_reconcile_resume_1",
+      "source_alias": "resume_csv_reconcile",
+      "status": "complete",
+      "covered_codepoints": 29,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "csv_reconcile_resume_2",
+      "source_alias": "resume_csv_reconcile",
+      "status": "complete",
+      "covered_codepoints": 30,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "accessibility_resume_1",
+      "source_alias": "resume_accessibility",
+      "status": "complete",
+      "covered_codepoints": 26,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "accessibility_resume_2",
+      "source_alias": "resume_accessibility",
+      "status": "complete",
+      "covered_codepoints": 29,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "checksum_import_resume_1",
+      "source_alias": "resume_checksum_import",
+      "status": "complete",
+      "covered_codepoints": 35,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "checksum_import_resume_2",
+      "source_alias": "resume_checksum_import",
+      "status": "complete",
+      "covered_codepoints": 32,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "sensor_units_resume_1",
+      "source_alias": "resume_sensor_units",
+      "status": "complete",
+      "covered_codepoints": 26,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "sensor_units_resume_2",
+      "source_alias": "resume_sensor_units",
+      "status": "complete",
+      "covered_codepoints": 32,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "retention_audit_resume_1",
+      "source_alias": "resume_retention_audit",
+      "status": "complete",
+      "covered_codepoints": 24,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "retention_audit_resume_2",
+      "source_alias": "resume_retention_audit",
+      "status": "complete",
+      "covered_codepoints": 34,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "locale_fallback_resume_1",
+      "source_alias": "resume_locale_fallback",
+      "status": "complete",
+      "covered_codepoints": 35,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "locale_fallback_resume_2",
+      "source_alias": "resume_locale_fallback",
+      "status": "complete",
+      "covered_codepoints": 35,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "sharding_gap_resume_1",
+      "source_alias": "resume_sharding_gap",
+      "status": "complete",
+      "covered_codepoints": 30,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "sharding_gap_web_1",
+      "source_alias": "web_sharding_gap",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "gpu_gap_resume_1",
+      "source_alias": "resume_gpu_gap",
+      "status": "complete",
+      "covered_codepoints": 36,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "gpu_gap_web_1",
+      "source_alias": "web_gpu_gap",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "ios_gap_resume_1",
+      "source_alias": "resume_ios_gap",
+      "status": "complete",
+      "covered_codepoints": 42,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "ios_gap_web_1",
+      "source_alias": "web_ios_gap",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "rotation_gap_resume_1",
+      "source_alias": "resume_rotation_gap",
+      "status": "complete",
+      "covered_codepoints": 27,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "rotation_gap_web_1",
+      "source_alias": "web_rotation_gap",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "streaming_gap_resume_1",
+      "source_alias": "resume_streaming_gap",
+      "status": "complete",
+      "covered_codepoints": 31,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "streaming_gap_web_1",
+      "source_alias": "web_streaming_gap",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "airgap_gap_resume_1",
+      "source_alias": "resume_airgap_gap",
+      "status": "complete",
+      "covered_codepoints": 31,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "airgap_gap_web_1",
+      "source_alias": "web_airgap_gap",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "device_gap_resume_1",
+      "source_alias": "resume_device_gap",
+      "status": "complete",
+      "covered_codepoints": 27,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "device_gap_web_1",
+      "source_alias": "web_device_gap",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "salary_absent_web_1",
+      "source_alias": "web_salary_absent",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "start_unknown_resume_1",
+      "source_alias": "resume_start_unknown",
+      "status": "complete",
+      "covered_codepoints": 33,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "language_score_resume_1",
+      "source_alias": "resume_language_score",
+      "status": "complete",
+      "covered_codepoints": 26,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "remote_policy_web_1",
+      "source_alias": "web_remote_policy",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "throughput_omission_resume_1",
+      "source_alias": "resume_throughput_omission",
+      "status": "complete",
+      "covered_codepoints": 36,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "sponsorship_unknown_web_1",
+      "source_alias": "web_sponsorship_unknown",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "license_present_resume_1",
+      "source_alias": "resume_license_present",
+      "status": "complete",
+      "covered_codepoints": 38,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "office_conflict_web_1",
+      "source_alias": "web_office_conflict",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "close_window_web_1",
+      "source_alias": "web_close_window",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "degree_revision_web_1",
+      "source_alias": "web_degree_revision",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "timezone_cutoff_web_1",
+      "source_alias": "web_timezone_cutoff",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "intern_duration_web_1",
+      "source_alias": "web_intern_duration",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "offer_condition_web_1",
+      "source_alias": "web_offer_condition",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "team_award_resume_1",
+      "source_alias": "resume_team_award",
+      "status": "complete",
+      "covered_codepoints": 22,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "team_award_resume_2",
+      "source_alias": "resume_team_award",
+      "status": "complete",
+      "covered_codepoints": 22,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "fork_history_resume_1",
+      "source_alias": "resume_fork_history",
+      "status": "complete",
+      "covered_codepoints": 33,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "two_employers_resume_1",
+      "source_alias": "resume_two_employers",
+      "status": "complete",
+      "covered_codepoints": 14,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "two_employers_resume_2",
+      "source_alias": "resume_two_employers",
+      "status": "complete",
+      "covered_codepoints": 26,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "mentor_metrics_resume_1",
+      "source_alias": "resume_mentor_metrics",
+      "status": "complete",
+      "covered_codepoints": 22,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "mentor_metrics_resume_2",
+      "source_alias": "resume_mentor_metrics",
+      "status": "complete",
+      "covered_codepoints": 30,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "course_vs_job_resume_1",
+      "source_alias": "resume_course_vs_job",
+      "status": "complete",
+      "covered_codepoints": 37,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "patent_namesake_resume_1",
+      "source_alias": "resume_patent_namesake",
+      "status": "complete",
+      "covered_codepoints": 35,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "resume_role_resume_1",
+      "source_alias": "resume_resume_role",
+      "status": "complete",
+      "covered_codepoints": 18,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "resume_role_resume_2",
+      "source_alias": "resume_resume_role",
+      "status": "complete",
+      "covered_codepoints": 27,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "web_secret_web_1",
+      "source_alias": "web_web_secret",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "resume_submit_resume_1",
+      "source_alias": "resume_resume_submit",
+      "status": "complete",
+      "covered_codepoints": 13,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "resume_submit_resume_2",
+      "source_alias": "resume_resume_submit",
+      "status": "complete",
+      "covered_codepoints": 24,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "web_scope_web_1",
+      "source_alias": "web_web_scope",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "resume_target_resume_1",
+      "source_alias": "resume_resume_target",
+      "status": "complete",
+      "covered_codepoints": 13,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "resume_target_resume_2",
+      "source_alias": "resume_resume_target",
+      "status": "complete",
+      "covered_codepoints": 36,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "web_score_web_1",
+      "source_alias": "web_web_score",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "resume_tool_resume_1",
+      "source_alias": "resume_resume_tool",
+      "status": "complete",
+      "covered_codepoints": 24,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "resume_tool_resume_2",
+      "source_alias": "resume_resume_tool",
+      "status": "complete",
+      "covered_codepoints": 44,
+      "chunk_ordinals": [
+        2
+      ]
+    },
+    {
+      "unit_id": "scope_public_web_1",
+      "source_alias": "web_scope_public",
+      "status": "not_applicable",
+      "covered_codepoints": 0,
+      "chunk_ordinals": []
+    },
+    {
+      "unit_id": "scope_foreign_resume_1",
+      "source_alias": "resume_scope_foreign",
+      "status": "complete",
+      "covered_codepoints": 29,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "scope_revoked_resume_1",
+      "source_alias": "resume_scope_revoked",
+      "status": "complete",
+      "covered_codepoints": 28,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "scope_unlisted_resume_1",
+      "source_alias": "resume_scope_unlisted",
+      "status": "complete",
+      "covered_codepoints": 23,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "scope_profile_resume_1",
+      "source_alias": "resume_scope_profile",
+      "status": "complete",
+      "covered_codepoints": 32,
+      "chunk_ordinals": [
+        1
+      ]
+    },
+    {
+      "unit_id": "scope_deleted_member_resume_1",
+      "source_alias": "resume_scope_deleted_member",
+      "status": "complete",
+      "covered_codepoints": 37,
+      "chunk_ordinals": [
+        1
+      ]
+    }
+  ],
+  "judgments": [
+    {
+      "case_id": "wheel_abi",
+      "source_alias": "resume_wheel_abi",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "wheel_abi",
+      "source_alias": "resume_wheel_abi",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "sql_dialect",
+      "source_alias": "resume_sql_dialect",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "sql_dialect",
+      "source_alias": "resume_sql_dialect",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "jdk_target",
+      "source_alias": "resume_jdk_target",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "jdk_target",
+      "source_alias": "resume_jdk_target",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "http_protocol",
+      "source_alias": "resume_http_protocol",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "http_protocol",
+      "source_alias": "resume_http_protocol",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "unicode_bytes",
+      "source_alias": "resume_unicode_bytes",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "unicode_bytes",
+      "source_alias": "resume_unicode_bytes",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "oci_manifest",
+      "source_alias": "resume_oci_manifest",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "oci_manifest",
+      "source_alias": "resume_oci_manifest",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "pager_shadow",
+      "source_alias": "resume_pager_shadow",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "pager_shadow",
+      "source_alias": "resume_pager_shadow",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "index_proposal",
+      "source_alias": "resume_index_proposal",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "index_proposal",
+      "source_alias": "resume_index_proposal",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "review_comment",
+      "source_alias": "resume_review_comment",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "review_comment",
+      "source_alias": "resume_review_comment",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "restore_observer",
+      "source_alias": "resume_restore_observer",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "restore_observer",
+      "source_alias": "resume_restore_observer",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "benchmark_runner",
+      "source_alias": "resume_benchmark_runner",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "benchmark_runner",
+      "source_alias": "resume_benchmark_runner",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "handoff_boundary",
+      "source_alias": "resume_handoff_boundary",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "handoff_boundary",
+      "source_alias": "resume_handoff_boundary",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "grant_approval",
+      "source_alias": "resume_grant_approval",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "grant_approval",
+      "source_alias": "resume_grant_approval",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "cache_ttl",
+      "source_alias": "resume_cache_ttl",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "cache_ttl",
+      "source_alias": "resume_cache_ttl",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "cache_ttl",
+      "source_alias": "resume_cache_ttl",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "csv_reconcile",
+      "source_alias": "resume_csv_reconcile",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "csv_reconcile",
+      "source_alias": "resume_csv_reconcile",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "csv_reconcile",
+      "source_alias": "resume_csv_reconcile",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "accessibility",
+      "source_alias": "resume_accessibility",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "accessibility",
+      "source_alias": "resume_accessibility",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "accessibility",
+      "source_alias": "resume_accessibility",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "checksum_import",
+      "source_alias": "resume_checksum_import",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "checksum_import",
+      "source_alias": "resume_checksum_import",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "checksum_import",
+      "source_alias": "resume_checksum_import",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "sensor_units",
+      "source_alias": "resume_sensor_units",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "sensor_units",
+      "source_alias": "resume_sensor_units",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "sensor_units",
+      "source_alias": "resume_sensor_units",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "retention_audit",
+      "source_alias": "resume_retention_audit",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "retention_audit",
+      "source_alias": "resume_retention_audit",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "retention_audit",
+      "source_alias": "resume_retention_audit",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "locale_fallback",
+      "source_alias": "resume_locale_fallback",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "locale_fallback",
+      "source_alias": "resume_locale_fallback",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "locale_fallback",
+      "source_alias": "resume_locale_fallback",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "sharding_gap",
+      "source_alias": "resume_sharding_gap",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "sharding_gap",
+      "source_alias": "resume_sharding_gap",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "gpu_gap",
+      "source_alias": "resume_gpu_gap",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "gpu_gap",
+      "source_alias": "resume_gpu_gap",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "ios_gap",
+      "source_alias": "resume_ios_gap",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "ios_gap",
+      "source_alias": "resume_ios_gap",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "rotation_gap",
+      "source_alias": "resume_rotation_gap",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "rotation_gap",
+      "source_alias": "resume_rotation_gap",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "streaming_gap",
+      "source_alias": "resume_streaming_gap",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "streaming_gap",
+      "source_alias": "resume_streaming_gap",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "airgap_gap",
+      "source_alias": "resume_airgap_gap",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "airgap_gap",
+      "source_alias": "resume_airgap_gap",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "device_gap",
+      "source_alias": "resume_device_gap",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "device_gap",
+      "source_alias": "resume_device_gap",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "start_unknown",
+      "source_alias": "resume_start_unknown",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "start_unknown",
+      "source_alias": "resume_start_unknown",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "language_score",
+      "source_alias": "resume_language_score",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "language_score",
+      "source_alias": "resume_language_score",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "throughput_omission",
+      "source_alias": "resume_throughput_omission",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "throughput_omission",
+      "source_alias": "resume_throughput_omission",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "license_present",
+      "source_alias": "resume_license_present",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "license_present",
+      "source_alias": "resume_license_present",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "team_award",
+      "source_alias": "resume_team_award",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "team_award",
+      "source_alias": "resume_team_award",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "team_award",
+      "source_alias": "resume_team_award",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "fork_history",
+      "source_alias": "resume_fork_history",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "fork_history",
+      "source_alias": "resume_fork_history",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "two_employers",
+      "source_alias": "resume_two_employers",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "two_employers",
+      "source_alias": "resume_two_employers",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "two_employers",
+      "source_alias": "resume_two_employers",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "mentor_metrics",
+      "source_alias": "resume_mentor_metrics",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "mentor_metrics",
+      "source_alias": "resume_mentor_metrics",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "mentor_metrics",
+      "source_alias": "resume_mentor_metrics",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "course_vs_job",
+      "source_alias": "resume_course_vs_job",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "course_vs_job",
+      "source_alias": "resume_course_vs_job",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "patent_namesake",
+      "source_alias": "resume_patent_namesake",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "patent_namesake",
+      "source_alias": "resume_patent_namesake",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_role",
+      "source_alias": "resume_resume_role",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_role",
+      "source_alias": "resume_resume_role",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_role",
+      "source_alias": "resume_resume_role",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_submit",
+      "source_alias": "resume_resume_submit",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_submit",
+      "source_alias": "resume_resume_submit",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_submit",
+      "source_alias": "resume_resume_submit",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_target",
+      "source_alias": "resume_resume_target",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_target",
+      "source_alias": "resume_resume_target",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_target",
+      "source_alias": "resume_resume_target",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_tool",
+      "source_alias": "resume_resume_tool",
+      "chunk_ordinal": 0,
+      "relevance": "irrelevant",
+      "reason": "off_topic",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_tool",
+      "source_alias": "resume_resume_tool",
+      "chunk_ordinal": 1,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    },
+    {
+      "case_id": "resume_tool",
+      "source_alias": "resume_resume_tool",
+      "chunk_ordinal": 2,
+      "relevance": "relevant",
+      "reason": "required_evidence",
+      "reviewer_id": "codex_agent"
+    }
+  ]
+}

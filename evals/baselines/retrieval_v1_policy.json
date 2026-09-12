@@ -1,0 +1,130 @@
+{
+  "schema_version": 2,
+  "policy_version": "retrieval-regression-v2",
+  "acceptance_reason": "Gate 9 follow-up: human-reviewed exact per-case deterministic rankings added while retaining the accepted metric thresholds and zero-leakage invariants.",
+  "evidence_scope": "deterministic_fake_embedding_regression",
+  "semantic_quality_claim": false,
+  "expected_identity": {
+    "dataset_version": "retrieval-v1",
+    "dataset_digest": "sha256:7748f3a0b4ebdc6003bee7a116c243dadef3c4329ee6443afc2a2501d2c4f16a",
+    "case_set_digest": "sha256:40bceda001ed553e6d5453b03c7d0d2851996f3469ba74dbe1ff85445e272e96",
+    "normalization_version": "nfc-lf-v1",
+    "chunking_version": "heading-paragraph-utf8-budget-800-v1",
+    "embedding_profile": "qwen-beijing-text-embedding-v4-1536-v1",
+    "embedding_dimension": 1536,
+    "retrieval_top_k": 5
+  },
+  "expected_rankings": [
+    {
+      "case_id": "python_backend_stack",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "agent_reliability", "ordinal": 0},
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "backend_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "rag_ranked_evidence",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "backend_profile", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 0},
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "approval_safety",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "agent_reliability", "ordinal": 0},
+        {"document_alias": "backend_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "backend_profile", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "exact_pipeline_canary",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "backend_profile", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 0},
+        {"document_alias": "rag_profile", "ordinal": 0},
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "backend_profile", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "foreign_allowlist_canary",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "backend_profile", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 0},
+        {"document_alias": "rag_profile", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "tenant_membership_guard",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "backend_profile", "ordinal": 0},
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 0},
+        {"document_alias": "agent_reliability", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "citation_instruction_safety",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "agent_reliability", "ordinal": 0},
+        {"document_alias": "backend_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "backend_profile", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "checkpoint_resume",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 0},
+        {"document_alias": "agent_reliability", "ordinal": 0},
+        {"document_alias": "backend_profile", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "provider_attempt_accounting",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "backend_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 0},
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 0}
+      ]
+    },
+    {
+      "case_id": "pgvector_ingestion_pipeline",
+      "ranked_retrieved_chunks": [
+        {"document_alias": "agent_reliability", "ordinal": 1},
+        {"document_alias": "agent_reliability", "ordinal": 0},
+        {"document_alias": "rag_profile", "ordinal": 0},
+        {"document_alias": "backend_profile", "ordinal": 1},
+        {"document_alias": "rag_profile", "ordinal": 1}
+      ]
+    }
+  ],
+  "thresholds": {
+    "minimum_macro_recall_at_1": 0.1,
+    "minimum_macro_recall_at_3": 0.4,
+    "minimum_macro_recall_at_5": 0.8,
+    "minimum_mean_reciprocal_rank": 0.29,
+    "maximum_total_irrelevant_context_count": 42
+  },
+  "hard_invariants": {
+    "workspace_leakage_count": 0,
+    "allowlist_leakage_count": 0
+  }
+}

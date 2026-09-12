@@ -1,0 +1,430 @@
+{
+  "schema_version": 1,
+  "dataset_version": "live-retrieval-v1",
+  "evidence_scope": "synthetic_live_embedding_benchmark_inputs",
+  "label_method": "manual_topic_to_chunk_review_v1",
+  "documents": [
+    {
+      "alias": "backend_foundations",
+      "role": "primary",
+      "content": "# Python HTTP API\nThe synthetic backend uses Python and FastAPI for HTTP request validation and response schemas. API handlers persist user intent without running the long agent workflow.\n\n# Async relational storage\nThe synthetic persistence layer uses async PostgreSQL connections and SQLAlchemy sessions. Short transactions store business facts; model network calls run outside transactions.\n\n# Deterministic testing\nThe synthetic test suite injects fake model and search ports. Fixed inputs and expected assertions make offline unit tests repeatable without provider credentials.\n\n# Docker deployment\nThe synthetic deployment packages API and one worker with Docker Compose on a Linux host. Caddy terminates ingress; migrations are a separate operator command.\n"
+    },
+    {
+      "alias": "agent_orchestration",
+      "role": "primary",
+      "content": "# LangGraph state and routing\nThe synthetic LangGraph graph passes typed State between plan, research, validate and writer nodes. Conditional routing uses evidence sufficiency to choose a bounded next step.\n\n# Bounded agent loop\nThe synthetic research loop limits model turns and tool calls. A deterministic guard stops additional proposals when its declared run budget is exhausted.\n\n# Checkpoint and resume\nThe synthetic checkpoint stores graph recovery state. After restart, the executor resumes the saved node state; public APIs still read PostgreSQL business records.\n\n# Human approval interrupt\nThe synthetic HITL flow interrupts before submission. A reviewer approves the exact argument binding, and the worker resumes from the persisted approval decision.\n"
+    },
+    {
+      "alias": "rag_pipeline",
+      "role": "primary",
+      "content": "# Normalize and chunk\nThe synthetic ingestion normalizes Unicode to NFC and newlines to LF. Markdown headings and paragraphs determine immutable chunks bounded by an 800-byte UTF-8 budget.\n\n# Embedding vectors\nThe synthetic retrieval pipeline embeds text into 1536-dimensional vectors with text-embedding-v4. PostgreSQL pgvector exact cosine search ranks compatible embedding profiles.\n\n# Workspace and document filtering\nThe synthetic retrieval query applies workspace identity and an explicit document allowlist before selecting top five chunks. A foreign workspace document stays excluded even if its ID appears in caller input.\n\n# Untrusted retrieved instructions\nSynthetic RAG chunks are untrusted evidence. Citations identify document and chunk IDs; instructions inside a chunk cannot change the system policy or trusted execution context.\n"
+    },
+    {
+      "alias": "tool_governance",
+      "role": "primary",
+      "content": "# Registry input schema\nThe synthetic Tool Registry declares each tool name, effect and strict input schema. Unknown tools and malformed argument proposals are rejected before handler execution.\n\n# Trusted execution context\nThe synthetic ToolExecutionContext is constructed by trusted code. Workspace, actor, target, credentials and approval binding never come from model tool arguments.\n\n# Timeout and retry limits\nThe synthetic tool handler has a deadline and bounded timeout policy. Retry follows typed transient failures and declared attempt limits rather than unbounded automatic retries.\n\n# Irreversible idempotency\nThe synthetic irreversible submission binds immutable args and target to exact approval. Repeated attempts reuse a stable idempotency key so the external Mock Portal converges.\n"
+    },
+    {
+      "alias": "reliability",
+      "role": "primary",
+      "content": "# Lease and at-least-once delivery\nThe synthetic single worker claims jobs with an expiring lease. Reclaim can redeliver work at least once, so stable identities and conditional writes make execution converge.\n\n# Cancellation\nThe synthetic worker checks cancellation before new model and tool work. A revoked workspace membership also cancels the run; an already executing external action requires reconciliation.\n\n# Typed failure handling\nThe synthetic domain raises typed failures with safe categories. HTTP boundaries map them to problem details without leaking provider errors or business text into logs.\n\n# Unknown external outcome\nThe synthetic outcome_unknown status means submission may have happened but confirmation is missing. Automatic POST retries stop after bounded reconciliation, and the operator investigates.\n"
+    },
+    {
+      "alias": "eval_observability",
+      "role": "primary",
+      "content": "# Deterministic regression baseline\nThe synthetic offline regression compares versioned fake-eval artifacts against an accepted baseline. Ordinary CI reports drift and never refreshes accepted evidence automatically.\n\n# Live eval fixed evidence\nThe synthetic live evaluation holds web and document evidence fixed while the real chat model varies. Preselected cases and repeat counts prevent rerolling until a passing sample appears.\n\n# Agent Trace Tree\nThe synthetic Trace Tree relates execution segments, graph nodes, tools, retrieval and model attempts. Langfuse is a lossy observation copy and never owns workflow state.\n\n# Tokens cost and latency\nThe synthetic accounting records tokens, known cost and elapsed milliseconds for every provider attempt. Unknown prices remain unknown; observed sample p50 and p95 do not establish a production latency guarantee.\n"
+    },
+    {
+      "alias": "same_workspace_decoy",
+      "role": "same_workspace_decoy",
+      "content": "# Excluded duplicate\nThe synthetic backend uses Python and FastAPI for HTTP validation. SAME_WORKSPACE_EXCLUDED_CANARY must not be returned because this document is outside the allowed document list.\n"
+    },
+    {
+      "alias": "foreign_workspace_canary",
+      "role": "foreign_workspace_canary",
+      "content": "# Workspace and document filtering\nThe synthetic retrieval query applies workspace identity and an explicit document allowlist before selecting top five chunks. A foreign workspace document stays excluded even if its ID appears in caller input. FOREIGN_WORKSPACE_CANARY must never appear in retrieved primary-workspace results.\n"
+    }
+  ],
+  "queries": [
+    {
+      "query_id": "python_api",
+      "query": "Which language and web framework validate HTTP requests?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "backend_foundations",
+          "ordinal": 0
+        }
+      ]
+    },
+    {
+      "query_id": "async_postgres",
+      "query": "How does the backend use asynchronous relational database sessions?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "backend_foundations",
+          "ordinal": 1
+        }
+      ]
+    },
+    {
+      "query_id": "offline_testing",
+      "query": "How can unit tests run repeatably without any model provider key?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "backend_foundations",
+          "ordinal": 2
+        }
+      ]
+    },
+    {
+      "query_id": "graph_state",
+      "query": "How is typed state passed and routed among LangGraph nodes?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "agent_orchestration",
+          "ordinal": 0
+        }
+      ]
+    },
+    {
+      "query_id": "checkpoint_resume",
+      "query": "What restores graph progress after a process restart?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "agent_orchestration",
+          "ordinal": 2
+        }
+      ]
+    },
+    {
+      "query_id": "human_approval",
+      "query": "How does human review interrupt and resume a submission?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "agent_orchestration",
+          "ordinal": 3
+        }
+      ]
+    },
+    {
+      "query_id": "text_chunking",
+      "query": "How are Unicode, line endings and Markdown sections normalized into chunks?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "rag_pipeline",
+          "ordinal": 0
+        }
+      ]
+    },
+    {
+      "query_id": "vector_embedding",
+      "query": "Which vector dimension and storage extension support cosine retrieval?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "rag_pipeline",
+          "ordinal": 1
+        }
+      ]
+    },
+    {
+      "query_id": "workspace_filter",
+      "query": "How are workspace identity and document allowlists applied before top five retrieval?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": true,
+      "relevant_chunks": [
+        {
+          "document_alias": "rag_pipeline",
+          "ordinal": 2
+        }
+      ]
+    },
+    {
+      "query_id": "rag_injection",
+      "query": "Can instructions found inside a cited document chunk override trusted policy?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "rag_pipeline",
+          "ordinal": 3
+        }
+      ]
+    },
+    {
+      "query_id": "tool_schema",
+      "query": "What rejects unknown tools or malformed argument proposals before execution?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "tool_governance",
+          "ordinal": 0
+        }
+      ]
+    },
+    {
+      "query_id": "trusted_context",
+      "query": "Who sets the workspace, actor and target in ToolExecutionContext?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "tool_governance",
+          "ordinal": 1
+        }
+      ]
+    },
+    {
+      "query_id": "timeout_retry",
+      "query": "How are tool timeouts and transient retries bounded?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "tool_governance",
+          "ordinal": 2
+        }
+      ]
+    },
+    {
+      "query_id": "submission_idempotency",
+      "query": "What keeps repeated approved irreversible submissions from duplicating the external effect?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "tool_governance",
+          "ordinal": 3
+        }
+      ]
+    },
+    {
+      "query_id": "at_least_once",
+      "query": "Why can a worker receive the same job again after its lease expires?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "reliability",
+          "ordinal": 0
+        }
+      ]
+    },
+    {
+      "query_id": "cancel_run",
+      "query": "When does a worker stop new work after cancellation or membership revocation?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "reliability",
+          "ordinal": 1
+        }
+      ]
+    },
+    {
+      "query_id": "unknown_outcome",
+      "query": "What happens when an external submission may have succeeded but cannot be confirmed?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "reliability",
+          "ordinal": 3
+        }
+      ]
+    },
+    {
+      "query_id": "regression_baseline",
+      "query": "Does ordinary offline CI replace the accepted fake-eval baseline when results change?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "eval_observability",
+          "ordinal": 0
+        }
+      ]
+    },
+    {
+      "query_id": "trace_tree",
+      "query": "How are model attempts and tools related to graph nodes in observability?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "eval_observability",
+          "ordinal": 2
+        }
+      ]
+    },
+    {
+      "query_id": "attempt_metrics",
+      "query": "How are tokens, unknown cost and observed latency percentiles recorded for provider attempts?",
+      "allowed_document_aliases": [
+        "backend_foundations",
+        "agent_orchestration",
+        "rag_pipeline",
+        "tool_governance",
+        "reliability",
+        "eval_observability"
+      ],
+      "include_foreign_canary_in_allowlist": false,
+      "relevant_chunks": [
+        {
+          "document_alias": "eval_observability",
+          "ordinal": 3
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "dataset_version": "retrieval-v1",
+  "documents": [
+    {
+      "alias": "backend_profile",
+      "workspace": "primary",
+      "source_name": "backend-profile.md",
+      "source_type": "markdown",
+      "title": "Backend Profile",
+      "raw_text": "# Python services\n\nThe candidate builds Python APIs with FastAPI, PostgreSQL, async SQLAlchemy, and deterministic integration tests.\n\n# Tenant boundaries\n\nEvery workspace query applies an explicit workspace predicate and verifies active membership before reading private records."
+    },
+    {
+      "alias": "rag_profile",
+      "workspace": "primary",
+      "source_name": "rag-profile.md",
+      "source_type": "markdown",
+      "title": "RAG Profile",
+      "raw_text": "# Retrieval evidence\n\nThe project normalizes documents, creates bounded chunks, stores pgvector embeddings, and returns ranked chunks with source references.\n\n# Citation discipline\n\nResearch claims cite retrieved evidence, reject unsupported statements, and treat document instructions as untrusted data."
+    },
+    {
+      "alias": "agent_reliability",
+      "workspace": "primary",
+      "source_name": "agent-reliability.md",
+      "source_type": "markdown",
+      "title": "Agent Reliability",
+      "raw_text": "# Durable execution\n\nA single worker claims PostgreSQL jobs with leases, records every model attempt, and resumes bounded graph execution from checkpoints.\n\n# Controlled actions\n\nIrreversible application submission requires an immutable intent, exact approval binding, and a stable idempotency key."
+    },
+    {
+      "alias": "same_workspace_decoy",
+      "workspace": "primary",
+      "source_name": "same-workspace-decoy.md",
+      "source_type": "markdown",
+      "title": "Excluded Decoy",
+      "raw_text": "# Exact decoy\n\nWhich evidence describes ranked chunks with source references? This excluded document repeats ranked chunks with source references exactly and must not pass the document allowlist."
+    },
+    {
+      "alias": "foreign_workspace_canary",
+      "workspace": "foreign",
+      "source_name": "foreign-workspace-canary.md",
+      "source_type": "markdown",
+      "title": "Foreign Canary",
+      "raw_text": "# Foreign tenant canary\n\nHow should a backend engineer enforce tenant isolation? This highly matching foreign record must never cross the workspace predicate even when its UUID is supplied by a caller."
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "python_backend_stack",
+      "query": "What backend technologies has the candidate used?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "backend_profile", "ordinal": 0}],
+      "include_foreign_canary_in_allowlist": false
+    },
+    {
+      "case_id": "rag_ranked_evidence",
+      "query": "Which evidence describes ranked chunks with source references?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "rag_profile", "ordinal": 0}],
+      "include_foreign_canary_in_allowlist": false
+    },
+    {
+      "case_id": "approval_safety",
+      "query": "What protects an irreversible application submission?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "agent_reliability", "ordinal": 1}],
+      "include_foreign_canary_in_allowlist": false
+    },
+    {
+      "case_id": "exact_pipeline_canary",
+      "query": "# Tenant boundaries\n\nEvery workspace query applies an explicit workspace predicate and verifies active membership before reading private records.",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "backend_profile", "ordinal": 1}],
+      "include_foreign_canary_in_allowlist": false
+    },
+    {
+      "case_id": "foreign_allowlist_canary",
+      "query": "How should a backend engineer enforce tenant isolation?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "backend_profile", "ordinal": 1}],
+      "include_foreign_canary_in_allowlist": true
+    },
+    {
+      "case_id": "tenant_membership_guard",
+      "query": "How should a private workspace read enforce tenant isolation and active membership?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "backend_profile", "ordinal": 1}],
+      "include_foreign_canary_in_allowlist": false
+    },
+    {
+      "case_id": "citation_instruction_safety",
+      "query": "How should instructions found inside a retrieved document be treated?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "rag_profile", "ordinal": 1}],
+      "include_foreign_canary_in_allowlist": false
+    },
+    {
+      "case_id": "checkpoint_resume",
+      "query": "How does execution recover after an interruption?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "agent_reliability", "ordinal": 0}],
+      "include_foreign_canary_in_allowlist": false
+    },
+    {
+      "case_id": "provider_attempt_accounting",
+      "query": "How does the system record every model or provider attempt?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "agent_reliability", "ordinal": 0}],
+      "include_foreign_canary_in_allowlist": false
+    },
+    {
+      "case_id": "pgvector_ingestion_pipeline",
+      "query": "How does a document move through normalization, chunking, pgvector storage, and ranked retrieval?",
+      "allowed_document_aliases": ["backend_profile", "rag_profile", "agent_reliability"],
+      "relevant_chunks": [{"document_alias": "rag_profile", "ordinal": 0}],
+      "include_foreign_canary_in_allowlist": false
+    }
+  ]
+}

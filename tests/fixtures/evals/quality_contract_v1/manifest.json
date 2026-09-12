@@ -1,0 +1,68 @@
+{
+  "dataset_version": "quality-contract-example-v1",
+  "purpose": "contract_example",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "digest": "sha256:fd9174588166e2078251d2f5963dfa531a4a90c1bf04bd5f8ab72bf62ad28e44",
+      "role": "cases"
+    },
+    {
+      "path": "source_units.jsonl",
+      "digest": "sha256:4afeb97015d98e8eee746bab1f2b343708bfc117c4690c5c7cc03c1902352d46",
+      "role": "source_units"
+    },
+    {
+      "path": "rubric.json",
+      "digest": "sha256:55fcd98b4e58c418577b0bc9cbe7e337f5cb3ec9d2880940fc0c519ffdf2f81a",
+      "role": "rubric"
+    },
+    {
+      "path": "resume.md",
+      "digest": "sha256:c59b72daee7cbb280940773c3f4f620d432d0f05dc8ee56bacf92551831ca11e",
+      "role": "document"
+    },
+    {
+      "path": "role.md",
+      "digest": "sha256:ae1c57143427bb75b72d8c3be81ef4517a4fccb4167df17ad351c94518e1c39f",
+      "role": "web_fixture"
+    }
+  ],
+  "strata": [
+    "unsupported_experience",
+    "no_resume_scope"
+  ],
+  "families": [
+    {
+      "family_id": "candidate_alpha",
+      "split": "dev"
+    },
+    {
+      "family_id": "no_resume_family",
+      "split": "dev"
+    }
+  ],
+  "split_rule": "family_disjoint",
+  "sources": [
+    {
+      "alias": "resume_alpha",
+      "kind": "resume",
+      "path": "resume.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "role_backend",
+      "kind": "web",
+      "path": "role.md",
+      "normalization_version": "nfc-lf-v1"
+    }
+  ],
+  "author_ids": [
+    "codex"
+  ],
+  "review_status": "not_reviewed",
+  "reviewer_ids": [],
+  "review_notes": "仅为 E4.2 合成契约样例，未进行人工事实和标签审核。",
+  "license_category": "synthetic",
+  "license_notes": "本步骤原创合成材料，无真实候选人或外部岗位正文。"
+}

@@ -1,0 +1,22 @@
+name: Set up locked Pathfinder Python
+description: Install the pinned uv/Python toolchain and synchronize the locked environment.
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned uv and Python
+      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      with:
+        version: "0.11.32"
+        python-version: "3.12.13"
+        enable-cache: true
+
+    - name: Verify lockfile
+      shell: bash
+      run: |
+        uv --version
+        uv lock --check
+
+    - name: Synchronize locked environment
+      shell: bash
+      run: uv sync --locked

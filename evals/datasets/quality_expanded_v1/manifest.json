@@ -1,0 +1,1013 @@
+{
+  "dataset_version": "quality-expanded-v1",
+  "purpose": "baseline",
+  "files": [
+    {
+      "path": "documents/resume_wheel_abi.md",
+      "digest": "sha256:4a4770601c3c60438dd663e3d06eb7827642d64deb8f4a9c33dbd159dcc6ae97",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_sql_dialect.md",
+      "digest": "sha256:43a3cf68b9313c894667041081b5a0f823a5335df0641cc08afd8c1ae97125bc",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_jdk_target.md",
+      "digest": "sha256:67651b6d2c042708d041d6679b7ed5409235e0bb8bf011b2a40a1f4503929ef0",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_http_protocol.md",
+      "digest": "sha256:5e432b431ee7fe6c85009e8026249c39ef99c65d30c346c2df68a00c1bb1b505",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_unicode_bytes.md",
+      "digest": "sha256:a723bd95078fe066c009418423b7d7d154880d475b9712376e76d3c13b5b45cd",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_oci_manifest.md",
+      "digest": "sha256:6e1f83f4064f6ea2f6fcb9f29450d1185c328e19bf92f04ce0e88aee8cca3ec4",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_pager_shadow.md",
+      "digest": "sha256:827f1af82a76035b663ab59272dd28e01806428b110b1dd36033609138784cdd",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_index_proposal.md",
+      "digest": "sha256:07d1d5fc48c50bf45498cbe0a4dc99c538b5a245e98eaea407b426c5d39c282f",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_review_comment.md",
+      "digest": "sha256:ba6c32e0a5c29e81ed2be6637056bcf69b9334e696c4bcdd015fe4bd33ae4b32",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_restore_observer.md",
+      "digest": "sha256:6807af78c0df5ddc6b0046b0277f3ea9651ecbd1913637834cab1f3f1a38aaf3",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_benchmark_runner.md",
+      "digest": "sha256:260e913fe117fadded33e0c478dac1237711dc087ae49dcc80f07525e5fb8a82",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_handoff_boundary.md",
+      "digest": "sha256:2abadf1db0580e13b8afa576db08020aeaad91aec54cf00edd192e1c7a461bfc",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_grant_approval.md",
+      "digest": "sha256:9a7070d6d2449b8606259a8ddfc072bcf7cf47bbaf78c4f86d4979fc4f669a35",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_cache_ttl.md",
+      "digest": "sha256:fee536304e99f57639a62115b2d093d4f9dce0ff851271bbbf4fc615736b76f5",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_csv_reconcile.md",
+      "digest": "sha256:4bcc00cd3c1584f029a6b001189d90bb0bff5702a8372521fd387ca28d7c5780",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_accessibility.md",
+      "digest": "sha256:5a846a26e86263aef755edaceea16b0763baf55880521aed2abc2d2fd07aed50",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_checksum_import.md",
+      "digest": "sha256:6a4ae42e2ad59e9cfbfd1ec56e4f54b3eac2689cb08c51d083ff712469a95288",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_sensor_units.md",
+      "digest": "sha256:6b20692764a54da20477d695a2fdfd98cfd065c93d4aef910638d12bc3cfc7b7",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_retention_audit.md",
+      "digest": "sha256:eef4b28df8eb446cea6a46f9d2b427e95de14966ee4bbc7a6fd71d4bb401f601",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_locale_fallback.md",
+      "digest": "sha256:02a91d78f6c2da4d75073a84bbf6c0ce0eae8a9c94459a55417bbf49915bc96b",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_sharding_gap.md",
+      "digest": "sha256:fa8bdcf50fbe240e596c0ce93a0749194c6eaa89afe066517519ed00e6d9dc95",
+      "role": "document"
+    },
+    {
+      "path": "web/web_sharding_gap.md",
+      "digest": "sha256:e8bd155cf36884ca5bf93dfc553a3e05408dbf3dc822f507d1cbb6c264dc4179",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_gpu_gap.md",
+      "digest": "sha256:4b154c0e59f5b65bea92835a84089c4cd5c4c1793275db11a3b6d28897a52251",
+      "role": "document"
+    },
+    {
+      "path": "web/web_gpu_gap.md",
+      "digest": "sha256:55d2645044e581240f40ef8e3eee26a65cb3404e261f68a6e514fbfd71e62145",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_ios_gap.md",
+      "digest": "sha256:3b6a4bcc19386590da48df915ed94ce54b658a1c5ea935b7ab763420d333e1f0",
+      "role": "document"
+    },
+    {
+      "path": "web/web_ios_gap.md",
+      "digest": "sha256:667e1c13376e29d17d35de1e8fabe533e1f371c08e81955b2076e93b3175acc6",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_rotation_gap.md",
+      "digest": "sha256:a1a74c3f5bf2391336503461c21438fd66549f490f0d82a8456dba21553d984c",
+      "role": "document"
+    },
+    {
+      "path": "web/web_rotation_gap.md",
+      "digest": "sha256:17d108fa855a129faf5c788b063a1abfd29de15711aed08311a59fd97fe440f2",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_streaming_gap.md",
+      "digest": "sha256:a6d01b6025d677c91ea0abc7458c2550643c1b99f3007df86d3a7f2843c2c022",
+      "role": "document"
+    },
+    {
+      "path": "web/web_streaming_gap.md",
+      "digest": "sha256:8ab6b5211049006753a64ffa0ae07126378d22a24636e96148c16d04621023f1",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_airgap_gap.md",
+      "digest": "sha256:342f684ed86f8d7c7e3cd5af5ecdc3a23f9323fb11af4c8fe8cfc383bd5da454",
+      "role": "document"
+    },
+    {
+      "path": "web/web_airgap_gap.md",
+      "digest": "sha256:5cb11c464e075aed53c4c301658e7d0103476ff8cd460a6a27585d6d8db5527e",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_device_gap.md",
+      "digest": "sha256:df1f4dd8e6d0ffce0b042c48c94cfd1e25b7b680434526497b7e055358254dc6",
+      "role": "document"
+    },
+    {
+      "path": "web/web_device_gap.md",
+      "digest": "sha256:1b0c4c9b07642f9dc2c34df9e36ffa9b3a94c49a78e5888388a913fde007aa06",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_salary_absent.md",
+      "digest": "sha256:f46b325ef53608af9c73a5dc6147044a0190656d4d3d008179ef1577e7ba7636",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_start_unknown.md",
+      "digest": "sha256:79772d0ca19405609f1d659c4021a8cd37c07abe66994c4dfe6b3a5d5d1a3fc8",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_language_score.md",
+      "digest": "sha256:3deb56b6a37125fd39939d2c5c5eab0f53d454eb714092f2d74e7de61e0f6c9c",
+      "role": "document"
+    },
+    {
+      "path": "web/web_remote_policy.md",
+      "digest": "sha256:e49801ddba791c0dea02cc99184f4b0ce11a425edc05a1aea0c9daaa940f0157",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_throughput_omission.md",
+      "digest": "sha256:0eb11ce057c5d544c3026b5d0ee91f2fd6a443c807ffce146241842435844aca",
+      "role": "document"
+    },
+    {
+      "path": "web/web_sponsorship_unknown.md",
+      "digest": "sha256:37ead97212978a5cb23805ae1f82adf4b1e57fc6d3772bb6f7c28af41f0b931c",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_license_present.md",
+      "digest": "sha256:dddf0ec8a791cfaf04a2897347e5157647476978c51cf3872316d563fddd765f",
+      "role": "document"
+    },
+    {
+      "path": "web/web_office_conflict.md",
+      "digest": "sha256:fe8b6ed15f287598eb0e8d27c7e17a6f531547c998765b6773ee786d64b371a5",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_close_window.md",
+      "digest": "sha256:d6b70cb66f9a66ab75a640694050db333ad540214f68e0ceae00665e171e98b2",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_degree_revision.md",
+      "digest": "sha256:81c39c46cb9982524eb5b2e1934647dbf19446f1c2ec0fde59d2bb20b7131c7f",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_timezone_cutoff.md",
+      "digest": "sha256:eec4a9e2f2d548f89a03c3415605a30d38acc328e82e7763b747a697016c2252",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_intern_duration.md",
+      "digest": "sha256:4b7841072065a0a92a7a97391a3c357293e2a78771afba5218103160e4969ddc",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_offer_condition.md",
+      "digest": "sha256:d7148a93c7045e39bcdfdf7e7f05dadd6c586a6454cdcd06d332b6defce1aa12",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_team_award.md",
+      "digest": "sha256:5dd95782f72dbf0087bd737e11d1de3f61c4f059260b14010489012e19bbde47",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_fork_history.md",
+      "digest": "sha256:1b37f8cdeda62c6d5218813521e1d1a0d67866c46fe7c1c23a5c4f244c109952",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_two_employers.md",
+      "digest": "sha256:587d60612259794c5c500e694ad66b8c2641e0de798c4e9d3d6cf54e6b06608b",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_mentor_metrics.md",
+      "digest": "sha256:4371e9f0e6a538ab7501fbd6a1b8806ea2fb41add516b016b83e9898634d2ef1",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_course_vs_job.md",
+      "digest": "sha256:255c5570686fdf83ee4f5a6bfb442bf970424c2097bc10500be47a5de44e736a",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_patent_namesake.md",
+      "digest": "sha256:20d8da8e65f4a5e0a5066e00ee18afcc4541897aae05f17c96d652e43cf03967",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_resume_role.md",
+      "digest": "sha256:834f0152fc0a67a548d6ccab440f0bc5aa46a7030dd3cecb7874274f61811812",
+      "role": "document"
+    },
+    {
+      "path": "web/web_web_secret.md",
+      "digest": "sha256:9dc312a9cf47bb1d25ddfad894b7fedb7921a814569ca1d77b0ef7dfabeea966",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_resume_submit.md",
+      "digest": "sha256:55e62fe8e84ab276639e556f624ad46540aa930d33459b9842de9c255913ddf5",
+      "role": "document"
+    },
+    {
+      "path": "web/web_web_scope.md",
+      "digest": "sha256:d9a154e551f265f51912264a3b03d4c4ac6ea8cda115978da84becad354a6f03",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_resume_target.md",
+      "digest": "sha256:a7294541089f0a005016419967b96e347f087c3464895bf6b11e5b2c507da4e5",
+      "role": "document"
+    },
+    {
+      "path": "web/web_web_score.md",
+      "digest": "sha256:299e78cbc93633c83540d937712c759a542b6115cc76d380007199c186839b3d",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_resume_tool.md",
+      "digest": "sha256:e6f1280a2d5c740132f9a884c9272cefad7b6070c8409ac0d6533557426622c7",
+      "role": "document"
+    },
+    {
+      "path": "web/web_scope_public.md",
+      "digest": "sha256:21a0f71e17ceb05bca78bf1d044acf88a3b19263c3c1e1c7c5c16aaad8fc8bbd",
+      "role": "web_fixture"
+    },
+    {
+      "path": "documents/resume_scope_foreign.md",
+      "digest": "sha256:169e4aaeeb3c0c1ca7c9ab8dfcb5fe632a4139f67c8df6c8ca34fdbd6048bc04",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_scope_revoked.md",
+      "digest": "sha256:55267fa392202eb0747ee048d7c6c3ca98096635f221373a39443394c3b8c05d",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_scope_unlisted.md",
+      "digest": "sha256:a139e89ec7770e95bea1623b38f11fad94f3d555eb77ab134d9dd03c973e7bb1",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_scope_profile.md",
+      "digest": "sha256:0352e4756009ecbd743c91ba6995a9d2f95d437ca1f2947ca929c2411bd6f0af",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_scope_deleted_member.md",
+      "digest": "sha256:bccb5553e656fa54925835726ab0788cbacff7f97196da396b52b08f0b38e554",
+      "role": "document"
+    },
+    {
+      "path": "cases.jsonl",
+      "role": "cases",
+      "digest": "sha256:f02b70807b24c04b52bff8f954f40ce956f7fe0d9cb307b1df564bad3cc49b2e"
+    },
+    {
+      "path": "source_units.jsonl",
+      "role": "source_units",
+      "digest": "sha256:1e0d1f2ed58748e7ad4885e27b294bbda0238a2888f2192f0b3cc7c9ab79636c"
+    },
+    {
+      "path": "rubric.json",
+      "role": "rubric",
+      "digest": "sha256:99ce87fc11bf0ffe03566d42de2058dc03cf7bd7c27b922c42654bb1c19f6a67"
+    }
+  ],
+  "strata": [
+    "mixed_technical_versions",
+    "claim_strength",
+    "multi_paragraph_support",
+    "unsupported_experience",
+    "no_or_partial_answer",
+    "web_conflict_or_time",
+    "similar_experience_distractor",
+    "prompt_injection",
+    "scope_negative"
+  ],
+  "families": [
+    {
+      "family_id": "family_wheel_abi",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_sql_dialect",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_jdk_target",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_http_protocol",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_unicode_bytes",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_oci_manifest",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_pager_shadow",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_index_proposal",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_review_comment",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_restore_observer",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_benchmark_runner",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_handoff_boundary",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_grant_approval",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_cache_ttl",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_csv_reconcile",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_accessibility",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_checksum_import",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_sensor_units",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_retention_audit",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_locale_fallback",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_sharding_gap",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_gpu_gap",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_ios_gap",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_rotation_gap",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_streaming_gap",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_airgap_gap",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_device_gap",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_salary_absent",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_start_unknown",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_language_score",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_remote_policy",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_throughput_omission",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_sponsorship_unknown",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_license_present",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_office_conflict",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_close_window",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_degree_revision",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_timezone_cutoff",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_intern_duration",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_offer_condition",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_team_award",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_fork_history",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_two_employers",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_mentor_metrics",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_course_vs_job",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_patent_namesake",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_resume_role",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_web_secret",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_resume_submit",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_web_scope",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_resume_target",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_web_score",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_resume_tool",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_scope_public",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_scope_foreign",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_scope_application_missing",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_scope_revoked",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_scope_unlisted",
+      "split": "dev"
+    },
+    {
+      "family_id": "family_scope_profile",
+      "split": "validation"
+    },
+    {
+      "family_id": "family_scope_deleted_member",
+      "split": "validation"
+    }
+  ],
+  "split_rule": "family_disjoint",
+  "sources": [
+    {
+      "alias": "resume_wheel_abi",
+      "kind": "resume",
+      "path": "documents/resume_wheel_abi.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_sql_dialect",
+      "kind": "resume",
+      "path": "documents/resume_sql_dialect.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_jdk_target",
+      "kind": "resume",
+      "path": "documents/resume_jdk_target.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_http_protocol",
+      "kind": "resume",
+      "path": "documents/resume_http_protocol.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_unicode_bytes",
+      "kind": "resume",
+      "path": "documents/resume_unicode_bytes.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_oci_manifest",
+      "kind": "resume",
+      "path": "documents/resume_oci_manifest.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_pager_shadow",
+      "kind": "resume",
+      "path": "documents/resume_pager_shadow.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_index_proposal",
+      "kind": "resume",
+      "path": "documents/resume_index_proposal.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_review_comment",
+      "kind": "resume",
+      "path": "documents/resume_review_comment.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_restore_observer",
+      "kind": "resume",
+      "path": "documents/resume_restore_observer.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_benchmark_runner",
+      "kind": "resume",
+      "path": "documents/resume_benchmark_runner.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_handoff_boundary",
+      "kind": "resume",
+      "path": "documents/resume_handoff_boundary.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_grant_approval",
+      "kind": "resume",
+      "path": "documents/resume_grant_approval.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_cache_ttl",
+      "kind": "resume",
+      "path": "documents/resume_cache_ttl.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_csv_reconcile",
+      "kind": "resume",
+      "path": "documents/resume_csv_reconcile.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_accessibility",
+      "kind": "resume",
+      "path": "documents/resume_accessibility.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_checksum_import",
+      "kind": "resume",
+      "path": "documents/resume_checksum_import.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_sensor_units",
+      "kind": "resume",
+      "path": "documents/resume_sensor_units.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_retention_audit",
+      "kind": "resume",
+      "path": "documents/resume_retention_audit.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_locale_fallback",
+      "kind": "resume",
+      "path": "documents/resume_locale_fallback.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_sharding_gap",
+      "kind": "resume",
+      "path": "documents/resume_sharding_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_sharding_gap",
+      "kind": "web",
+      "path": "web/web_sharding_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_gpu_gap",
+      "kind": "resume",
+      "path": "documents/resume_gpu_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_gpu_gap",
+      "kind": "web",
+      "path": "web/web_gpu_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_ios_gap",
+      "kind": "resume",
+      "path": "documents/resume_ios_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_ios_gap",
+      "kind": "web",
+      "path": "web/web_ios_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_rotation_gap",
+      "kind": "resume",
+      "path": "documents/resume_rotation_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_rotation_gap",
+      "kind": "web",
+      "path": "web/web_rotation_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_streaming_gap",
+      "kind": "resume",
+      "path": "documents/resume_streaming_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_streaming_gap",
+      "kind": "web",
+      "path": "web/web_streaming_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_airgap_gap",
+      "kind": "resume",
+      "path": "documents/resume_airgap_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_airgap_gap",
+      "kind": "web",
+      "path": "web/web_airgap_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_device_gap",
+      "kind": "resume",
+      "path": "documents/resume_device_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_device_gap",
+      "kind": "web",
+      "path": "web/web_device_gap.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_salary_absent",
+      "kind": "web",
+      "path": "web/web_salary_absent.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_start_unknown",
+      "kind": "resume",
+      "path": "documents/resume_start_unknown.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_language_score",
+      "kind": "resume",
+      "path": "documents/resume_language_score.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_remote_policy",
+      "kind": "web",
+      "path": "web/web_remote_policy.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_throughput_omission",
+      "kind": "resume",
+      "path": "documents/resume_throughput_omission.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_sponsorship_unknown",
+      "kind": "web",
+      "path": "web/web_sponsorship_unknown.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_license_present",
+      "kind": "resume",
+      "path": "documents/resume_license_present.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_office_conflict",
+      "kind": "web",
+      "path": "web/web_office_conflict.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_close_window",
+      "kind": "web",
+      "path": "web/web_close_window.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_degree_revision",
+      "kind": "web",
+      "path": "web/web_degree_revision.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_timezone_cutoff",
+      "kind": "web",
+      "path": "web/web_timezone_cutoff.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_intern_duration",
+      "kind": "web",
+      "path": "web/web_intern_duration.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_offer_condition",
+      "kind": "web",
+      "path": "web/web_offer_condition.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_team_award",
+      "kind": "resume",
+      "path": "documents/resume_team_award.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_fork_history",
+      "kind": "resume",
+      "path": "documents/resume_fork_history.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_two_employers",
+      "kind": "resume",
+      "path": "documents/resume_two_employers.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_mentor_metrics",
+      "kind": "resume",
+      "path": "documents/resume_mentor_metrics.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_course_vs_job",
+      "kind": "resume",
+      "path": "documents/resume_course_vs_job.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_patent_namesake",
+      "kind": "resume",
+      "path": "documents/resume_patent_namesake.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_resume_role",
+      "kind": "resume",
+      "path": "documents/resume_resume_role.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_web_secret",
+      "kind": "web",
+      "path": "web/web_web_secret.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_resume_submit",
+      "kind": "resume",
+      "path": "documents/resume_resume_submit.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_web_scope",
+      "kind": "web",
+      "path": "web/web_web_scope.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_resume_target",
+      "kind": "resume",
+      "path": "documents/resume_resume_target.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_web_score",
+      "kind": "web",
+      "path": "web/web_web_score.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_resume_tool",
+      "kind": "resume",
+      "path": "documents/resume_resume_tool.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_scope_public",
+      "kind": "web",
+      "path": "web/web_scope_public.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_scope_foreign",
+      "kind": "resume",
+      "path": "documents/resume_scope_foreign.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_scope_revoked",
+      "kind": "resume",
+      "path": "documents/resume_scope_revoked.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_scope_unlisted",
+      "kind": "resume",
+      "path": "documents/resume_scope_unlisted.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_scope_profile",
+      "kind": "resume",
+      "path": "documents/resume_scope_profile.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_scope_deleted_member",
+      "kind": "resume",
+      "path": "documents/resume_scope_deleted_member.md",
+      "normalization_version": "nfc-lf-v1"
+    }
+  ],
+  "author_ids": [
+    "codex_agent"
+  ],
+  "review_status": "reviewed",
+  "reviewer_ids": [
+    "codex_agent"
+  ],
+  "review_notes": "E4.9 user-authorized single Agent self-review; not human or independent review. Public frozen validation, not blind. Baseline purpose denotes intended use only; no measurements or acceptance.",
+  "license_category": "synthetic",
+  "license_notes": "Original fictional plain-text scenarios authored for E4.9; no real resumes, credentials, or external copyrighted job text."
+}

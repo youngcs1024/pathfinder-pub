@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "dataset_version": "research-v3",
+  "chat_model": "qwen3.6-flash-2026-04-16",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 1536,
+  "reasoning_effort": "medium",
+  "plan_prompt_version": "sha256:d6fcfd84d71bf65a1b634e635912d32fd8b6d7db246f655de444e2397f01010a",
+  "research_prompt_version": "sha256:14b811368f69bc6fb67ed28dd4f0ca2c087a099e725d0cc71c06e9beda73101a",
+  "writer_prompt_version": "sha256:ef97580f25d257aa12d03d95224cebc9ccc407bab7500a1885083f844f7501c7",
+  "research_tool_policy": "research_agent",
+  "research_tool_schema_version": "sha256:ceffc6964af3bd7892054047e63169ea89c5a571e23e515083aff293f2b2a6d4",
+  "research_output_schema_version": 2,
+  "pricing_version": "qwen-cn-beijing-cny-2026-08-13-v1"
+}

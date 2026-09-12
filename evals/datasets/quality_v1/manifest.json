@@ -1,0 +1,171 @@
+{
+  "dataset_version": "quality-pilot-v1",
+  "purpose": "pilot",
+  "files": [
+    {
+      "path": "documents/resume_alpha.md",
+      "digest": "sha256:ac50947635c64d6fe495223fd383777a2e274b29c42eb0e715eae727545a9a1d",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_beta.md",
+      "digest": "sha256:918726cb4ccf5b68556f4fb94b2f87c3ff1cc698d90374e8b4e3a0759bb8e8cb",
+      "role": "document"
+    },
+    {
+      "path": "documents/resume_gamma.md",
+      "digest": "sha256:4d2961d96b8f6d0131f9175895b04929e89b330ab51826eb803bc169904d8b00",
+      "role": "document"
+    },
+    {
+      "path": "web/role_backend.md",
+      "digest": "sha256:aaa076deffc68a02c30587533468be28f0b4ff43f5f1d1525baf45b897d4cd16",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/role_java.md",
+      "digest": "sha256:53cdd0dd83b7db2b73ef1f3c5e8af65d53c89f33de84e073a2aea41de6007713",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/role_data.md",
+      "digest": "sha256:810c5f1cd754d6e737b88012001d6c9cec9afeb26f97a78c3c939e0a9b005cad",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_conflict.md",
+      "digest": "sha256:b87db1686e0355a07198d587a4192c3e589fed2d78dbc0b0737ee0b8424840ad",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_deadline.md",
+      "digest": "sha256:204bafb919cb9476d7bca035f4d38f5be4176c5197a9f14dc05d734d79a859ca",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_revision.md",
+      "digest": "sha256:c7d59399db1dde1288299d101d0a0576381b96c927083f78274ca4ffd1b3ebc1",
+      "role": "web_fixture"
+    },
+    {
+      "path": "web/web_injection.md",
+      "digest": "sha256:4e3529891b56a6c966673d78cf04235ddf409e9e650bc0997c458d9cb24f888c",
+      "role": "web_fixture"
+    },
+    {
+      "path": "cases.dev.jsonl",
+      "digest": "sha256:5b00d3e4abf965bfaf0299f05cb91b959264bf4610dd9d3e3e2428fc0cabee90",
+      "role": "cases"
+    },
+    {
+      "path": "source_units.jsonl",
+      "digest": "sha256:ebfd0ee74e987b72864cf5e3aae91bec18815479559339b4446410b919fa817a",
+      "role": "source_units"
+    },
+    {
+      "path": "rubric.json",
+      "digest": "sha256:2af05958367faebce60c237bc25e7e137335a1e75a17002062cbdb1b8f6c9137",
+      "role": "rubric"
+    }
+  ],
+  "strata": [
+    "mixed_technical_versions",
+    "claim_strength",
+    "multi_paragraph_support",
+    "unsupported_experience",
+    "no_or_partial_answer",
+    "web_conflict_or_time",
+    "similar_experience_distractor",
+    "prompt_injection",
+    "scope_negative"
+  ],
+  "families": [
+    {
+      "family_id": "candidate_alpha",
+      "split": "dev"
+    },
+    {
+      "family_id": "candidate_beta",
+      "split": "dev"
+    },
+    {
+      "family_id": "candidate_gamma",
+      "split": "dev"
+    },
+    {
+      "family_id": "scope_only",
+      "split": "dev"
+    }
+  ],
+  "split_rule": "family_disjoint",
+  "sources": [
+    {
+      "alias": "resume_alpha",
+      "kind": "resume",
+      "path": "documents/resume_alpha.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_beta",
+      "kind": "resume",
+      "path": "documents/resume_beta.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "resume_gamma",
+      "kind": "resume",
+      "path": "documents/resume_gamma.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "role_backend",
+      "kind": "web",
+      "path": "web/role_backend.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "role_java",
+      "kind": "web",
+      "path": "web/role_java.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "role_data",
+      "kind": "web",
+      "path": "web/role_data.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_conflict",
+      "kind": "web",
+      "path": "web/web_conflict.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_deadline",
+      "kind": "web",
+      "path": "web/web_deadline.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_revision",
+      "kind": "web",
+      "path": "web/web_revision.md",
+      "normalization_version": "nfc-lf-v1"
+    },
+    {
+      "alias": "web_injection",
+      "kind": "web",
+      "path": "web/web_injection.md",
+      "normalization_version": "nfc-lf-v1"
+    }
+  ],
+  "author_ids": [
+    "codex"
+  ],
+  "review_status": "not_reviewed",
+  "reviewer_ids": [],
+  "review_notes": "E4.3 原创合成开发集及候选标签；人工尚未核对。逐案清单见 review-checklist.md；不构成人工评分或质量基线。",
+  "license_category": "synthetic",
+  "license_notes": "本步原创虚构人物与岗位，无真实简历、个人联系方式或外部岗位正文；允许作为本仓库合成开发材料提交。Rubric 结构沿用项目 E4.2 样例，另设新版本。"
+}

@@ -1,0 +1,189 @@
+x-pathfinder-app: &pathfinder-app
+  image: ${PATHFINDER_IMAGE:-pathfinder-ci:local}
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  mem_limit: 1g
+  cpus: 1.0
+  pids_limit: 256
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.5-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pathfinder
+      POSTGRES_PASSWORD: ${PF_POSTGRES_PASSWORD:-pathfinder}
+      POSTGRES_USER: pathfinder
+    volumes:
+      - pathfinder_postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pathfinder -d pathfinder"]
+      start_period: 5s
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  api:
+    <<: *pathfinder-app
+    command: ["python", "-m", "app.main"]
+    environment:
+      PF_API_HOST: 0.0.0.0
+      PF_AUTH_MODE: ${PF_AUTH_MODE:-fake}
+      PF_DATABASE_URL: ${PF_DATABASE_URL:-postgresql+psycopg://pathfinder:pathfinder@postgres:5432/pathfinder}
+      PF_DB_STATEMENT_TIMEOUT_MS: ${PF_DB_STATEMENT_TIMEOUT_MS:-5000}
+      PF_DB_LOCK_TIMEOUT_MS: ${PF_DB_LOCK_TIMEOUT_MS:-1000}
+      PF_DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: ${PF_DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-10000}
+      PF_DB_CONNECT_TIMEOUT_SECONDS: ${PF_DB_CONNECT_TIMEOUT_SECONDS:-5}
+      PF_DB_POOL_TIMEOUT_SECONDS: ${PF_DB_POOL_TIMEOUT_SECONDS:-2}
+      PF_DB_POOL_SIZE: ${PF_DB_POOL_SIZE:-5}
+      PF_DB_MAX_OVERFLOW: ${PF_DB_MAX_OVERFLOW:-0}
+      PF_LOG_LEVEL: ${PF_LOG_LEVEL:-INFO}
+      PF_SUPABASE_JWT_AUDIENCE: ${PF_SUPABASE_JWT_AUDIENCE:-authenticated}
+      PF_SUPABASE_PROJECT_REF: ${PF_SUPABASE_PROJECT_REF:-}
+      PF_SUPABASE_PUBLISHABLE_KEY: ${PF_SUPABASE_PUBLISHABLE_KEY:-}
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen("http://127.0.0.1:8000/readyz", timeout=2).read()
+      start_period: 10s
+      interval: 10s
+      timeout: 2s
+      retries: 3
+
+  worker:
+    <<: *pathfinder-app
+    command: ["python", "-m", "app.worker.main"]
+    environment:
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SAMPLE_RATE: ${LANGFUSE_SAMPLE_RATE:-1.0}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      PF_DATABASE_URL: ${PF_DATABASE_URL:-postgresql+psycopg://pathfinder:pathfinder@postgres:5432/pathfinder}
+      PF_DB_STATEMENT_TIMEOUT_MS: ${PF_DB_STATEMENT_TIMEOUT_MS:-5000}
+      PF_DB_LOCK_TIMEOUT_MS: ${PF_DB_LOCK_TIMEOUT_MS:-1000}
+      PF_DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: ${PF_DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-10000}
+      PF_DB_CONNECT_TIMEOUT_SECONDS: ${PF_DB_CONNECT_TIMEOUT_SECONDS:-5}
+      PF_DB_POOL_TIMEOUT_SECONDS: ${PF_DB_POOL_TIMEOUT_SECONDS:-2}
+      PF_DB_POOL_SIZE: ${PF_DB_POOL_SIZE:-5}
+      PF_DB_MAX_OVERFLOW: ${PF_DB_MAX_OVERFLOW:-0}
+      PF_LLM_MODE: ${PF_LLM_MODE:-fake}
+      PF_LOG_LEVEL: ${PF_LOG_LEVEL:-INFO}
+      PF_MOCK_PORTAL_BASE_URL: http://api:8000
+      PF_QWEN_WORKSPACE_ID: ${PF_QWEN_WORKSPACE_ID:-}
+      PF_SEARCH_MODE: ${PF_SEARCH_MODE:-fake}
+      PF_TRACE_MODE: ${PF_TRACE_MODE:-off}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+    scale: 1
+    deploy:
+      replicas: 1
+    networks:
+      - backend
+      - worker_egress
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |-
+          import asyncio
+          from app.config import Settings
+          from app.db.readiness import DatabaseReadinessProbe
+          from app.db.runtime_policy import DatabaseComponent, DatabasePoolPolicy
+          from app.db.session import create_database_engine
+          from app.obs.logging import configure_logging
+          from app.worker.settings import WORKER_READY_PATH
+
+          async def is_ready():
+              if not WORKER_READY_PATH.is_file():
+                  return False
+              settings = Settings()
+              engine = create_database_engine(
+                  settings.database_url,
+                  policy=DatabasePoolPolicy.from_settings(
+                      settings, DatabaseComponent.WORKER_HEALTHCHECK
+                  ),
+              )
+              try:
+                  return await DatabaseReadinessProbe(engine).is_ready()
+              finally:
+                  await engine.dispose()
+
+          try:
+              configure_logging(log_level="WARNING")
+              ready = asyncio.run(is_ready())
+          except Exception:
+              raise SystemExit(1) from None
+          raise SystemExit(0 if ready else 1)
+      start_period: 10s
+      interval: 10s
+      timeout: 2s
+      retries: 3
+    stop_grace_period: 30s
+
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    restart: unless-stopped
+    environment:
+      PF_PUBLIC_DOMAIN: ${PF_PUBLIC_DOMAIN:?PF_PUBLIC_DOMAIN is required}
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+    volumes:
+      - type: bind
+        source: ./Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind:
+          create_host_path: false
+      - pathfinder_caddy_data:/data
+      - pathfinder_caddy_config:/config
+    networks:
+      - edge
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pathfinder_postgres_data:
+  pathfinder_caddy_data:
+  pathfinder_caddy_config:
+
+networks:
+  edge:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+  worker_egress:
+    driver: bridge

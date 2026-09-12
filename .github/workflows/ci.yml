@@ -1,0 +1,458 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{
+      github.event_name == 'workflow_dispatch'
+      && format('manual-{0}', github.run_id)
+      || (github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number))
+      || format('ref-{0}', github.ref)
+    }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+env:
+  PF_LLM_MODE: fake
+  PF_SEARCH_MODE: fake
+  PF_AUTH_MODE: fake
+  PF_TRACE_MODE: off
+  PYTEST_TMPDIR: /tmp
+  PYTEST_ADDOPTS: --durations=20
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      run_full: ${{ steps.classify.outputs.run_full }}
+      baseline_sha: ${{ steps.classify.outputs.baseline_sha }}
+      baseline_run_id: ${{ steps.classify.outputs.baseline_run_id }}
+      baseline_attempt: ${{ steps.classify.outputs.baseline_attempt }}
+    steps:
+      - name: Check out repository history
+        id: checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Classify change set conservatively
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/ci_classify_changes.py \
+            --event-name '${{ github.event_name }}' \
+            --before '${{ github.event.before }}' \
+            --sha '${{ github.sha }}' \
+            --pull-request-base '${{ github.event.pull_request.base.sha }}' \
+            --pull-request-head '${{ github.event.pull_request.head.sha }}'
+
+      - name: Check public repository boundary
+        id: links
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: python scripts/check_public_repository.py
+
+      - name: Scan repository history for secrets
+        id: secret_scan
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_COMMENTS: false
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
+      - name: Summarize check outcomes
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: preflight
+          PF_CI_BRANCH: ""
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "classify": {"outcome": ${{ toJSON(steps.classify.outcome) }}, "conclusion": ${{ toJSON(steps.classify.conclusion) }}},
+            "links": {"outcome": ${{ toJSON(steps.links.outcome) }}, "conclusion": ${{ toJSON(steps.links.conclusion) }}},
+            "secret_scan": {"outcome": ${{ toJSON(steps.secret_scan.outcome) }}, "conclusion": ${{ toJSON(steps.secret_scan.conclusion) }}}
+            }
+        run: python scripts/ci_step_summary.py
+
+  python-validation:
+    needs: preflight
+    if: needs.preflight.outputs.run_full == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install locked Python environment
+        id: setup
+        uses: ./.github/actions/setup-python
+
+      - name: Format check
+        id: format
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: make lint-format
+
+      - name: Lint rules
+        id: rules
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        env:
+          RUFF_OUTPUT_FORMAT: github
+        run: make lint-rules
+
+      # Collection also checks that each Python test has one actual CI execution target.
+      - name: Collect all tests
+        id: collect
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: make test-collect
+
+      - name: Validate real CI routing
+        id: routing
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && steps.collect.outcome == 'success' }}
+        run: make test-ci-routing
+
+      - name: Summarize check outcomes
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: python-validation
+          PF_CI_BRANCH: ""
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "setup": {"outcome": ${{ toJSON(steps.setup.outcome) }}, "conclusion": ${{ toJSON(steps.setup.conclusion) }}},
+            "format": {"outcome": ${{ toJSON(steps.format.outcome) }}, "conclusion": ${{ toJSON(steps.format.conclusion) }}},
+            "rules": {"outcome": ${{ toJSON(steps.rules.outcome) }}, "conclusion": ${{ toJSON(steps.rules.conclusion) }}},
+            "collect": {"outcome": ${{ toJSON(steps.collect.outcome) }}, "conclusion": ${{ toJSON(steps.collect.conclusion) }}},
+            "routing": {"outcome": ${{ toJSON(steps.routing.outcome) }}, "conclusion": ${{ toJSON(steps.routing.conclusion) }}}
+            }
+        run: python scripts/ci_step_summary.py
+
+  quality:
+    needs: [preflight, python-validation]
+    if: needs.preflight.outputs.run_full == 'true' && needs.python-validation.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install locked Python environment
+        id: setup
+        uses: ./.github/actions/setup-python
+
+      - name: Install locked JavaScript test runtime
+        id: setup_node
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: UI asynchronous behavior
+        id: ui
+        if: ${{ !cancelled() && steps.setup_node.outcome == 'success' }}
+        run: make test-ui
+
+      - name: Unit tests
+        id: unit
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: make test-unit
+
+      - name: Architecture constraints
+        id: architecture
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: make test-architecture
+
+      - name: Audit locked dependencies
+        id: audit
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: make audit-deps
+
+      - name: Summarize check outcomes
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: quality
+          PF_CI_BRANCH: ""
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "setup": {"outcome": ${{ toJSON(steps.setup.outcome) }}, "conclusion": ${{ toJSON(steps.setup.conclusion) }}},
+            "setup_node": {"outcome": ${{ toJSON(steps.setup_node.outcome) }}, "conclusion": ${{ toJSON(steps.setup_node.conclusion) }}},
+            "ui": {"outcome": ${{ toJSON(steps.ui.outcome) }}, "conclusion": ${{ toJSON(steps.ui.conclusion) }}},
+            "unit": {"outcome": ${{ toJSON(steps.unit.outcome) }}, "conclusion": ${{ toJSON(steps.unit.conclusion) }}},
+            "architecture": {"outcome": ${{ toJSON(steps.architecture.outcome) }}, "conclusion": ${{ toJSON(steps.architecture.conclusion) }}},
+            "audit": {"outcome": ${{ toJSON(steps.audit.outcome) }}, "conclusion": ${{ toJSON(steps.audit.conclusion) }}}
+            }
+        run: python scripts/ci_step_summary.py
+
+  contracts:
+    needs: [preflight, python-validation]
+    if: needs.preflight.outputs.run_full == 'true' && needs.python-validation.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        suite: [operational, eval]
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install locked Python environment
+        id: setup
+        uses: ./.github/actions/setup-python
+
+      - name: Operational contracts
+        id: operational
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'operational' }}
+        run: make test-operational-contracts
+
+      - name: Eval harness contracts
+        id: eval
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'eval' }}
+        run: make test-eval-contracts
+
+      - name: Accepted offline research regression
+        id: regression
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'eval' }}
+        run: make evals-regression
+
+      - name: Summarize check outcomes
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: contracts
+          PF_CI_BRANCH: "${{ matrix.suite }}"
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "setup": {"outcome": ${{ toJSON(steps.setup.outcome) }}, "conclusion": ${{ toJSON(steps.setup.conclusion) }}},
+            "operational": {"outcome": ${{ toJSON(steps.operational.outcome) }}, "conclusion": ${{ toJSON(steps.operational.conclusion) }}},
+            "eval": {"outcome": ${{ toJSON(steps.eval.outcome) }}, "conclusion": ${{ toJSON(steps.eval.conclusion) }}},
+            "regression": {"outcome": ${{ toJSON(steps.regression.outcome) }}, "conclusion": ${{ toJSON(steps.regression.conclusion) }}}
+            }
+        run: python scripts/ci_step_summary.py
+
+  integration:
+    needs: [preflight, python-validation]
+    if: needs.preflight.outputs.run_full == 'true' && needs.python-validation.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1]
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install locked Python environment
+        id: setup
+        uses: ./.github/actions/setup-python
+
+      - name: PostgreSQL integration core
+        id: core
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        env:
+          PYTEST_ADDOPTS: >-
+            --durations=20 -p tests.ci_sharding
+            --ci-shard-index=${{ matrix.shard }} --ci-shard-count=2
+          PYTHONPATH: ${{ github.workspace }}
+        run: make test-integration-core
+
+      - name: Deterministic PostgreSQL retrieval regression
+        id: retrieval
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.shard == 0 }}
+        run: make evals-retrieval
+
+      - name: Canonical offline product demo
+        id: demo
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.shard == 0 }}
+        run: make demo
+
+      - name: Summarize check outcomes
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: integration
+          PF_CI_BRANCH: "${{ matrix.shard }}"
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "setup": {"outcome": ${{ toJSON(steps.setup.outcome) }}, "conclusion": ${{ toJSON(steps.setup.conclusion) }}},
+            "core": {"outcome": ${{ toJSON(steps.core.outcome) }}, "conclusion": ${{ toJSON(steps.core.conclusion) }}},
+            "retrieval": {"outcome": ${{ toJSON(steps.retrieval.outcome) }}, "conclusion": ${{ toJSON(steps.retrieval.conclusion) }}},
+            "demo": {"outcome": ${{ toJSON(steps.demo.outcome) }}, "conclusion": ${{ toJSON(steps.demo.conclusion) }}}
+            }
+        run: python scripts/ci_step_summary.py
+
+  image-security:
+    needs: preflight
+    if: needs.preflight.outputs.run_full == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      IMAGE_TAG: pathfinder-ci:${{ github.sha }}
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Scan repository filesystem vulnerabilities
+        id: filesystem
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+          format: table
+
+      - name: Build application image
+        id: build
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: make image-build
+
+      - name: Smoke-test application image
+        id: smoke
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: make image-smoke
+
+      - name: Scan application image library vulnerabilities
+        id: library
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_TAG }}
+          scanners: vuln
+          vuln-type: library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+          format: table
+
+      - name: Scan application image OS vulnerabilities
+        id: os
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_TAG }}
+          scanners: vuln
+          vuln-type: os
+          severity: HIGH,CRITICAL
+          # Approved personal-learning exception: accept only Debian advisories
+          # for which the vendor has not published a fixed package.
+          ignore-unfixed: true
+          exit-code: 1
+          format: table
+
+      - name: Scan application image secrets
+        id: secret_scan
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_TAG }}
+          scanners: secret
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          format: table
+
+      - name: Record CI local image content ID
+        id: image
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: docker image inspect --format '{{.Id}}' "$IMAGE_TAG"
+
+      - name: Summarize check outcomes
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: image-security
+          PF_CI_BRANCH: ""
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "filesystem": {"outcome": ${{ toJSON(steps.filesystem.outcome) }}, "conclusion": ${{ toJSON(steps.filesystem.conclusion) }}},
+            "build": {"outcome": ${{ toJSON(steps.build.outcome) }}, "conclusion": ${{ toJSON(steps.build.conclusion) }}},
+            "smoke": {"outcome": ${{ toJSON(steps.smoke.outcome) }}, "conclusion": ${{ toJSON(steps.smoke.conclusion) }}},
+            "library": {"outcome": ${{ toJSON(steps.library.outcome) }}, "conclusion": ${{ toJSON(steps.library.conclusion) }}},
+            "os": {"outcome": ${{ toJSON(steps.os.outcome) }}, "conclusion": ${{ toJSON(steps.os.conclusion) }}},
+            "secret_scan": {"outcome": ${{ toJSON(steps.secret_scan.outcome) }}, "conclusion": ${{ toJSON(steps.secret_scan.conclusion) }}},
+            "image": {"outcome": ${{ toJSON(steps.image.outcome) }}, "conclusion": ${{ toJSON(steps.image.conclusion) }}}
+            }
+        run: python scripts/ci_step_summary.py
+
+  ci-gate:
+    if: always()
+    needs:
+      - preflight
+      - python-validation
+      - quality
+      - contracts
+      - integration
+      - image-security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Evaluate required CI results
+        id: evaluate
+        run: |
+          python scripts/ci_gate.py \
+            --run-full '${{ needs.preflight.outputs.run_full }}' \
+            --baseline-sha '${{ needs.preflight.outputs.baseline_sha }}' \
+            --baseline-run-id '${{ needs.preflight.outputs.baseline_run_id }}' \
+            --baseline-attempt '${{ needs.preflight.outputs.baseline_attempt }}' \
+            --preflight '${{ needs.preflight.result }}' \
+            --python-validation '${{ needs.python-validation.result }}' \
+            --quality '${{ needs.quality.result }}' \
+            --contracts '${{ needs.contracts.result }}' \
+            --integration '${{ needs.integration.result }}' \
+            --image-security '${{ needs.image-security.result }}'
+
+      - name: Summarize check outcomes
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: ci-gate
+          PF_CI_BRANCH: ""
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "evaluate": {"outcome": ${{ toJSON(steps.evaluate.outcome) }}, "conclusion": ${{ toJSON(steps.evaluate.conclusion) }}}
+            }
+        run: python scripts/ci_step_summary.py
