@@ -97,7 +97,11 @@ def test_main_appends_only_allowlisted_fields_to_stdout_and_summary(tmp_path, mo
     assert "| collect | required | success | success |" in content
 
 
-@pytest.mark.parametrize("payload", ["CANARY", "[]", "null", "{}", "x" * 262_145])
+@pytest.mark.parametrize(
+    "payload",
+    ["CANARY", "[]", "null", "{}", "x" * 262_145],
+    ids=["invalid-json", "array", "null", "empty-object", "oversized"],
+)
 def test_invalid_input_returns_safe_nonzero(tmp_path, monkeypatch, capsys, payload):
     destination = _environment(monkeypatch, tmp_path, payload)
     assert main() == 1

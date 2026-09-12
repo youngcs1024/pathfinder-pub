@@ -188,6 +188,7 @@ def test_prepared_repr_does_not_disclose_document_or_chunk_body() -> None:
         ("x" * (MAX_DOCUMENT_CHARACTERS + 1), IngestionErrorCode.DOCUMENT_TOO_LARGE),
         ("🙂" * ((MAX_DOCUMENT_BYTES // 4) + 1), IngestionErrorCode.DOCUMENT_TOO_LARGE),
     ],
+    ids=["empty", "invalid-utf8", "character-limit", "byte-limit"],
 )
 def test_hand_constructed_invalid_source_fails_with_safe_typed_error(
     text: str,

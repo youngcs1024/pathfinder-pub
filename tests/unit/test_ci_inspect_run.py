@@ -300,6 +300,7 @@ def test_total_budget_exhaustion_stops_more_requests():
         (b"HTTP/2.0 500 Error\n\n{}", 1, "api_unavailable"),
         (b"x" * (ci.MAX_BYTES + 1), 0, "response_limit"),
     ],
+    ids=["pagination", "forbidden", "rate-limited", "invalid-json", "server-error", "oversized"],
 )
 def test_bounded_http_response_parser(body, code, category):
     with pytest.raises(ci.EvidenceError) as error:
