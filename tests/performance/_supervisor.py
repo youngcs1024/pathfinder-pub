@@ -1,0 +1,351 @@
+"""Private supervisor entrypoint: one owned DB, API and idle worker, bounded lifetime."""
+
+from __future__ import annotations
+
+import json
+import re
+import select
+import signal
+import socket
+import sys
+import time
+from pathlib import Path
+from uuid import UUID, uuid4
+
+from tests.performance.environment import (
+    CLEANUP_SECONDS,
+    POSTGRES_IMAGE,
+    PROFILE,
+    RUN_SECONDS,
+    START_SECONDS,
+    EnvironmentError,
+    OwnedProcess,
+    child_environment,
+    receive_packet,
+    send_packet,
+    write_record,
+)
+
+LABEL = "pathfinder.e52.owner"
+
+
+class LifecycleInterrupted(BaseException):
+    pass
+
+
+def interrupt(signum, frame) -> None:
+    raise LifecycleInterrupted
+
+
+def verify_container(container, *, owner: str, name: str, identifier: str | None) -> None:
+    container.reload()
+    attrs = container.attrs
+    if (
+        not isinstance(container.id, str)
+        or re.fullmatch(r"[0-9a-f]{64}", container.id) is None
+        or (identifier is not None and container.id != identifier)
+        or attrs.get("Name") != "/" + name
+        or attrs.get("Config", {}).get("Labels", {}).get(LABEL) != owner
+        or attrs.get("Config", {}).get("Image") != POSTGRES_IMAGE
+    ):
+        raise EnvironmentError("ownership_mismatch")
+
+
+def verified_port(container) -> int:
+    bindings = container.attrs.get("NetworkSettings", {}).get("Ports", {})
+    host_config = container.attrs.get("HostConfig", {})
+    ports = bindings.get("5432/tcp")
+    if (
+        set(bindings) != {"5432/tcp"}
+        or not isinstance(ports, list)
+        or len(ports) != 1
+        or ports[0].get("HostIp") != "127.0.0.1"
+        or host_config.get("NetworkMode") != "bridge"
+        or host_config.get("NanoCpus") != 1_000_000_000
+        or host_config.get("Memory") != 1024**3
+    ):
+        raise EnvironmentError("unsafe_binding")
+    try:
+        port = int(ports[0]["HostPort"])
+    except (ValueError, KeyError, TypeError):
+        raise EnvironmentError("unsafe_binding") from None
+    if not 1 <= port <= 65535:
+        raise EnvironmentError("unsafe_binding")
+    return port
+
+
+class Supervisor:
+    def __init__(self, directory: Path, owner: str, channel: socket.socket) -> None:
+        self.directory = directory
+        self.owner = UUID(owner).hex
+        self.channel = channel
+        self.name = "pf-e52-" + self.owner
+        self.database_name = "pf_e52_" + self.owner
+        self.password = uuid4().hex
+        self.container = None
+        self.container_id: str | None = None
+        self.create_attempted = False
+        self.processes: dict[str, OwnedProcess] = {}
+        self.api_socket: socket.socket | None = None
+        self.started = time.monotonic()
+        self.identity: dict = {
+            "schema_version": 1,
+            "owner": self.owner,
+            "profile": PROFILE,
+            "image": POSTGRES_IMAGE,
+            "container_name": self.name,
+        }
+        self.cleanup_failures: list[str] = []
+
+    def create_database(self) -> str:
+        # Import only in the clean supervisor process; do not mutate pytest's TC configuration.
+        from testcontainers.community.postgres import PostgresContainer
+        from testcontainers.core.config import testcontainers_config
+        from testcontainers.core.container import DockerContainer
+
+        testcontainers_config.tc_properties = {}
+        testcontainers_config.ryuk_disabled = True
+        try:
+            self.container = PostgresContainer(
+                POSTGRES_IMAGE,
+                username="pf_e52",
+                password=self.password,
+                dbname=self.database_name,
+                driver="psycopg",
+                name=self.name,
+                docker_client_kw={"timeout": 5},
+                network_mode="bridge",
+                labels={LABEL: self.owner},
+                nano_cpus=1_000_000_000,
+                mem_limit=1024**3,
+                pids_limit=128,
+            )
+        except Exception:
+            raise EnvironmentError("docker_unavailable") from None
+        # The installed TC version's with_bind_ports only accepts an integer. Its underlying
+        # Docker port mapping supports (host IP, ephemeral port), so set that mapping explicitly.
+        self.container.ports = {"5432/tcp": ("127.0.0.1", 0)}
+        self.container.tmpfs = {"/var/lib/postgresql/data": "rw,size=268435456"}
+        self.create_attempted = True
+        DockerContainer.start(self.container)
+        wrapped = self.container.get_wrapped_container()
+        verify_container(wrapped, owner=self.owner, name=self.name, identifier=None)
+        self.container_id = wrapped.id
+        port = verified_port(wrapped)
+        self.identity.update(
+            {"container_id": wrapped.id, "database_name": self.database_name, "database_port": port}
+        )
+        write_record(self.directory, "resources.json", self.identity)
+        # Wait for real SQL readiness only after ownership and host binding verification.
+        self.container._connect()
+        return f"postgresql+psycopg://pf_e52:{self.password}@127.0.0.1:{port}/{self.database_name}"
+
+    def launch(self, role: str, database_url: str, **extra) -> OwnedProcess:
+        if role not in {"api", "worker", "migrate"}:
+            raise EnvironmentError("protocol_failed")
+        if role in self.processes:
+            raise EnvironmentError("already_started")
+        env = child_environment()
+        env["PF_DATABASE_URL"] = database_url
+        if "api_origin" in self.identity:
+            env["PF_MOCK_PORTAL_BASE_URL"] = self.identity["api_origin"]
+        bootstrap = {"owner": self.owner, **extra}
+        fds = tuple(extra[key] for key in ("socket_fd", "ready_fd") if key in extra)
+        process = OwnedProcess.launch(role, env=env, bootstrap=bootstrap, fds=fds)
+        self.processes[role] = process
+        self.identity["process_ids"] = {
+            key: item.process.pid for key, item in self.processes.items()
+        }
+        return process
+
+    def start(self) -> str:
+        write_record(
+            self.directory,
+            "started.json",
+            {
+                **self.identity,
+                "status": "IN_PROGRESS",
+                "startup_limit_seconds": START_SECONDS,
+                "runtime_limit_seconds": RUN_SECONDS,
+                "database_cpu": 1,
+                "database_memory_bytes": 1024**3,
+            },
+        )
+        database_url = self.create_database()
+        migration = self.launch("migrate", database_url)
+        if migration.process.wait(
+            timeout=max(1, START_SECONDS - (time.monotonic() - self.started))
+        ):
+            raise EnvironmentError("startup_failed")
+        self.api_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.api_socket.bind(("127.0.0.1", 0))
+        self.api_socket.listen(128)
+        self.identity["api_origin"] = f"http://127.0.0.1:{self.api_socket.getsockname()[1]}"
+        api = self.launch("api", database_url, socket_fd=self.api_socket.fileno())
+        self.api_socket.close()
+        self.api_socket = None
+        import httpx
+
+        with httpx.Client(timeout=1, trust_env=False, follow_redirects=False) as client:
+            while True:
+                if api.process.poll() is not None:
+                    raise EnvironmentError("process_exited")
+                try:
+                    if client.get(self.identity["api_origin"] + "/readyz").status_code == 200:
+                        break
+                except httpx.HTTPError:
+                    pass
+                time.sleep(0.05)
+        parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        try:
+            worker = self.launch("worker", database_url, ready_fd=child.fileno())
+            child.close()
+            packet = receive_packet(
+                parent, max(1, START_SECONDS - (time.monotonic() - self.started))
+            )
+            if packet != {"owner": self.owner, "kind": "worker_ready"}:
+                raise EnvironmentError("ownership_mismatch")
+            if worker.process.poll() is not None:
+                raise EnvironmentError("process_exited")
+        finally:
+            parent.close()
+            child.close()
+        self.identity["process_ids"] = {
+            role: child.process.pid for role, child in self.processes.items()
+        }
+        write_record(self.directory, "ready.json", self.identity)
+        return database_url
+
+    def serve(self) -> str | None:
+        while True:
+            remaining = RUN_SECONDS - CLEANUP_SECONDS - (time.monotonic() - self.started)
+            if remaining <= 0:
+                return "runtime_timeout"
+            if any(self.processes[role].process.poll() is not None for role in ("api", "worker")):
+                return "process_exited"
+            if select.select([self.channel], [], [], min(remaining, 0.1))[0]:
+                try:
+                    packet = receive_packet(self.channel, 0)
+                except EnvironmentError:
+                    return "cancelled"  # Includes parent disconnect; still clean owned resources.
+                return None if packet == {"kind": "stop"} else "protocol_failed"
+
+    def cleanup(self) -> bool:
+        for role in ("worker", "api", "migrate"):
+            child = self.processes.get(role)
+            try:
+                if child is not None and not child.close():
+                    self.cleanup_failures.append(role)
+            except Exception:
+                self.cleanup_failures.append(role)
+        if self.api_socket is not None:
+            try:
+                self.api_socket.close()
+            except OSError:
+                self.cleanup_failures.append("listener")
+        if self.container is not None:
+            try:
+                wrapped = self.container._container
+                if wrapped is None and self.create_attempted:
+                    # A failed create response may still have created a resource. Exact name
+                    # lookup plus the unguessable label is required; absence is not proof.
+                    wrapped = self.container.get_docker_client().client.containers.get(self.name)
+                if wrapped is not None:
+                    verify_container(
+                        wrapped, owner=self.owner, name=self.name, identifier=self.container_id
+                    )
+                    wrapped.remove(force=True, v=True)
+                    from docker.errors import NotFound
+
+                    try:
+                        wrapped.reload()
+                    except NotFound:
+                        pass
+                    else:
+                        raise EnvironmentError("cleanup_failed")
+            except Exception:
+                self.cleanup_failures.append("database")
+            finally:
+                try:
+                    self.container.get_docker_client().client.close()
+                except Exception:
+                    self.cleanup_failures.append("docker_connection")
+        return not self.cleanup_failures
+
+    def run(self) -> int:
+        category = None
+        released = False
+        signal.signal(signal.SIGTERM, interrupt)
+        signal.signal(signal.SIGINT, interrupt)
+        signal.signal(signal.SIGALRM, interrupt)
+        signal.setitimer(signal.ITIMER_REAL, START_SECONDS)
+        try:
+            database_url = self.start()
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            send_packet(
+                self.channel,
+                {"kind": "ready", "identity": self.identity, "database_url": database_url},
+            )
+            category = self.serve()
+        except LifecycleInterrupted:
+            category = (
+                "startup_timeout"
+                if time.monotonic() - self.started >= START_SECONDS
+                else "cancelled"
+            )
+        except EnvironmentError as exc:
+            category = exc.category
+        except Exception:
+            category = "startup_failed"
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            signal.setitimer(signal.ITIMER_REAL, CLEANUP_SECONDS)
+            try:
+                released = self.cleanup()
+            except LifecycleInterrupted:
+                self.cleanup_failures.append("deadline")
+            finally:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+        if category == "cleanup_failed":
+            released = False
+        result = {
+            "kind": "result",
+            "profile": PROFILE,
+            "status": "PASS" if released and category is None else "IN_PROGRESS",
+            "category": category if released else "cleanup_failed",
+            "primary_category": category,
+            "resources_released": released,
+            "cleanup_failures": self.cleanup_failures,
+            "elapsed_seconds": round(time.monotonic() - self.started, 3),
+            "identity": self.identity,
+        }
+        if category == "docker_unavailable" and released:
+            result["status"] = "BLOCKED"
+        try:
+            write_record(self.directory, "result.json", result)
+        except EnvironmentError:
+            result["status"] = "IN_PROGRESS"
+            result["category"] = "report_failed"
+        try:
+            send_packet(self.channel, result)
+        except (OSError, EnvironmentError):
+            pass  # On parent loss the durable result remains the cleanup record.
+        finally:
+            self.channel.close()
+        return 0 if result["status"] == "PASS" else 1
+
+
+def main() -> int:
+    bootstrap = json.loads(sys.stdin.buffer.read(8193))
+    with socket.socket(fileno=bootstrap["channel_fd"]) as channel:
+        return Supervisor(Path(bootstrap["output_dir"]), bootstrap["owner"], channel).run()
+
+
+if __name__ == "__main__":
+    try:
+        code = main()
+    except Exception:
+        code = 1  # No raw provider/library/filesystem exceptions to stderr.
+    raise SystemExit(code)
