@@ -168,8 +168,8 @@ def publish(directory: Path, name: str, record: Contract) -> None:
             raise ValueError
         if name.startswith("calls-"):
             if (
-                type(record) not in {CallRecord, QueueCallRecord}
-                or name != f"calls-{record.process}-{record.sequence:03}-{record.phase}.json"
+                type(record) is QueueCallRecord
+                and name != f"calls-{record.process}-{record.sequence:03}-{record.phase}.json"
             ):
                 raise ValueError("invalid_call_record")
         if name == "call-profile.json" and type(record) not in {CallProfile, QueueCallProfile}:

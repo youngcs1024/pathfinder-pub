@@ -91,7 +91,7 @@ class Manifest(Contract):
     lock_digest: Digest
     database_image: Literal["pgvector/pgvector:0.8.5-pg16"]
     database_version: str = Field(pattern=r"^16\.[0-9]{1,3}$")
-    environment_profile: Literal["environment-v1"]
+    environment_profile: Literal["environment-v1", "environment-queue-v1"]
     profile: LoadProfile
     profile_digest: Digest
     call_profile: CallPolicy

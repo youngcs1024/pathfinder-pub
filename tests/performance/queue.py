@@ -29,7 +29,6 @@ from tests.performance.driver import MonotonicClock
 from tests.performance.driver import run as run_schedule
 from tests.performance.environment import (
     POSTGRES_IMAGE,
-    PROFILE,
     QUEUE_PROFILE,
     ROOT,
     EnvironmentProfile,
@@ -103,9 +102,6 @@ class QueueExperiment(Experiment):
             except Exception:
                 self.reason = self.reason or "guard_failed"
                 self.stop_event.set()
-                return
-            if self.reason:
-                await self.monitor_done.wait()
                 return
             try:
                 await asyncio.wait_for(self.monitor_done.wait(), 1.0)
@@ -282,7 +278,7 @@ class QueueExperiment(Experiment):
             lock_digest=self.manifest.lock_digest,
             database_image=POSTGRES_IMAGE,
             database_version=self.manifest.database_version,
-            environment_profile=PROFILE,
+            environment_profile=QUEUE_PROFILE,
             profile=profile,
             profile_digest=digest(profile),
             call_profile=self.manifest.call_profile,
@@ -345,6 +341,8 @@ class QueueExperiment(Experiment):
     async def drain(self):
         deadline = monotonic() + self.profile.drain_seconds
         while monotonic() < deadline:
+            if self.reason is not None and self.reason not in SAFE_STOPS:
+                self.check()
             rows, _ = await self.rows()
             if all(r["status"] in TERMINAL and r["job_status"] in {"done", "dead"} for r in rows):
                 return

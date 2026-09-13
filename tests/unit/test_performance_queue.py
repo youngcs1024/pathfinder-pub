@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from tests.performance import _supervisor, queue
 from tests.performance.adapters import Calls
+from tests.performance.capacity import CapacityStop
 from tests.performance.capacity_contracts import Health
 from tests.performance.contracts import digest
 from tests.performance.environment import (
@@ -359,3 +360,56 @@ def test_suite_never_treats_deadline_or_incomplete_as_success():
     results[-1] = results[-1].model_copy(update={"status": "NOT_RUN", "stop": "suite_deadline"})
     assert not successful_suite(suite.model_copy(update={"results": tuple(results)}))
     assert not successful_suite(suite.model_copy(update={"results": ()}))
+
+
+async def test_business_drain_stops_on_failed_guard(tmp_path):
+    e = queue.QueueExperiment(SimpleNamespace(output_dir=tmp_path), manifest())
+    e.reason = "guard_failed"
+    with pytest.raises(CapacityStop):
+        await e.drain()
+
+
+def test_report_builds_complete_baseline_and_retains_cutoff(tmp_path):
+    from tests.performance.queue_contracts import Snapshot
+    from tests.performance.queue_report import summarize
+
+    m = manifest()
+    facts = [fact(), fact()]
+    for role in ("api", "driver", "supervisor"):
+        QueueCollector(role, tmp_path).finish()
+    now = [1.0]
+    collector = QueueCollector("worker", tmp_path, clock=lambda: now[0])
+    for ordinal, f in enumerate(facts, 1):
+        token = collector.begin(
+            "segment", run_id=f.run_id, job_id=uuid4(), attempt=1, claim_ordinal=ordinal
+        )
+        now[0] += float(ordinal * 2)
+        collector.end(token)
+    collector.finish()
+    snapshots = [
+        Snapshot(at=10.0, recorded_at=NOW, stage=stage, runs=tuple(facts))
+        for stage in ("submission_stopped", "drain_cutoff", "worker_stopped")
+    ]
+    e = SimpleNamespace(
+        diagnostics=[],
+        env=SimpleNamespace(output_dir=tmp_path),
+        snapshots=snapshots,
+        point=m.point,
+        manifest=m,
+        control_result=None,
+        load_result=None,
+        requests=[],
+        measurement_start_utc=None,
+        measurement_end_utc=None,
+        actual_end_utc=None,
+        unfinished_calls=0,
+        worker_stopped=True,
+        queue=[],
+        health=[],
+    )
+    result = summarize(e, "window_complete", {"resources_released": True})
+    assert result.status == "PASS" and result.baseline.mean_seconds == 3.0
+    assert len(result.timings) == 2
+    assert result.timings[0].run_total_seconds.value == 10.0
+    e.snapshots = snapshots[:2]
+    assert summarize(e, "window_complete", {"resources_released": True}).status == "IN_PROGRESS"

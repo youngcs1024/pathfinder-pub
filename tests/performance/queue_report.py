@@ -113,6 +113,7 @@ def summarize(experiment, reason, cleanup):
                 RunFact(
                     run_id=f.run_id,
                     created_at=f.created_at,
+                    status=f.status,
                     started_at=f.started_at,
                     finished_at=f.finished_at,
                     approval_mode="synthetic_driver" if f.mode == "application" else "none",
