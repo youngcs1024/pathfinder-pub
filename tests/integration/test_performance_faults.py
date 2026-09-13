@@ -39,7 +39,10 @@ def test_real_fault_window_converges_with_owned_resources(tmp_path, monkeypatch,
 def test_fault_collector_failure_retains_partial_and_cleans_up(tmp_path, monkeypatch):
     from tests.performance import faults
 
+    observations = []
+
     async def failed(*args):
+        observations.append(True)
         raise ValueError("E59_COLLECTOR_PRIVATE_CANARY")
 
     monkeypatch.setattr(faults, "snapshot", failed)
@@ -49,6 +52,8 @@ def test_fault_collector_failure_retains_partial_and_cleans_up(tmp_path, monkeyp
         profile=load_profile("faults-instant-ci-v1"),
         authorization="ci_instant",
     )
+    assert observations == [True]
+    assert result.stage == "barrier"
     assert result.status == "IN_PROGRESS" and result.stop == "correctness_failed"
     assert result.resources_released and result.pool_remaining == 0
     assert not result.complete and not result.expected_state_correct

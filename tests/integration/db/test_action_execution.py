@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -186,6 +186,94 @@ async def test_prepare_is_atomic_idempotent_and_begin_send_is_a_second_transacti
             assert action is not None and action.status == "succeeded"
             assert action.result == {"external_ref": "mock-submission:confirmed"}
             assert invocation is not None and invocation.status == "succeeded"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("action_status", ["authorized", "executing", "succeeded"])
+async def test_consumed_resume_preserves_original_execution(
+    migrated_database_url: str, action_status: str
+) -> None:
+    engine, runtime, identity = await _approved(migrated_database_url, "resume-" + action_status)
+    try:
+        store = SqlAlchemyActionExecutionStore(runtime.sessions)
+        prepared = await store.prepare_execution(identity, now=NOW + timedelta(minutes=2))
+        if action_status != "authorized":
+            assert (await store.begin_send(identity, now=NOW + timedelta(minutes=3))).allowed
+        if action_status == "succeeded":
+            await store.confirm_success(
+                identity,
+                result=ConfirmedActionResult("mock-submission:resume"),
+                latency_ms=7,
+                now=NOW + timedelta(minutes=4),
+            )
+        jobs = SqlAlchemyWorkerJobStore(runtime.sessions, retry_delay=lambda _attempt: timedelta(0))
+        now = NOW + timedelta(minutes=5)
+        claim = await jobs.claim_due_job(
+            worker_id="resume-worker", now=now, lease_duration=timedelta(seconds=30)
+        )
+        assert (
+            claim is not None and claim.resume_approval_request_id == identity.approval_request_id
+        )
+        result = await jobs.prepare_claimed_job(job=claim, resolved_tenant=runtime.tenant, now=now)
+        assert result.disposition == "execute" and result.tenant == runtime.tenant
+        recovered = await store.prepare_execution(identity, now=now)
+        assert recovered.invocation_id == prepared.invocation_id
+        assert recovered.idempotency_key == prepared.idempotency_key
+        assert recovered.args == prepared.args and recovered.target == prepared.target
+        assert recovered.status == action_status
+        async with runtime.sessions() as session:
+            request = await session.get(ApprovalRequest, identity.approval_request_id)
+            assert request.status == "consumed"
+            assert request.consumed_at == NOW + timedelta(minutes=2)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "conflict", ["binding", "cross_run", "missing_invocation", "status", "first_resume"]
+)
+async def test_consumed_resume_rejects_conflicting_persisted_facts(
+    migrated_database_url: str, conflict: str
+) -> None:
+    engine, runtime, identity = await _approved(migrated_database_url, "resume-bad-" + conflict)
+    try:
+        store = SqlAlchemyActionExecutionStore(runtime.sessions)
+        if conflict != "missing_invocation":
+            await store.prepare_execution(identity, now=NOW + timedelta(minutes=2))
+        async with runtime.sessions.begin() as session:
+            request = await session.get(ApprovalRequest, identity.approval_request_id)
+            intent = await session.get(ActionIntent, identity.action_intent_id)
+            if conflict == "binding":
+                request.approval_binding_digest = "sha256:" + "0" * 64
+            elif conflict == "missing_invocation":
+                request.status = "consumed"
+                request.consumed_at = NOW + timedelta(minutes=2)
+                intent.status = "authorized"
+            elif conflict == "status":
+                intent.status = "executing"
+            elif conflict == "first_resume":
+                run = await session.get(Run, runtime.run_id)
+                run.status = "waiting_approval"
+        jobs = SqlAlchemyWorkerJobStore(runtime.sessions, retry_delay=lambda _attempt: timedelta(0))
+        now = NOW + timedelta(minutes=5)
+        claim = await jobs.claim_due_job(
+            worker_id="resume-worker", now=now, lease_duration=timedelta(seconds=30)
+        )
+        assert claim is not None
+        with pytest.raises(DomainInvariantError):
+            if conflict == "cross_run":
+                async with runtime.sessions() as session:
+                    await jobs._require_resume_request(
+                        session, job=replace(claim, run_id=uuid4()), allow_consumed=True
+                    )
+            else:
+                await jobs.prepare_claimed_job(job=claim, resolved_tenant=runtime.tenant, now=now)
+        async with runtime.sessions() as session:
+            run = await session.get(Run, runtime.run_id)
+            job = await session.get(RunJob, claim.job_id)
+            assert run.status == ("waiting_approval" if conflict == "first_resume" else "running")
+            assert job.status == "leased" and job.owner_token == claim.owner_token
     finally:
         await engine.dispose()
 

@@ -127,7 +127,14 @@ def main() -> None:
             faults,
             instrument(worker, collector) if collector is not None else nullcontext(),
         ):
-            asyncio.run(worker.run_worker(settings))
+            try:
+                asyncio.run(worker.run_worker(settings))
+            except Exception as error:
+                if "fault_config" in bootstrap:
+                    from tests.performance.fault_runtime import record_child_failure
+
+                    record_child_failure(bootstrap, error)
+                raise
     else:
         raise EnvironmentError("protocol_failed")
 

@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.action_execution import _intent_record, _request_record
 from app.db.models import (
     ActionIntent,
     ApprovalRequest,
@@ -17,6 +18,7 @@ from app.db.models import (
 )
 from app.db.session import AsyncSessionFactory, transaction
 from app.domain.action_execution import ActionExecutionIdentity
+from app.domain.actions import validate_exact_approval_binding
 from app.domain.approvals import ApprovalStatus, persisted_approval_status
 from app.domain.errors import DomainInvariantError
 from app.domain.jobs import (
@@ -503,7 +505,7 @@ class SqlAlchemyWorkerJobStore:
             elif run.status != RunStatus.RUNNING.value:
                 raise DomainInvariantError("claimed job run status is invalid")
             elif job.resume_approval_request_id is not None:
-                await self._require_resume_request(session, job=job)
+                await self._require_resume_request(session, job=job, allow_consumed=True)
 
             tenant = TenantContext(
                 workspace_id=job.workspace_id,
@@ -1127,6 +1129,7 @@ class SqlAlchemyWorkerJobStore:
         session: AsyncSession,
         *,
         job: ClaimedJob,
+        allow_consumed: bool = False,
     ) -> ApprovalRequest:
         if job.resume_approval_request_id is None:
             raise DomainInvariantError("waiting approval job is missing resume identity")
@@ -1139,9 +1142,59 @@ class SqlAlchemyWorkerJobStore:
         )
         if request is None:
             raise DomainInvariantError("resume approval request is missing or cross-tenant")
-        if persisted_approval_status(request.status) not in _GATE6_RESUME_APPROVAL_STATUSES:
+        status = persisted_approval_status(request.status)
+        if status is ApprovalStatus.CONSUMED and allow_consumed:
+            await SqlAlchemyWorkerJobStore._require_consumed_resume(session, job, request)
+        elif status not in _GATE6_RESUME_APPROVAL_STATUSES:
             raise DomainInvariantError("resume approval request status is invalid")
         return request
+
+    @staticmethod
+    async def _require_consumed_resume(
+        session: AsyncSession, job: ClaimedJob, request: ApprovalRequest
+    ) -> None:
+        # Consumption authorizes recovery of the original action, never a new approval.
+        intent = await session.scalar(
+            select(ActionIntent)
+            .where(
+                ActionIntent.workspace_id == job.workspace_id,
+                ActionIntent.run_id == job.run_id,
+                ActionIntent.id == request.action_intent_id,
+                ActionIntent.originating_actor_user_id == job.originating_actor_user_id,
+            )
+            .with_for_update()
+        )
+        if intent is None or request.consumed_at is None:
+            raise DomainInvariantError("consumed resume action is missing or conflicting")
+        validate_exact_approval_binding(
+            intent=_intent_record(intent), request=_request_record(request)
+        )
+        invocation = await session.scalar(
+            select(ToolInvocation)
+            .where(
+                ToolInvocation.workspace_id == job.workspace_id,
+                ToolInvocation.run_id == job.run_id,
+                ToolInvocation.action_intent_id == intent.id,
+            )
+            .with_for_update()
+        )
+        expected_status = {
+            "authorized": "prepared",
+            "executing": "executing",
+            "succeeded": "succeeded",
+        }.get(intent.status)
+        if (
+            invocation is None
+            or expected_status is None
+            or invocation.status != expected_status
+            or invocation.originating_actor_user_id != job.originating_actor_user_id
+            or invocation.tool_name != intent.tool_name
+            or invocation.effect != intent.effect
+            or invocation.args_digest != intent.args_digest
+            or (expected_status == "prepared" and invocation.attempt != 0)
+            or (expected_status != "prepared" and invocation.attempt < 1)
+        ):
+            raise DomainInvariantError("consumed resume invocation facts conflict")
 
     @staticmethod
     async def _require_persisted_resume_request(

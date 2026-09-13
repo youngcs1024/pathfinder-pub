@@ -162,8 +162,8 @@ class FaultCall(CallRecord):
 
 class ModelFact(Contract):
     id: UUID
-    node: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
-    request_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    node: str = Field(pattern=r"^[a-z][a-z0-9_]{0,99}$")
+    request_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     status: Literal["started", "succeeded", "failed"]
     cost_known: bool
 
@@ -198,9 +198,9 @@ class Snapshot(Contract):
         Literal["prepared", "executing", "succeeded", "failed", "outcome_unknown"] | None
     ) = None
     approval_status: Literal["pending", "approved", "rejected", "consumed", "expired"] | None = None
-    args_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    target_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    binding_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    args_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    target_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    binding_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
     decision_count: int = Field(ge=0, le=1)
     recovery_attempts: int = Field(ge=0, le=3)
     effects: int = Field(ge=0)
@@ -307,6 +307,8 @@ class Suite(Contract):
 
 
 def validate_publication(name, record):
+    if type(record) is ChildFailure and name == f"fault-error-worker-{record.generation}.json":
+        return
     fixed = {
         "fault-manifest.json": Manifest,
         "fault-result.json": Result,
@@ -322,3 +324,16 @@ def validate_publication(name, record):
     ):
         return
     raise ValueError("invalid_artifact")
+
+
+class ErrorFrame(Contract):
+    file: str = Field(pattern=r"^(?:src/app|tests/performance)/[a-z_/]+\.py$")
+    line: int = Field(gt=0)
+
+
+class ChildFailure(Contract):
+    generation: Literal[1, 2]
+    category: Literal[
+        "TypeError", "ValueError", "RuntimeError", "InvalidRequestError", "IntegrityError", "other"
+    ]
+    frames: tuple[ErrorFrame, ...] = Field(max_length=32)

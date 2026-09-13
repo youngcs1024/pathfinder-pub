@@ -63,6 +63,7 @@ from app.tools.document_retrieval import (
     RetrievalEventRecorderPort,
     create_research_tool_registry,
 )
+from app.tools.registry import ToolCancelledError
 from app.tools.search import SearchPort
 from app.tools.web_search import RESEARCH_TOOL_POLICY_NAME
 from app.worker.checkpoints import CheckpointHandle
@@ -166,7 +167,7 @@ class LangGraphRunExecutor:
             return await self._execute_guarded_graph(execution)
         except asyncio.CancelledError:
             raise
-        except RunExecutionCancelledError:
+        except (RunExecutionCancelledError, ToolCancelledError):
             return RunExecutionResult(status=RunStatus.CANCELLED)
         except RunExecutionInvalidError as error:
             return self._failed(error.category, retryable=False)

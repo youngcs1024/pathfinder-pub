@@ -182,3 +182,32 @@ def instrument_faults(worker, calls):
             yield
         finally:
             calls.channel.close()
+
+
+def record_child_failure(bootstrap, error):
+    """Only exception class and repository line coordinates, never values or source text."""
+    from tests.performance.environment import ROOT
+    from tests.performance.fault_contracts import ChildFailure, ErrorFrame
+
+    frames = []
+    tb = error.__traceback__
+    while tb is not None:
+        path = Path(tb.tb_frame.f_code.co_filename)
+        if path.is_relative_to(ROOT):
+            relative = str(path.relative_to(ROOT))
+            if relative.startswith(("src/app/", "tests/performance/")):
+                frames.append(ErrorFrame(file=relative, line=tb.tb_lineno))
+        tb = tb.tb_next
+    name = type(error).__name__
+    if name not in {
+        "TypeError",
+        "ValueError",
+        "RuntimeError",
+        "InvalidRequestError",
+        "IntegrityError",
+    }:
+        name = "other"
+    record = ChildFailure(
+        generation=bootstrap["generation"], category=name, frames=tuple(frames[-32:])
+    )
+    publish(Path(bootstrap["output_dir"]), f"fault-error-worker-{record.generation}.json", record)

@@ -260,3 +260,29 @@ def test_cli_nonzero_for_partial(monkeypatch, tmp_path):
         )
         == 1
     )
+
+
+def test_observer_preserves_versioned_business_digest():
+    from tests.performance.fault_contracts import ModelFact
+
+    value = "sha256:" + "a" * 64
+    record = ModelFact(
+        id=uuid4(), node="plan", request_hash=value, status="succeeded", cost_known=True
+    )
+    assert record.request_hash == value
+    with pytest.raises(ValueError):
+        ModelFact(
+            id=uuid4(), node="plan", request_hash="a" * 64, status="succeeded", cost_known=True
+        )
+
+
+def test_child_failure_diagnostic_never_contains_exception_body(tmp_path):
+    from tests.performance.fault_runtime import record_child_failure
+
+    try:
+        raise ValueError("E59_DIAGNOSTIC_PRIVATE_CANARY")
+    except ValueError as error:
+        record_child_failure({"generation": 1, "output_dir": str(tmp_path)}, error)
+    body = (tmp_path / "fault-error-worker-1.json").read_text()
+    assert "E59_DIAGNOSTIC_PRIVATE_CANARY" not in body
+    assert '"category": "ValueError"' in body

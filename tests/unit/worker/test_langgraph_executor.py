@@ -31,6 +31,7 @@ from app.obs.logging import configure_logging
 from app.retrieval.documents import RetrievedDocumentChunk
 from app.tools.fake_search import FakeSearch
 from app.tools.invocations import InMemoryToolInvocationRecorder
+from app.tools.registry import ToolCancelledError
 from app.worker.fake_research_adapter import DeterministicResearchFakeChatAdapter
 from app.worker.langgraph_executor import LangGraphRunExecutor
 
@@ -249,6 +250,20 @@ def _executor(
     )
     executor.approved_action_executor = approved_action_executor
     return executor
+
+
+async def test_tool_cancellation_returns_cancelled_before_watchdog(monkeypatch) -> None:
+    execution = _execution_input()
+    executor = _executor(execution, InMemorySaver(), _InvocationRecorder())
+
+    async def cancelled(_execution):
+        raise ToolCancelledError("private cancellation detail")
+
+    monkeypatch.setattr(executor, "_execute_guarded_graph", cancelled)
+    tenant = TenantContext(execution.workspace_id, execution.actor_user_id, execution.role)
+    result = await executor.execute(execution.run_id, tenant, CURRENT_GRAPH_VERSION)
+    assert result.status is RunStatus.CANCELLED
+    assert result.error_category is None and result.retryable is False
 
 
 @pytest.mark.asyncio

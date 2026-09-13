@@ -34,6 +34,7 @@ from tests.performance.capacity_metrics import CapacityCollector, CapacityPacket
 from tests.performance.contracts import digest
 from tests.performance.environment import (
     PROFILE,
+    ROOT,
     EnvironmentError,
     EnvironmentProfile,
     IsolatedEnvironment,
@@ -357,7 +358,7 @@ class Experiment:
                 self.manifest = Manifest(
                     experiment_id=uuid4(),
                     source_sha=source_sha(),
-                    lock_digest=lock_digest(),
+                    lock_digest=lock_digest(ROOT),
                     profile=self.profile,
                     profile_digest=digest(self.profile),
                     point=self.point,
