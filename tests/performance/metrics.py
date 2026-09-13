@@ -342,7 +342,10 @@ def http_counts(packets, facts):
 
 
 class Collector:
-    limit = LIMIT
+    @property
+    def limit(self):
+        return LIMIT
+
     sample_type = Sample
     packet_type = Packet
 
