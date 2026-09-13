@@ -632,7 +632,7 @@ def test_report_publish_failure_during_cancel_does_not_replace_cancellation(tmp_
             self.directory = directory
             self.output_created = False
 
-        def __enter__(self):
+        def start(self):
             self.directory.mkdir(mode=0o700)
             self.output_created = True
             return self
