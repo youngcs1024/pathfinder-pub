@@ -175,6 +175,7 @@ class RunResult(Contract):
     run_id: UUID
     mode: Literal["research", "application"]
     phase: Literal["warmup", "measurement", "setup"]
+    approval_mode: Literal["none", "synthetic_driver"] | None = None
     status: Literal["queued", "running", "waiting_approval", "completed", "failed", "cancelled"]
     job_status: Literal["queued", "leased", "done", "dead"]
     events: tuple[int, ...] = Field(max_length=256)
@@ -233,6 +234,14 @@ class Result(Contract):
     ] = Field(default_factory=dict)
 
 
+class Finalization(Contract):
+    schema_version: Literal[1] = 1
+    role: Literal["api", "worker", "driver", "supervisor"]
+    category: Literal["invalid_packet", "write_failed"]
+    sample_count: int = Field(ge=0, le=16384)
+    pool_remaining: int = Field(ge=-32768, le=32768)
+
+
 class Suite(Contract):
     schema_version: Literal[1] = 1
     source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
@@ -247,6 +256,10 @@ def validate_publication(name, record):
         "capacity-result.json": Result,
         "capacity-suite.json": Suite,
     }
+    if type(record) is Finalization:
+        if name != f"capacity-finalization-{record.role}.json":
+            raise ValueError("invalid_capacity_artifact")
+        return
     if types.get(name) is not type(record):
         raise ValueError("invalid_capacity_artifact")
 

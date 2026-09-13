@@ -33,6 +33,10 @@ def test_capacity_instant_owned_real_paths(tmp_path, monkeypatch, scenario):
     if scenario == "mixed":
         assert len(result.runs) == 4
         assert sum(r.mock_effects for r in result.runs) == 2
+        assert all(
+            r.approval_mode == ("synthetic_driver" if r.mode == "application" else "none")
+            for r in result.runs
+        )
     if scenario in {"reconnect", "slow"}:
         assert len(result.connections) == 2
         first, second = result.connections

@@ -310,3 +310,37 @@ def test_only_capacity_allows_deferred_worker(tmp_path, capacity):
     finally:
         parent.close()
         child.close()
+
+
+def test_pool_checkin_without_checkout_does_not_corrupt_packet(tmp_path, monkeypatch):
+    from tests.performance import capacity_metrics as module
+
+    callbacks = {}
+    monkeypatch.setattr(
+        module.event, "listen", lambda pool, name, callback: callbacks.update({name: callback})
+    )
+    monkeypatch.setattr(module.event, "remove", Mock())
+    collector = CapacityCollector("api", tmp_path)
+    collector.attach_pool(SimpleNamespace(sync_engine=SimpleNamespace(pool=object())))
+    record = object()
+    # SQLAlchemy can return a connection record after connect was cancelled, before checkout.
+    callbacks["checkin"](None, record)
+    callbacks["checkout"](object(), record, object())
+    callbacks["checkin"](None, record)
+    assert collector.checked_out == 0
+    collector.finish()
+    packet = CapacityPacket.model_validate_json((tmp_path / "metrics-api.json").read_bytes())
+    assert packet.pool_remaining == 0 and packet.pool_peak == 1
+
+
+def test_invalid_capacity_packet_retains_only_safe_finalization(tmp_path, monkeypatch):
+    collector = CapacityCollector("api", tmp_path)
+    monkeypatch.setattr(collector, "packet", Mock(side_effect=ValueError("PRIVATE_BODY_CANARY")))
+    collector.finish()
+    assert collector.write_failed
+    path = tmp_path / "capacity-finalization-api.json"
+    raw = path.read_text()
+    assert "PRIVATE_BODY_CANARY" not in raw
+    assert json.loads(raw)["category"] == "invalid_packet"
+    collector.finish()
+    assert path.read_text() == raw

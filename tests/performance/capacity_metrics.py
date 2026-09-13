@@ -36,15 +36,18 @@ class CapacityCollector(Collector):
         self.checkouts = 0
         self.checked_out = 0
         self.peak = 0
+        self.active_records = set()
 
     def attach_pool(self, engine):
-        def checkout(*_args):
+        def checkout(connection, record, proxy):
             self.checkouts += 1
-            self.checked_out += 1
+            self.active_records.add(id(record))
+            self.checked_out = len(self.active_records)
             self.peak = max(self.peak, self.checked_out)
 
-        def checkin(*_args):
-            self.checked_out -= 1
+        def checkin(connection, record):
+            self.active_records.discard(id(record))
+            self.checked_out = len(self.active_records)
 
         event.listen(engine.sync_engine.pool, "checkout", checkout)
         event.listen(engine.sync_engine.pool, "checkin", checkin)
@@ -54,6 +57,35 @@ class CapacityCollector(Collector):
             event.remove(engine.sync_engine.pool, "checkin", checkin)
 
         return detach
+
+    def finish(self):
+        if getattr(self, "_finished", False):
+            return
+        self._finished = True
+        category = "write_failed"
+        try:
+            self.write(f"metrics-{self.role}.json", self.packet())
+        except (ValueError, TypeError):
+            self.write_failed = True
+            category = "invalid_packet"
+        if self.write_failed and self.directory is not None:
+            from tests.performance.capacity_contracts import Finalization
+            from tests.performance.environment import EnvironmentError
+            from tests.performance.workload import publish
+
+            try:
+                publish(
+                    self.directory,
+                    f"capacity-finalization-{self.role}.json",
+                    Finalization(
+                        role=self.role,
+                        category=category,
+                        sample_count=len(self.samples),
+                        pool_remaining=self.checked_out,
+                    ),
+                )
+            except EnvironmentError:
+                pass  # The caller still observes the absent packet; never expose the exception.
 
     def packet(self):
         return CapacityPacket(

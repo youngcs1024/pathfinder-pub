@@ -443,6 +443,7 @@ class Experiment:
                         run_id=run_id,
                         mode=mode,
                         phase=phase,
+                        approval_mode="synthetic_driver" if mode == "application" else "none",
                         status=run.status,
                         job_status=jobs[0].status,
                         events=events,
@@ -656,7 +657,8 @@ def summarize(experiment, source, reason, cleanup):
             correct &= len(first) == p.point.level and all(
                 r.established_at is not None for r in first
             )
-        correct &= api is not None and api.pool_remaining == 0
+        if api is not None:
+            correct &= api.pool_remaining == 0
         try:
             calls = read_calls(p.env.output_dir)
             model_calls = [c for c in calls if c.call in {"chat", "embedding"}]
@@ -690,7 +692,7 @@ def summarize(experiment, source, reason, cleanup):
         diagnostics=tuple(diagnostics),
         resources_released=cleanup.get("resources_released") is True,
         completeness=not missing and "metrics_incomplete" not in diagnostics,
-        correctness=correct if reason == "window_complete" else None,
+        correctness=correct if reason == "window_complete" and not missing else None,
         measurement_start=start,
         measurement_end=end,
         actual_observation_end=p.observation_end,
