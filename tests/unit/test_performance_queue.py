@@ -413,3 +413,24 @@ def test_report_builds_complete_baseline_and_retains_cutoff(tmp_path):
     assert result.timings[0].run_total_seconds.value == 10.0
     e.snapshots = snapshots[:2]
     assert summarize(e, "window_complete", {"resources_released": True}).status == "IN_PROGRESS"
+
+
+def test_response_accounting_requires_persisted_202_and_recovers_unknown():
+    from tests.performance.queue_facts import reconcile_requests
+    from tests.performance.smoke import SmokeFailure
+
+    request = Request(
+        ordinal=0,
+        request_id=uuid4(),
+        mode="research",
+        phase="measurement",
+        started_at=NOW,
+        http_status=202,
+    )
+    with pytest.raises(SmokeFailure):
+        reconcile_requests([request], [])
+    row = SimpleNamespace(client_request_id=request.request_id, id=uuid4())
+    reconcile_requests([request], [row])
+    reconcile_requests([request.model_copy(update={"http_status": None})], [row])
+    with pytest.raises(SmokeFailure):
+        reconcile_requests([request.model_copy(update={"run_id": uuid4()})], [row])

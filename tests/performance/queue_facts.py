@@ -76,6 +76,18 @@ def sample(rows, now, at):
     )
 
 
+def reconcile_requests(requests, runs):
+    by_key = {r.client_request_id: r.id for r in runs}
+    require(len(by_key) == len(runs))
+    require(set(by_key) <= {r.request_id for r in requests})
+    for request in requests:
+        # Even an unreadable 202 body must have exactly one persisted request identity.
+        if request.http_status == 202:
+            require(request.request_id in by_key)
+        if request.run_id is not None:
+            require(by_key.get(request.request_id) == request.run_id)
+
+
 async def snapshot(experiment, stage):
     start = monotonic()
     tenant = experiment.tenant
@@ -103,6 +115,7 @@ async def snapshot(experiment, stage):
             )
         ).all()
         all_ids = set(await session.scalars(select(Run.id)))
+    reconcile_requests(experiment.requests, runs)
     require(all_ids == {r.id for r in runs})
     require(len(runs) == len(jobs) and len(runs) <= 128)
     require({r.client_request_id for r in runs} <= set(by_key))
