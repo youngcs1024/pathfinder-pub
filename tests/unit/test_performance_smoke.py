@@ -349,13 +349,15 @@ async def test_all_drive_finalizers_run_without_replacing_primary_failure(primar
 
 async def test_caller_cancellation_during_sampler_shutdown_still_disposes_engine():
     entered = asyncio.Event()
+    draining = asyncio.Event()
 
     async def sampling():
         entered.set()
         try:
             await asyncio.Event().wait()
         finally:
-            await asyncio.sleep(60)
+            draining.set()
+            await asyncio.Event().wait()
 
     sampler = asyncio.create_task(sampling())
     await entered.wait()
@@ -364,10 +366,10 @@ async def test_caller_cancellation_during_sampler_shutdown_still_disposes_engine
     task = asyncio.create_task(
         smoke.finish_drive(engine, metrics, sampler, asyncio.Event(), {}, monotonic(), primary=None)
     )
-    await asyncio.sleep(0)
+    await asyncio.wait_for(draining.wait(), timeout=1)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await asyncio.wait_for(task, timeout=1)
     engine.dispose.assert_awaited_once()
     metrics.finish.assert_called_once()
 
