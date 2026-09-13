@@ -362,6 +362,7 @@ class IsolatedEnvironment:
     call_profile: dict | None = None
     metrics: bool = False
     capacity: bool = False
+    fault_config: dict | None = None
     _ipc_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _process: OwnedProcess | None = field(default=None, init=False)
     _channel: socket.socket | None = field(default=None, init=False)
@@ -401,6 +402,16 @@ class IsolatedEnvironment:
             raise EnvironmentError("invalid_profile")
         if type(self.metrics) is not bool or type(self.capacity) is not bool:
             raise EnvironmentError("invalid_profile")
+        if self.fault_config is not None:
+            from tests.performance.fault_contracts import parse_config
+
+            self.fault_config = parse_config(self.fault_config).model_dump(mode="json")
+            if (
+                not (self.capacity and self.metrics)
+                or self.profile.name != PROFILE
+                or self.call_profile is None
+            ):
+                raise EnvironmentError("invalid_profile")
         if self.profile.name == QUEUE_PROFILE and not (self.capacity and self.metrics):
             raise EnvironmentError("invalid_profile")
         if self.call_profile is not None:
@@ -456,6 +467,7 @@ class IsolatedEnvironment:
                     "queue": self.profile.name == QUEUE_PROFILE,
                     "metrics": self.metrics,
                     "capacity": self.capacity,
+                    **({"fault_config": self.fault_config} if self.fault_config else {}),
                     **(
                         {"call_profile": self.call_profile} if self.call_profile is not None else {}
                     ),
@@ -482,8 +494,13 @@ class IsolatedEnvironment:
     def capacity_command(self, kind: str) -> dict:
         if not self.capacity or not self._started or self._closed:
             raise EnvironmentError("protocol_failed")
-        if kind not in {"start_worker", "health"} and not (
-            kind == "stop_worker" and self.profile.name == QUEUE_PROFILE
+        if (
+            kind not in {"start_worker", "health"}
+            and not (kind == "stop_worker" and self.profile.name == QUEUE_PROFILE)
+            and not (
+                self.fault_config is not None
+                and kind in {"fault_poll", "fault_release", "fault_kill"}
+            )
         ):
             raise EnvironmentError("protocol_failed")
         with self._ipc_lock:

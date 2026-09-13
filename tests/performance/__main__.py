@@ -8,9 +8,11 @@ from tests.performance.capacity import run_suite
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["capacity", "queue", "retrieval-scale"])
+    parser.add_argument("command", choices=["capacity", "queue", "retrieval-scale", "faults"])
     parser.add_argument(
-        "--profile", required=True, choices=["capacity-e56-v1", "queue-e57-v1", "retrieval-e58-v1"]
+        "--profile",
+        required=True,
+        choices=["capacity-e56-v1", "queue-e57-v1", "retrieval-e58-v1", "faults-e59-v1"],
     )
     parser.add_argument(
         "--authorization",
@@ -19,17 +21,22 @@ def main(argv=None):
             "e56_local_capacity_user_approved_v1",
             "e57_local_queue_user_approved_v1",
             "e58_local_retrieval_user_approved_v1",
+            "e59_local_faults_user_approved_v1",
         ],
     )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
+        from tests.performance.faults import run_suite as run_faults
         from tests.performance.queue import run_suite as run_queue
         from tests.performance.retrieval_scale import run_suite as run_retrieval
 
-        execute = {"queue": run_queue, "capacity": run_suite, "retrieval-scale": run_retrieval}[
-            args.command
-        ]
+        execute = {
+            "queue": run_queue,
+            "capacity": run_suite,
+            "retrieval-scale": run_retrieval,
+            "faults": run_faults,
+        }[args.command]
         suite = execute(
             args.output, authorization=args.authorization, selected_profile=args.profile
         )

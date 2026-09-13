@@ -277,3 +277,8 @@ benchmark-queue: verify-toolchain
 .PHONY: benchmark-retrieval
 benchmark-retrieval: verify-toolchain
 	$(UV) run --locked python -m tests.performance retrieval-scale --profile retrieval-e58-v1 --authorization "$(RETRIEVAL_AUTHORIZATION)" --output "$(RETRIEVAL_OUTPUT)"
+
+# Manual only: owned fake/off E5.9 matrix; requires the explicit fixed-budget authorization.
+.PHONY: benchmark-faults
+benchmark-faults: verify-toolchain
+	$(UV) run --locked python -m tests.performance faults --profile faults-e59-v1 --authorization "$(FAULTS_AUTHORIZATION)" --output "$(FAULTS_OUTPUT)"

@@ -86,6 +86,7 @@ class Supervisor:
         metrics=False,
         capacity=False,
         queue=False,
+        fault_config=None,
     ) -> None:
         from tests.performance.workload import parse_profile
 
@@ -131,6 +132,13 @@ class Supervisor:
         self.processes: dict[str, OwnedProcess] = {}
         self.api_socket: socket.socket | None = None
         self.started = time.monotonic()
+        self.faults = None
+        if fault_config is not None:
+            from tests.performance.fault_control import FaultControl
+
+            if not (capacity and metrics) or queue:
+                raise EnvironmentError("invalid_profile")
+            self.faults = FaultControl(self, fault_config)
         self.identity: dict = {
             "schema_version": 1,
             "owner": self.owner,
@@ -206,7 +214,13 @@ class Supervisor:
                 queue=self.queue,
                 output_dir=str(self.directory),
             )
-        fds = tuple(extra[key] for key in ("socket_fd", "ready_fd") if key in extra)
+        if role == "worker" and self.faults is not None:
+            bootstrap.update(self.faults.bootstrap())
+            bootstrap["metrics"] = False
+            bootstrap["capacity"] = False
+        fds = tuple(
+            bootstrap[key] for key in ("socket_fd", "ready_fd", "fault_fd") if key in bootstrap
+        )
         process = OwnedProcess.launch(role, env=env, bootstrap=bootstrap, fds=fds)
         self.processes[role] = process
         self.identity["process_ids"] = {
@@ -259,6 +273,8 @@ class Supervisor:
         return database_url
 
     def start_worker(self):
+        if self.faults is not None:
+            self.faults.before_start()
         parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         try:
             worker = self.launch("worker", self.database_url, ready_fd=child.fileno())
@@ -271,6 +287,8 @@ class Supervisor:
                 raise EnvironmentError("ownership_mismatch")
             if worker.process.poll() is not None:
                 raise EnvironmentError("process_exited")
+            if self.faults is not None:
+                self.faults.after_start(worker)
         finally:
             parent.close()
             child.close()
@@ -301,6 +319,8 @@ class Supervisor:
                     packet = receive_packet(self.channel, 0)
                 except EnvironmentError:
                     return "cancelled"  # Includes parent disconnect; still clean owned resources.
+                if self.faults is not None and self.faults.command(packet):
+                    continue
                 if self.capacity and packet == {"kind": "start_worker"}:
                     pid = self.start_worker()
                     send_packet(
@@ -328,6 +348,8 @@ class Supervisor:
                 return None if packet == {"kind": "stop"} else "protocol_failed"
 
     def cleanup(self) -> bool:
+        if self.faults is not None:
+            self.faults.close()
         for role in ("worker", "api", "migrate"):
             child = self.processes.get(role)
             try:
@@ -460,6 +482,7 @@ def main() -> int:
             bootstrap.get("metrics", False),
             bootstrap.get("capacity", False),
             bootstrap.get("queue", False),
+            bootstrap.get("fault_config"),
         ).run()
 
 

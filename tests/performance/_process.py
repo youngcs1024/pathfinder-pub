@@ -110,11 +110,21 @@ def main() -> None:
             calls = Calls(
                 parse_profile(bootstrap["call_profile"]), directory=Path(bootstrap["output_dir"])
             )
+            if "fault_config" in bootstrap:
+                from tests.performance.fault_runtime import FaultCalls
+
+                calls = FaultCalls(bootstrap)
             adapters = worker_adapters(worker, calls)
+        faults = nullcontext()
+        if "fault_config" in bootstrap:
+            from tests.performance.fault_runtime import instrument_faults
+
+            faults = instrument_faults(worker, calls)
         with (
             patch.object(worker, "_clear_worker_ready_marker", lambda _path: None),
             patch.object(worker, "_worker_readiness_marker", readiness),
             adapters,
+            faults,
             instrument(worker, collector) if collector is not None else nullcontext(),
         ):
             asyncio.run(worker.run_worker(settings))
