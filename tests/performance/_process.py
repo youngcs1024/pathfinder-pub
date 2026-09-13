@@ -46,6 +46,12 @@ def main() -> None:
         or not url.port
     ):
         raise EnvironmentError("ownership_mismatch")
+    if type(bootstrap.get("metrics", False)) is not bool:
+        raise EnvironmentError("invalid_profile")
+    from tests.performance.metrics import Collector
+    from tests.performance.metrics_runtime import instrument
+
+    collector = Collector(role, Path(bootstrap["output_dir"])) if bootstrap.get("metrics") else None
     if role == "migrate":
         from alembic import command
         from alembic.config import Config
@@ -56,14 +62,17 @@ def main() -> None:
     elif role == "api":
         import uvicorn
 
-        from app.main import create_app
+        from app import main as api
 
-        with socket.socket(fileno=bootstrap["socket_fd"]) as listener:
+        with (
+            instrument(api, collector) if collector is not None else nullcontext(),
+            socket.socket(fileno=bootstrap["socket_fd"]) as listener,
+        ):
             if listener.getsockname()[0] != "127.0.0.1":
                 raise EnvironmentError("unsafe_binding")
             server = uvicorn.Server(
                 uvicorn.Config(
-                    create_app(settings),
+                    api.create_app(settings),
                     lifespan="on",
                     access_log=False,
                     log_config=None,
@@ -95,6 +104,7 @@ def main() -> None:
             patch.object(worker, "_clear_worker_ready_marker", lambda _path: None),
             patch.object(worker, "_worker_readiness_marker", readiness),
             adapters,
+            instrument(worker, collector) if collector is not None else nullcontext(),
         ):
             asyncio.run(worker.run_worker(settings))
     else:

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import subprocess
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from time import monotonic
 from typing import Literal
@@ -44,6 +46,8 @@ from tests.performance.environment import (
     EnvironmentProfile,
     IsolatedEnvironment,
 )
+from tests.performance.metrics import Collector, DecisionFact, RunFact, build_report
+from tests.performance.metrics_runtime import database_sampler, sample_database
 from tests.performance.workload import (
     KINDS,
     CallProfile,
@@ -104,12 +108,14 @@ class SmokeRecord(Contract):
         Field(default_factory=dict)
     )
     resources_released: bool = False
+    metrics_status: Literal["PASS", "IN_PROGRESS", "NOT_RUN"] = "NOT_RUN"
 
 
 class HTTP:
-    def __init__(self, client: httpx.AsyncClient):
+    def __init__(self, client: httpx.AsyncClient, metrics: Collector | None = None):
         self.client = client
         self.count = 0
+        self.metrics = metrics
 
     def reserve(self):
         require(self.count < MAX_REQUESTS, "request_limit")
@@ -117,27 +123,89 @@ class HTTP:
 
     async def request(self, method, path, *, expected=200, **kwargs):
         self.reserve()
+        token = self.metrics.begin("http", expected_status=expected) if self.metrics else None
+        outcome = "failed"
         try:
             response = await self.client.request(method, path, **kwargs)
+            # HTTPX request reads the complete body. Stop latency before JSON decoding.
+            if self.metrics:
+                flag = response.headers.get("Idempotency-Replayed")
+                self.metrics.end(
+                    token,
+                    "succeeded" if response.status_code == expected else "failed",
+                    http_status=response.status_code,
+                    replayed={"true": True, "false": False}.get(flag),
+                )
             require(response.status_code == expected, "http_failed")
-            return response.json()
-        except (httpx.HTTPError, ValueError):
+            data = response.json()
+            if self.metrics and expected == 202:
+                self.metrics.update(token, run_id=UUID(data["run_id"]))
+            outcome = "succeeded"
+            return data
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        except httpx.TimeoutException:
+            outcome = "timeout"
             raise SmokeFailure("http_failed") from None
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            raise SmokeFailure("http_failed") from None
+        finally:
+            if self.metrics and token is not None:
+                sample = self.metrics.samples[token - 1]
+                if sample.finished is None:
+                    self.metrics.end(token, outcome)
+                elif outcome != "succeeded":
+                    self.metrics.update(token, outcome=outcome)
 
     async def events(self, path, *, cursor=0):
         self.reserve()
-        body = bytearray()
+        token = self.metrics.begin("sse_connection", cursor=cursor) if self.metrics else None
+        pending = bytearray()
+        frames = []
+        received_bytes = 0
+        outcome = "failed"
         try:
             async with self.client.stream(
                 "GET", path, headers={"Last-Event-ID": str(cursor)}
             ) as response:
+                if self.metrics:
+                    self.metrics.update(token, http_status=response.status_code)
                 require(response.status_code == 200, "http_failed")
                 async for chunk in response.aiter_bytes():
-                    require(len(body) + len(chunk) <= MAX_SSE_BYTES)
-                    body.extend(chunk)
-            return parse_events(body.decode())
-        except (httpx.HTTPError, ValueError, UnicodeError):
+                    received_bytes += len(chunk)
+                    require(received_bytes <= MAX_SSE_BYTES)
+                    pending.extend(chunk)
+                    while b"\n\n" in pending:
+                        raw, _, remainder = pending.partition(b"\n\n")
+                        pending = bytearray(remainder)
+                        parsed = parse_events(raw.decode())
+                        for frame in parsed:
+                            if self.metrics:
+                                data = frame["data"]
+                                received = self.metrics.begin(
+                                    "sse_event",
+                                    run_id=UUID(data["run_id"]),
+                                    seq=frame["id"],
+                                    cursor=cursor,
+                                    event_recorded_at=datetime.fromisoformat(data["occurred_at"]),
+                                )
+                                self.metrics.end(received)
+                        frames.extend(parsed)
+            require(not pending.strip())
+            outcome = "succeeded"
+            return frames
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        except httpx.TimeoutException:
+            outcome = "timeout"
             raise SmokeFailure("http_failed") from None
+        except (httpx.HTTPError, ValueError, UnicodeError, KeyError, TypeError):
+            raise SmokeFailure("http_failed") from None
+        finally:
+            if self.metrics:
+                self.metrics.end(token, outcome)
 
 
 def parse_events(body):
@@ -442,13 +510,81 @@ async def verify_facts(sessions, tenant, run_id, mode, document_id, frames, dire
         "tool_invocations": len(tools),
         "mock_effects": len(submissions),
         "call_counts": {kind: counts[kind] for kind in KINDS},
+        "_metrics_facts": (
+            RunFact(
+                run_id=run.id,
+                created_at=run.created_at,
+                started_at=run.started_at,
+                finished_at=run.finished_at,
+                status=run.status,
+                approval_mode="synthetic_driver" if mode == "application" else "none",
+            ),
+        ),
+        "_metrics_decisions": tuple(
+            DecisionFact(
+                run_id=run.id,
+                request_id=d.approval_request_id,
+                decided_at=d.decided_at,
+            )
+            for d in decisions
+        ),
     }
+
+
+async def capture_timing_facts(sessions, tenant, run_id, mode, progress):
+    async with sessions() as session:
+        row = (
+            await session.execute(
+                select(
+                    Run.id,
+                    Run.created_at,
+                    Run.started_at,
+                    Run.finished_at,
+                    Run.status,
+                ).where(Run.workspace_id == tenant.workspace_id, Run.id == run_id)
+            )
+        ).one()
+        decisions = (
+            await session.execute(
+                select(
+                    ApprovalDecision.approval_request_id,
+                    ApprovalDecision.decided_at,
+                )
+                .join(ApprovalRequest, ApprovalRequest.id == ApprovalDecision.approval_request_id)
+                .where(
+                    ApprovalDecision.workspace_id == tenant.workspace_id,
+                    ApprovalRequest.workspace_id == tenant.workspace_id,
+                    ApprovalRequest.run_id == run_id,
+                )
+            )
+        ).all()
+    progress["_metrics_facts"] = (
+        RunFact(
+            run_id=row.id,
+            created_at=row.created_at,
+            started_at=row.started_at,
+            finished_at=row.finished_at,
+            status=row.status,
+            approval_mode="synthetic_driver" if mode == "application" else "none",
+        ),
+    )
+    progress["_metrics_decisions"] = tuple(
+        DecisionFact(
+            run_id=run_id,
+            request_id=d.approval_request_id,
+            decided_at=d.decided_at,
+        )
+        for d in decisions
+    )
 
 
 async def drive(environment, policy, mode, progress):
     engine = create_database_engine(SecretStr(environment.database_url))
     sessions = create_session_factory(engine)
     started = monotonic()
+    metrics = Collector("driver", environment.output_dir)
+    sampler = None
+    stop_sampling = asyncio.Event()
     try:
         async with (
             asyncio.timeout(MAX_SECONDS),
@@ -459,7 +595,9 @@ async def drive(environment, policy, mode, progress):
                 follow_redirects=False,
             ) as client,
         ):
-            http = HTTP(client)
+            http = HTTP(client, metrics)
+            await sample_database(sessions, metrics)
+            sampler = asyncio.create_task(database_sampler(sessions, metrics, stop_sampling))
             try:
                 identity = await http.request("GET", "/api/v1/me")
                 require(
@@ -504,6 +642,9 @@ async def drive(environment, policy, mode, progress):
                     approved = False
                     while True:
                         state = await http.request("GET", path)
+                        observation_started = monotonic()
+                        await capture_timing_facts(sessions, tenant, run_id, mode, progress)
+                        metrics.observer_seconds += monotonic() - observation_started
                         if state["status"] == "completed":
                             async with sessions() as session:
                                 job_status = await session.scalar(
@@ -530,9 +671,19 @@ async def drive(environment, policy, mode, progress):
                         sessions, tenant, run_id, mode, document_id, frames, environment.output_dir
                     )
                 )
+                await sample_database(sessions, metrics)
             finally:
                 progress["http_requests"] = http.count
     finally:
+        if sampler is not None:
+            stop_sampling.set()
+            sampler.cancel()
+            try:
+                await sampler
+            except asyncio.CancelledError:
+                pass
+        metrics.finish()
+        progress["_metrics_write_failed"] = metrics.write_failed
         progress["elapsed_seconds"] = monotonic() - started
         await asyncio.wait_for(engine.dispose(), timeout=5)
 
@@ -592,7 +743,10 @@ def run_smoke(
         approval_mode="synthetic_driver" if mode == "application" else "none",
     )
     environment = IsolatedEnvironment(
-        EnvironmentProfile(PROFILE), output_dir, call_profile=selected.model_dump(mode="json")
+        EnvironmentProfile(PROFILE),
+        output_dir,
+        call_profile=selected.model_dump(mode="json"),
+        metrics=True,
     )
     progress = {}
     category = None
@@ -615,6 +769,28 @@ def run_smoke(
             progress.update(partial_calls(output_dir))
         except Exception:
             category = "report_failed"
+    facts = progress.pop("_metrics_facts", ())
+    decisions = progress.pop("_metrics_decisions", ())
+    metrics_write_failed = progress.pop("_metrics_write_failed", False)
+    if environment.output_created:
+        try:
+            report = build_report(
+                output_dir,
+                source_commit=commit,
+                lock_digest=hashlib.sha256((ROOT / "uv.lock").read_bytes()).hexdigest(),
+                facts=facts,
+                decisions=decisions,
+            )
+            if metrics_write_failed:
+                report = report.model_copy(update={"status": "IN_PROGRESS"})
+            publish(output_dir, "metrics-result.json", report)
+            progress["metrics_status"] = report.status
+            if report.status != "PASS" and category is None:
+                category = "evidence_mismatch"
+        except Exception:
+            progress["metrics_status"] = "IN_PROGRESS"
+            if category is None:
+                category = "report_failed"
     result = SmokeRecord.model_validate(
         {
             **initial.model_dump(),
@@ -627,7 +803,12 @@ def run_smoke(
         }
     )
     if environment.output_created:
-        publish(output_dir, "smoke-result.json", result)
+        try:
+            publish(output_dir, "smoke-result.json", result)
+        except EnvironmentError:
+            if interrupted is not None:
+                raise interrupted from None
+            raise
     if interrupted is not None:
         raise interrupted
     return result

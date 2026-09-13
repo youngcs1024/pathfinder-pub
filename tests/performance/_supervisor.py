@@ -76,7 +76,7 @@ def verified_port(container) -> int:
 
 class Supervisor:
     def __init__(
-        self, directory: Path, owner: str, channel: socket.socket, call_profile=None
+        self, directory: Path, owner: str, channel: socket.socket, call_profile=None, metrics=False
     ) -> None:
         from tests.performance.workload import parse_profile
 
@@ -85,6 +85,14 @@ class Supervisor:
             if call_profile is not None
             else None
         )
+        if type(metrics) is not bool:
+            raise EnvironmentError("invalid_profile")
+        from tests.performance.metrics import Collector
+
+        self.metrics = Collector("supervisor", directory) if metrics else None
+        self.serving = False
+        self.previous_stats = None
+        self.next_sample = 0.0
         self.directory = directory
         self.owner = UUID(owner).hex
         self.channel = channel
@@ -161,6 +169,8 @@ class Supervisor:
         bootstrap = {"owner": self.owner, **extra}
         if role == "worker" and self.call_profile is not None:
             bootstrap.update(call_profile=self.call_profile, output_dir=str(self.directory))
+        if self.metrics is not None and role in {"api", "worker"}:
+            bootstrap.update(metrics=True, output_dir=str(self.directory))
         fds = tuple(extra[key] for key in ("socket_fd", "ready_fd") if key in extra)
         process = OwnedProcess.launch(role, env=env, bootstrap=bootstrap, fds=fds)
         self.processes[role] = process
@@ -234,6 +244,11 @@ class Supervisor:
                 return "runtime_timeout"
             if any(self.processes[role].process.poll() is not None for role in ("api", "worker")):
                 return "process_exited"
+            if self.metrics is not None and time.monotonic() >= self.next_sample:
+                from tests.performance.metrics_runtime import sample_container
+
+                sample_container(self)
+                self.next_sample = time.monotonic() + 1.0
             if select.select([self.channel], [], [], min(remaining, 0.1))[0]:
                 try:
                     packet = receive_packet(self.channel, 0)
@@ -297,13 +312,21 @@ class Supervisor:
                 self.channel,
                 {"kind": "ready", "identity": self.identity, "database_url": database_url},
             )
+            self.serving = True
+            if self.metrics is not None:
+                signal.setitimer(
+                    signal.ITIMER_REAL,
+                    max(1, RUN_SECONDS - CLEANUP_SECONDS - (time.monotonic() - self.started)),
+                )
             category = self.serve()
         except LifecycleInterrupted:
-            category = (
-                "startup_timeout"
-                if time.monotonic() - self.started >= START_SECONDS
-                else "cancelled"
-            )
+            elapsed = time.monotonic() - self.started
+            if self.serving and elapsed >= RUN_SECONDS - CLEANUP_SECONDS:
+                category = "runtime_timeout"
+            elif not self.serving and elapsed >= START_SECONDS:
+                category = "startup_timeout"
+            else:
+                category = "cancelled"
         except EnvironmentError as exc:
             category = exc.category
         except Exception:
@@ -319,6 +342,10 @@ class Supervisor:
                 self.cleanup_failures.append("deadline")
             finally:
                 signal.setitimer(signal.ITIMER_REAL, 0)
+        if self.metrics is not None:
+            self.metrics.finish()
+            if self.metrics.write_failed and category is None:
+                category = "report_failed"
         if category == "cleanup_failed":
             released = False
         result = {
@@ -356,6 +383,7 @@ def main() -> int:
             bootstrap["owner"],
             channel,
             bootstrap.get("call_profile"),
+            bootstrap.get("metrics", False),
         ).run()
 
 

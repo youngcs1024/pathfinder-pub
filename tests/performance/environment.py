@@ -357,6 +357,7 @@ class IsolatedEnvironment:
     output_dir: Path
     docker_socket: Path = Path("/var/run/docker.sock")
     call_profile: dict | None = None
+    metrics: bool = False
     _process: OwnedProcess | None = field(default=None, init=False)
     _channel: socket.socket | None = field(default=None, init=False)
     _started: bool = field(default=False, init=False)
@@ -389,6 +390,8 @@ class IsolatedEnvironment:
         if self._started or self._closed:
             raise EnvironmentError("already_started")
         if type(self.profile) is not EnvironmentProfile or self.profile.name != PROFILE:
+            raise EnvironmentError("invalid_profile")
+        if type(self.metrics) is not bool:
             raise EnvironmentError("invalid_profile")
         if self.call_profile is not None:
             from tests.performance.workload import parse_profile
@@ -434,6 +437,7 @@ class IsolatedEnvironment:
                     "owner": owner,
                     "output_dir": str(directory),
                     "channel_fd": child.fileno(),
+                    "metrics": self.metrics,
                     **(
                         {"call_profile": self.call_profile} if self.call_profile is not None else {}
                     ),

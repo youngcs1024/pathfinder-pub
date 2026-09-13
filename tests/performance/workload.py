@@ -108,7 +108,7 @@ class CallRecord(Contract):
 def publish(directory: Path, name: str, record: Contract) -> None:
     """No free-form exception, payload, path or target string enters an artifact."""
     try:
-        if (
+        if not name.startswith("metrics-") and (
             re.fullmatch(
                 r"(?:calls-(?:worker|ingest)-\d{3}-(?:started|finished)|smoke-(?:started|result)|call-profile|load-(?:manifest|started|result))\.json",
                 name,
@@ -116,6 +116,10 @@ def publish(directory: Path, name: str, record: Contract) -> None:
             is None
         ):
             raise ValueError
+        if name.startswith("metrics-"):
+            from tests.performance.metrics import validate_publication
+
+            validate_publication(name, record)
         if name.startswith("load-"):
             from tests.performance.contracts import Manifest, Result, Started
 
