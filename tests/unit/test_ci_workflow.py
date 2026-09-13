@@ -526,3 +526,16 @@ def test_safe_diagnostic_upload_is_bounded_and_preserves_original_failures():
         assert "${{ github.run_id }}-${{ github.run_attempt }}-" + job in upload
         assert "**" not in upload
     assert "-p tests.ci_reports" in _workflow().split("\njobs:")[0]
+
+
+def test_runner_context_is_step_scoped_and_workflow_validator_is_required():
+    workflow = _workflow()
+    assert "runner." not in workflow.split("\njobs:", 1)[0]
+    for job in ("python-validation", "quality", "contracts", "integration"):
+        for step in _steps(_jobs(workflow)[job]).values():
+            if "PF_CI_TEST_STEP:" in step:
+                assert "          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest" in step
+    preflight = _steps(_jobs(workflow)["preflight"])
+    assert "run: make prepare-workflow-lint" in preflight["Install pinned workflow validator"]
+    assert "run: make lint-workflow" in preflight["Validate workflow semantics"]
+    assert "steps.workflow_setup.outcome == 'success'" in preflight["Validate workflow semantics"]

@@ -23,6 +23,18 @@ SUMMARY_NAME = "Summarize check outcomes"
 CHECKS = {
     "preflight": (
         Check("checkout", "Check out repository history"),
+        Check(
+            "workflow_setup",
+            "Install pinned workflow validator",
+            ("checkout",),
+            command="make prepare-workflow-lint",
+        ),
+        Check(
+            "workflow",
+            "Validate workflow semantics",
+            ("workflow_setup",),
+            command="make lint-workflow",
+        ),
         Check("classify", "Classify change set conservatively", ("checkout",)),
         Check("links", "Check public repository boundary", ("checkout",)),
         Check("secret_scan", "Scan repository history for secrets", ("checkout",)),

@@ -394,3 +394,10 @@ def test_cli_emits_safe_json_and_preserves_exit_code(monkeypatch, capsys):
     monkeypatch.setattr(ci, "inspect_run", lambda **kwargs: ({"category": "billing_blocked"}, 1))
     assert ci.main(["--repo", REPO, "--run-id", "164", "--expected-sha", SHA]) == 1
     assert json.loads(capsys.readouterr().out) == {"category": "billing_blocked"}
+
+
+def test_failed_attempt_with_no_jobs_is_not_misdiagnosed_as_step_failure():
+    run = run_fixture(conclusion="failure")
+    request, _ = api_fixture(run=run, jobs={"total_count": 0, "jobs": []})
+    result, code = inspect(request)
+    assert code == 1 and result["category"] == "no_jobs_failure"

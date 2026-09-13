@@ -28,7 +28,6 @@ env:
   PYTEST_TMPDIR: /tmp
   PYTEST_ADDOPTS: --durations=20 -p tests.ci_reports
   PYTHONPATH: ${{ github.workspace }}
-  PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
 
 jobs:
   preflight:
@@ -50,8 +49,19 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Install pinned workflow validator
+        id: workflow_setup
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: make prepare-workflow-lint
+
+      - name: Validate workflow semantics
+        id: workflow
+        if: ${{ !cancelled() && steps.workflow_setup.outcome == 'success' }}
+        run: make lint-workflow
+
       - name: Classify change set conservatively
         id: classify
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -84,6 +94,8 @@ jobs:
           PF_CI_STEPS: >-
             {
             "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "workflow_setup": {"outcome": ${{ toJSON(steps.workflow_setup.outcome) }}, "conclusion": ${{ toJSON(steps.workflow_setup.conclusion) }}},
+            "workflow": {"outcome": ${{ toJSON(steps.workflow.outcome) }}, "conclusion": ${{ toJSON(steps.workflow.conclusion) }}},
             "classify": {"outcome": ${{ toJSON(steps.classify.outcome) }}, "conclusion": ${{ toJSON(steps.classify.conclusion) }}},
             "links": {"outcome": ${{ toJSON(steps.links.outcome) }}, "conclusion": ${{ toJSON(steps.links.conclusion) }}},
             "secret_scan": {"outcome": ${{ toJSON(steps.secret_scan.outcome) }}, "conclusion": ${{ toJSON(steps.secret_scan.conclusion) }}}
@@ -108,6 +120,8 @@ jobs:
           PF_CI_STEPS: >-
             {
             "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "workflow_setup": {"outcome": ${{ toJSON(steps.workflow_setup.outcome) }}, "conclusion": ${{ toJSON(steps.workflow_setup.conclusion) }}},
+            "workflow": {"outcome": ${{ toJSON(steps.workflow.outcome) }}, "conclusion": ${{ toJSON(steps.workflow.conclusion) }}},
             "classify": {"outcome": ${{ toJSON(steps.classify.outcome) }}, "conclusion": ${{ toJSON(steps.classify.conclusion) }}},
             "links": {"outcome": ${{ toJSON(steps.links.outcome) }}, "conclusion": ${{ toJSON(steps.links.conclusion) }}},
             "secret_scan": {"outcome": ${{ toJSON(steps.secret_scan.outcome) }}, "conclusion": ${{ toJSON(steps.secret_scan.conclusion) }}}
@@ -149,6 +163,7 @@ jobs:
         id: collect
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         env:
+          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
           PF_CI_TEST_STEP: collect
         run: make test-collect
 
@@ -234,6 +249,7 @@ jobs:
         id: unit
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         env:
+          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
           PF_CI_TEST_STEP: unit
         run: make test-unit
 
@@ -241,6 +257,7 @@ jobs:
         id: architecture
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         env:
+          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
           PF_CI_TEST_STEP: architecture
         run: make test-architecture
 
@@ -320,6 +337,7 @@ jobs:
         id: operational
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'operational' }}
         env:
+          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
           PF_CI_TEST_STEP: operational
         run: make test-operational-contracts
 
@@ -327,6 +345,7 @@ jobs:
         id: eval
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'eval' }}
         env:
+          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
           PF_CI_TEST_STEP: eval
         run: make test-eval-contracts
 
@@ -402,6 +421,7 @@ jobs:
         id: core
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         env:
+          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
           PF_CI_TEST_STEP: core
           PYTEST_ADDOPTS: >-
             --durations=20 -p tests.ci_sharding -p tests.ci_reports
@@ -413,6 +433,7 @@ jobs:
         id: retrieval
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.shard == 0 }}
         env:
+          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
           PF_CI_TEST_STEP: retrieval
         run: make evals-retrieval
 
@@ -420,6 +441,7 @@ jobs:
         id: demo
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.shard == 0 }}
         env:
+          PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
           PF_CI_TEST_STEP: demo
         run: make demo
 

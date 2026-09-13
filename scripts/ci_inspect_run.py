@@ -324,7 +324,13 @@ def inspect_run(
             result["category"] = "pending"
             return result, 2
         if run["conclusion"] in ("cancelled", "failure", "timed_out", "startup_failure"):
-            result["category"] = "cancelled" if run["conclusion"] == "cancelled" else "run_failed"
+            result["category"] = (
+                "cancelled"
+                if run["conclusion"] == "cancelled"
+                else "no_jobs_failure"
+                if not jobs
+                else "run_failed"
+            )
             return result, 1
         if run["conclusion"] == "success" and full_attempt(payload, run):
             result["category"] = "full_success"

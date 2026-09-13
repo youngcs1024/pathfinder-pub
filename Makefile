@@ -257,3 +257,11 @@ test-ui:
 		printf 'error: Node version must match .node-version\n' >&2; exit 1; \
 	}
 	node --test tests/ui/*.test.cjs
+
+# Workflow edits require this semantic check before committing; Python lint stays independent.
+.PHONY: prepare-workflow-lint lint-workflow
+prepare-workflow-lint:
+	python3 scripts/workflow_lint.py prepare
+
+lint-workflow:
+	python3 scripts/workflow_lint.py check
