@@ -257,10 +257,14 @@ class Supervisor:
         return worker.process.pid
 
     def serve(self) -> str | None:
+        deadline = self.started + RUN_SECONDS - CLEANUP_SECONDS
         while True:
-            remaining = RUN_SECONDS - CLEANUP_SECONDS - (time.monotonic() - self.started)
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return "runtime_timeout"
+            required = {"api"} if self.capacity else {"api", "worker"}
+            if not required.issubset(self.processes):
+                return "process_exited"
             if any(
                 p.process.poll() is not None
                 for r, p in self.processes.items()

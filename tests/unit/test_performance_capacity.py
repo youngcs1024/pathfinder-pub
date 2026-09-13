@@ -270,3 +270,43 @@ def test_warmup_and_cross_window_samples_are_not_measurement(tmp_path):
     assert len(result.summaries) == 1
     assert result.summaries[0].count == 1 and result.summaries[0].calls_per_second.value == 0.1
     assert result.cross_window_samples == 1
+
+
+def test_absolute_supervisor_deadline_avoids_rounding_spin(tmp_path, monkeypatch):
+    import socket
+
+    from tests.performance import _supervisor as module
+
+    parent, child = socket.socketpair()
+    try:
+        supervisor = module.Supervisor(tmp_path, "a" * 32, parent)
+        supervisor.started = 17.75044742211813
+        deadline = supervisor.started + module.RUN_SECONDS - module.CLEANUP_SECONDS
+        monkeypatch.setattr(module.time, "monotonic", lambda: deadline)
+        monkeypatch.setattr(
+            module.select, "select", Mock(side_effect=AssertionError("deadline_fell_through"))
+        )
+        assert supervisor.serve() == "runtime_timeout"
+    finally:
+        parent.close()
+        child.close()
+
+
+@pytest.mark.parametrize("capacity", [False, True])
+def test_only_capacity_allows_deferred_worker(tmp_path, capacity):
+    import socket
+
+    from tests.performance import _supervisor as module
+    from tests.performance.environment import send_packet
+
+    parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    try:
+        supervisor = module.Supervisor(tmp_path, "a" * 32, parent, capacity=capacity)
+        supervisor.metrics = None
+        supervisor.processes = {"api": Mock()}
+        supervisor.processes["api"].process.poll.return_value = None
+        send_packet(child, {"kind": "stop"})
+        assert supervisor.serve() == (None if capacity else "process_exited")
+    finally:
+        parent.close()
+        child.close()
