@@ -2,8 +2,9 @@
 
 import asyncio
 import json
+from time import monotonic
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import httpx
@@ -149,7 +150,7 @@ def test_driver_failure_closes_owned_environment_and_preserves_partial_evidence(
             self.closed = False
             instances.append(self)
 
-        def __enter__(self):
+        def start(self):
             self.directory.mkdir(mode=0o700)
             self.output_created = True
             return self
@@ -278,7 +279,7 @@ def test_primary_failure_survives_cleanup_and_publication_failures(tmp_path, mon
             self.directory = directory
             self.output_created = False
 
-        def __enter__(self):
+        def start(self):
             self.directory.mkdir(mode=0o700)
             self.output_created = True
             return self
@@ -312,3 +313,209 @@ def test_primary_failure_survives_cleanup_and_publication_failures(tmp_path, mon
     }
     assert set(result.missing_roles) == {"api", "worker", "driver", "supervisor"}
     assert "missing_role" in result.metrics_reasons
+
+
+@pytest.mark.parametrize(
+    "primary", [None, smoke.SmokeFailure("http_failed"), asyncio.CancelledError()]
+)
+async def test_all_drive_finalizers_run_without_replacing_primary_failure(primary):
+    sampler = asyncio.get_running_loop().create_future()
+    sampler.set_exception(RuntimeError("PRIVATE_SAMPLER_CANARY"))
+    metrics = SimpleNamespace(
+        finish=Mock(side_effect=ValueError("PRIVATE_METRICS_CANARY")), write_failed=False
+    )
+    engine = SimpleNamespace(dispose=AsyncMock(side_effect=OSError("PRIVATE_DISPOSAL_CANARY")))
+    progress = {}
+    stop = asyncio.Event()
+
+    async def execute():
+        await smoke.finish_drive(
+            engine, metrics, sampler, stop, progress, monotonic(), primary=primary
+        )
+
+    if primary is None:
+        with pytest.raises(smoke.SmokeFailure, match="evidence_mismatch"):
+            await execute()
+    else:
+        # Returning permits the enclosing finally to propagate its original exception.
+        await execute()
+    assert stop.is_set()
+    metrics.finish.assert_called_once()
+    engine.dispose.assert_awaited_once()
+    assert set(progress["_diagnostic_errors"]) == {"metrics_incomplete", "cleanup_failed"}
+    assert progress["_metrics_write_failed"]
+    assert "CANARY" not in json.dumps(progress)
+
+
+async def test_caller_cancellation_during_sampler_shutdown_still_disposes_engine():
+    entered = asyncio.Event()
+
+    async def sampling():
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(60)
+
+    sampler = asyncio.create_task(sampling())
+    await entered.wait()
+    engine = SimpleNamespace(dispose=AsyncMock())
+    metrics = SimpleNamespace(finish=Mock(), write_failed=False)
+    task = asyncio.create_task(
+        smoke.finish_drive(engine, metrics, sampler, asyncio.Event(), {}, monotonic(), primary=None)
+    )
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    engine.dispose.assert_awaited_once()
+    metrics.finish.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "error", [smoke.SmokeFailure("http_failed"), KeyboardInterrupt(), asyncio.CancelledError()]
+)
+def test_cleanup_exception_cannot_replace_drive_failure_or_interrupt(tmp_path, monkeypatch, error):
+    close = Mock(side_effect=OSError("PRIVATE_CLEANUP_CANARY"))
+
+    class Environment:
+        output_created = False
+
+        def __init__(self, _, directory, **kwargs):
+            self.directory = directory
+
+        def start(self):
+            self.directory.mkdir(mode=0o700)
+            self.output_created = True
+
+        def close(self):
+            return close()
+
+    monkeypatch.setattr(smoke, "IsolatedEnvironment", Environment)
+    monkeypatch.setattr(smoke, "drive", AsyncMock(side_effect=error))
+    if isinstance(error, (KeyboardInterrupt, asyncio.CancelledError)):
+        with pytest.raises(type(error)):
+            smoke.run_smoke(tmp_path / "report", mode="research")
+    else:
+        result = smoke.run_smoke(tmp_path / "report", mode="research")
+        assert result.category == "http_failed" and result.failure_stage == "drive"
+    close.assert_called_once()
+    data = json.loads((tmp_path / "report" / "smoke-result.json").read_text())
+    assert data["status"] == "IN_PROGRESS" and not data["resources_released"]
+    assert data["category"] == (
+        "cancelled"
+        if isinstance(error, (KeyboardInterrupt, asyncio.CancelledError))
+        else "http_failed"
+    )
+    assert "cleanup_failed" in data["diagnostic_errors"]
+    assert "CANARY" not in json.dumps(data)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"--authorization": None},
+        {"--authorization": "e59_local_faults_user_approved_v1"},
+        {"--profile": "capacity-e56-v1"},
+        {"--profile": "delayed-v1"},
+        {"--mode": "invalid"},
+        {"--output": "relative-output"},
+    ],
+)
+def test_smoke_cli_invalid_arguments_never_create_environment(tmp_path, monkeypatch, changes):
+    from tests.performance.__main__ import main
+
+    constructor = Mock()
+    monkeypatch.setattr(smoke, "IsolatedEnvironment", constructor)
+    options = {
+        "--profile": "instant-v1",
+        "--authorization": "e510_local_smoke_user_approved_v1",
+        "--output": str(tmp_path / "new"),
+    }
+    options.update(changes)
+    args = [
+        "smoke",
+        *(part for key, value in options.items() if value is not None for part in (key, value)),
+    ]
+    with pytest.raises(SystemExit) as error:
+        main(args)
+    assert error.value.code == 2
+    constructor.assert_not_called()
+    assert not (tmp_path / "new").exists()
+
+
+@pytest.mark.parametrize(
+    "error,code",
+    [
+        (RuntimeError("PRIVATE_CLI_CANARY"), 1),
+        (KeyboardInterrupt(), 130),
+        (asyncio.CancelledError(), 130),
+    ],
+)
+def test_smoke_cli_sanitizes_exceptions_and_preserves_interrupt_exit(
+    tmp_path, monkeypatch, capsys, error, code
+):
+    from tests.performance.__main__ import main
+
+    monkeypatch.setattr(smoke, "run_smoke", Mock(side_effect=error))
+    assert (
+        main(
+            [
+                "smoke",
+                "--profile",
+                "instant-v1",
+                "--authorization",
+                "e510_local_smoke_user_approved_v1",
+                "--output",
+                str(tmp_path / "new"),
+            ]
+        )
+        == code
+    )
+    assert "CANARY" not in capsys.readouterr().out
+
+
+def test_smoke_cli_existing_output_fails_without_touching_evidence(tmp_path):
+    from tests.performance.__main__ import main
+
+    marker = tmp_path / "evidence.json"
+    marker.write_text("retained")
+    assert (
+        main(
+            [
+                "smoke",
+                "--profile",
+                "instant-v1",
+                "--authorization",
+                "e510_local_smoke_user_approved_v1",
+                "--output",
+                str(tmp_path),
+            ]
+        )
+        == 1
+    )
+    assert list(tmp_path.iterdir()) == [marker]
+    assert marker.read_text() == "retained"
+
+
+def test_successful_drive_without_required_metrics_cannot_pass(tmp_path, monkeypatch):
+    class Environment:
+        output_created = False
+
+        def __init__(self, _, directory, **kwargs):
+            self.directory = directory
+
+        def start(self):
+            self.directory.mkdir(mode=0o700)
+            self.output_created = True
+
+        def close(self):
+            return {"status": "PASS", "resources_released": True}
+
+    monkeypatch.setattr(smoke, "IsolatedEnvironment", Environment)
+    monkeypatch.setattr(smoke, "drive", AsyncMock())
+    result = smoke.run_smoke(tmp_path / "new", mode="research")
+    assert result.status == "IN_PROGRESS" and result.metrics_status == "IN_PROGRESS"
+    assert result.category == "evidence_mismatch" and result.failure_stage == "metrics"
+    assert result.resources_released and result.missing_roles
+    assert "metrics_incomplete" in result.diagnostic_errors

@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import subprocess
+import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -693,17 +694,55 @@ async def drive(environment, policy, mode, progress):
             finally:
                 progress["http_requests"] = http.count
     finally:
-        if sampler is not None:
-            stop_sampling.set()
-            sampler.cancel()
-            try:
-                await sampler
-            except asyncio.CancelledError:
-                pass
+        await finish_drive(
+            engine, metrics, sampler, stop_sampling, progress, started, primary=sys.exception()
+        )
+
+
+async def finish_drive(engine, metrics, sampler, stop_sampling, progress, started, *, primary):
+    """Attempt every bounded finalizer without replacing a primary failure or cancellation."""
+    diagnostics = progress.setdefault("_diagnostic_errors", [])
+    failure = None
+    interrupted = None
+    if sampler is not None:
+        stop_sampling.set()
+        cancellation_count = asyncio.current_task().cancelling()
+        sampler.cancel()
+        try:
+            await sampler
+        except asyncio.CancelledError as exc:
+            # Cancellation requested by this finalizer is expected; caller cancellation is not.
+            if asyncio.current_task().cancelling() > cancellation_count:
+                interrupted = exc
+        except KeyboardInterrupt as exc:
+            interrupted = exc
+        except Exception:
+            diagnostics.append("metrics_incomplete")
+            failure = SmokeFailure("evidence_mismatch")
+    try:
         metrics.finish()
-        progress["_metrics_write_failed"] = metrics.write_failed
-        progress["elapsed_seconds"] = monotonic() - started
+    except (KeyboardInterrupt, asyncio.CancelledError) as exc:
+        interrupted = interrupted or exc
+        diagnostics.append("metrics_incomplete")
+    except Exception:
+        diagnostics.append("metrics_incomplete")
+        failure = failure or SmokeFailure("evidence_mismatch")
+    progress["_metrics_write_failed"] = metrics.write_failed or "metrics_incomplete" in diagnostics
+    progress["elapsed_seconds"] = monotonic() - started
+    try:
         await asyncio.wait_for(engine.dispose(), timeout=5)
+    except (KeyboardInterrupt, asyncio.CancelledError) as exc:
+        interrupted = interrupted or exc
+        diagnostics.append("cleanup_failed")
+    except Exception:
+        diagnostics.append("cleanup_failed")
+        failure = failure or SmokeFailure("cleanup_failed")
+    if interrupted is not None and not isinstance(
+        primary, (KeyboardInterrupt, asyncio.CancelledError)
+    ):
+        raise interrupted
+    if primary is None and failure is not None:
+        raise failure
 
 
 def failure_category(error) -> SmokeCategory:
@@ -772,18 +811,26 @@ def run_smoke(
     stage = "environment"
     diagnostic_errors = []
     try:
-        with environment:
-            publish(output_dir, "smoke-started.json", initial)
-            stage = "drive"
-            asyncio.run(drive(environment, selected, mode, progress))
+        environment.start()
+        publish(output_dir, "smoke-started.json", initial)
+        stage = "drive"
+        asyncio.run(drive(environment, selected, mode, progress))
     except (KeyboardInterrupt, asyncio.CancelledError) as exc:
         category = "cancelled"
         interrupted = exc
     except Exception as exc:
         category = failure_category(exc)
-    cleanup = environment.close()
+    diagnostic_errors.extend(progress.pop("_diagnostic_errors", ()))
+    try:
+        cleanup = environment.close()
+    except (KeyboardInterrupt, asyncio.CancelledError) as exc:
+        interrupted = interrupted or exc
+        category = "cancelled"
+        cleanup = {"resources_released": False}
+    except Exception:
+        cleanup = {"resources_released": False}
     released = cleanup.get("resources_released") is True
-    if not released:
+    if not released or cleanup.get("status") != "PASS" or cleanup.get("category"):
         diagnostic_errors.append("cleanup_failed")
         if category is None:
             category, stage = "cleanup_failed", "cleanup"
@@ -837,14 +884,18 @@ def run_smoke(
             "failure_stage": stage if category else None,
             "diagnostic_errors": tuple(dict.fromkeys(diagnostic_errors)),
             "status": "PASS"
-            if category is None and cleanup.get("status") == "PASS"
+            if category is None
+            and not diagnostic_errors
+            and released
+            and progress.get("metrics_status") == "PASS"
+            and cleanup.get("status") == "PASS"
             else "IN_PROGRESS",
         }
     )
     if environment.output_created:
         try:
             publish(output_dir, "smoke-result.json", result)
-        except EnvironmentError:
+        except Exception:
             result = result.model_copy(
                 update={
                     "status": "IN_PROGRESS",

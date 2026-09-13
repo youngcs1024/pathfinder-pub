@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+import sys
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -222,3 +225,89 @@ def test_demo_forces_offline_modes_and_passes_test_only_failure_selector() -> No
     assert "PF_AUTH_MODE=fake" in result.stdout
     assert "PF_TRACE_MODE=off" in result.stdout
     assert 'PF_GATE87_DEMO_FAILURE="rag"' in result.stdout
+
+
+def test_benchmark_help_requires_no_toolchain_or_docker():
+    result = _run(
+        "make", "benchmark-help", "UV=/bin/false", "DOCKER=/bin/false", "COMPOSE=/bin/false"
+    )
+    assert result.returncode == 0
+    for target in ("smoke", "capacity", "queue", "retrieval", "faults"):
+        assert f"make benchmark-{target}" in result.stdout
+    assert "fake/fake/fake/off" in result.stdout
+    assert "128 HTTP requests / 64 calls / 40 business seconds" in result.stdout
+    assert "GNU Make returns 2" in result.stdout
+    assert "create-only" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "target,command,prefix,profile,authorization",
+    [
+        ("smoke", "smoke", "SMOKE", "instant-v1", "e510_local_smoke_user_approved_v1"),
+        (
+            "capacity",
+            "capacity",
+            "CAPACITY",
+            "capacity-e56-v1",
+            "e56_local_capacity_user_approved_v1",
+        ),
+        ("queue", "queue", "QUEUE", "queue-e57-v1", "e57_local_queue_user_approved_v1"),
+        (
+            "retrieval",
+            "retrieval-scale",
+            "RETRIEVAL",
+            "retrieval-e58-v1",
+            "e58_local_retrieval_user_approved_v1",
+        ),
+        ("faults", "faults", "FAULTS", "faults-e59-v1", "e59_local_faults_user_approved_v1"),
+    ],
+)
+@pytest.mark.parametrize("business_exit", [0, 1, 130])
+def test_benchmark_make_preserves_failure_without_confusing_business_exit(
+    tmp_path, target, command, prefix, profile, authorization, business_exit
+):
+    uv = tmp_path / "uv-stub"
+    calls = tmp_path / "calls.jsonl"
+    uv.write_text(
+        f"#!{sys.executable}\n"
+        + dedent("""\
+        import json
+        import os
+        import sys
+        from pathlib import Path
+        args = sys.argv[1:]
+        if args == ["--version"]:
+            print("uv 0.11.32")
+        elif args == ["lock", "--check"]:
+            pass
+        elif args[:4] == ["run", "--locked", "python", "-c"]:
+            print("CPython" if "python_implementation" in args[-1] else "3.12.13")
+        elif args[:5] == ["run", "--locked", "python", "-m", "tests.performance"]:
+            with Path(os.environ["E510_TEST_CALLS"]).open("a") as stream:
+                stream.write(json.dumps(args) + "\\n")
+            sys.exit(int(os.environ["E510_TEST_EXIT"]))
+        else:
+            sys.exit(99)
+    """)
+    )
+    uv.chmod(0o700)
+    output = tmp_path / "private output"
+    environment = dict(os.environ, E510_TEST_CALLS=str(calls), E510_TEST_EXIT=str(business_exit))
+    args = ["run", "--locked", "python", "-m", "tests.performance", command, "--profile", profile]
+    if target == "smoke":
+        args += ["--mode", "application"]
+    args += ["--authorization", authorization, "--output", str(output)]
+    direct = subprocess.run([str(uv), *args], env=environment, capture_output=True, timeout=10)
+    assert direct.returncode == business_exit
+    result = _run(
+        "make",
+        "--no-print-directory",
+        f"benchmark-{target}",
+        f"UV={uv}",
+        f"{prefix}_OUTPUT={output}",
+        f"{prefix}_AUTHORIZATION={authorization}",
+        env_overrides=environment,
+    )
+    assert result.returncode == (0 if business_exit == 0 else 2)
+    assert [json.loads(line) for line in calls.read_text().splitlines()] == [args, args]
+    assert not output.exists()

@@ -4,8 +4,9 @@ import json
 
 import pytest
 
+from tests.performance.__main__ import main
 from tests.performance.metrics import Report, distribution, utc_difference
-from tests.performance.smoke import run_smoke
+from tests.performance.smoke import SmokeRecord
 
 pytestmark = pytest.mark.integration
 
@@ -23,12 +24,27 @@ def test_instant_real_api_worker_graph_database_sse_and_synthetic_approval(
         "PF_DATABASE_URL",
     ):
         monkeypatch.setenv(key, canary)
-    result = run_smoke(tmp_path / "smoke", mode=mode)
+    code = main(
+        [
+            "smoke",
+            "--profile",
+            "instant-v1",
+            "--authorization",
+            "e510_local_smoke_user_approved_v1",
+            "--mode",
+            mode,
+            "--output",
+            str(tmp_path / "smoke"),
+        ]
+    )
+    result = SmokeRecord.model_validate_json(
+        (tmp_path / "smoke" / "smoke-result.json").read_bytes()
+    )
     from tests.ci_reports import smoke_projection
 
     request.node.user_properties.append(("smoke", smoke_projection(result)))
     # Fixed safe category on failure, never HTTP responses, model output or a DSN.
-    if result.status != "PASS":
+    if code != 0 or result.status != "PASS":
         pytest.fail(
             f"e53_smoke_{result.category or 'incomplete'}_stage_{result.failure_stage}"
             f"_missing_{','.join(result.missing_roles)}",
@@ -99,3 +115,90 @@ def test_instant_real_api_worker_graph_database_sse_and_synthetic_approval(
             if sample.resources is not None:
                 for value in sample.resources.model_dump().values():
                     assert (value["value"] is None) == (value["reason"] is not None)
+
+
+@pytest.mark.parametrize("failure", ["sse", "mock", "collector"])
+def test_smoke_cli_failure_is_nonzero_and_retains_owned_evidence(tmp_path, monkeypatch, failure):
+    from tests.performance import environment, metrics, smoke
+    from tests.performance.workload import Fault
+
+    observed = []
+    canary = "E510_PRIVATE_FAILURE_CANARY"
+    if failure == "sse":
+
+        async def fail_stream(self, path, *, cursor=0):
+            observed.append("sse")
+            raise smoke.SmokeFailure("http_failed")
+
+        monkeypatch.setattr(smoke.HTTP, "events", fail_stream)
+    elif failure == "mock":
+
+        class RejectingEnvironment(environment.IsolatedEnvironment):
+            def start(self):
+                # Test-only injection below Registry: use the existing worker call adapter.
+                # The persisted call-profile records the actual fault, not a success profile.
+                self.call_profile = {
+                    **self.call_profile,
+                    "faults": [
+                        Fault(call="mock_submit", ordinal=1, kind="permanent").model_dump(
+                            mode="json"
+                        )
+                    ],
+                }
+                observed.append("mock")
+                return super().start()
+
+        monkeypatch.setattr(smoke, "IsolatedEnvironment", RejectingEnvironment)
+    else:
+        publish = metrics.publish
+
+        def fail_collector(directory, name, record):
+            if name == "metrics-driver.json":
+                observed.append("collector")
+                raise environment.EnvironmentError("report_failed")
+            publish(directory, name, record)
+
+        monkeypatch.setattr(metrics, "publish", fail_collector)
+    for key in ("PF_QWEN_API_KEY", "PF_TAVILY_API_KEY", "PF_DATABASE_URL", "HTTPS_PROXY"):
+        monkeypatch.setenv(key, canary)
+    output = tmp_path / "failed-smoke"
+    assert (
+        main(
+            [
+                "smoke",
+                "--profile",
+                "instant-v1",
+                "--authorization",
+                "e510_local_smoke_user_approved_v1",
+                "--output",
+                str(output),
+            ]
+        )
+        == 1
+    )
+    result = SmokeRecord.model_validate_json((output / "smoke-result.json").read_bytes())
+    assert observed and result.status == "IN_PROGRESS"
+    assert result.resources_released
+    assert result.profile == "instant-v1" and result.mode == "application"
+    assert result.http_requests <= 128 and sum(result.call_counts.values()) <= 64
+    assert (
+        result.category
+        == {"sse": "http_failed", "mock": "business_failed", "collector": "evidence_mismatch"}[
+            failure
+        ]
+    )
+    assert result.failure_stage == ("metrics" if failure == "collector" else "drive")
+    if failure == "mock":
+        records = [json.loads(p.read_text()) for p in output.glob("calls-worker-*-finished.json")]
+        failed = [r for r in records if r["call"] == "mock_submit"]
+        assert len(failed) == 1 and failed[0]["outcome"] == "failed"
+    if failure == "collector":
+        assert result.mock_effects == 1  # Business completed, but its measurement cannot pass.
+        assert result.metrics_status == "IN_PROGRESS"
+        assert "metrics_incomplete" in result.diagnostic_errors
+        assert "write_failed" in result.metrics_reasons
+    for path in output.iterdir():
+        body = path.read_text()
+        if canary in body:
+            pytest.fail("e510_artifact_leak", pytrace=False)
+        json.loads(body)

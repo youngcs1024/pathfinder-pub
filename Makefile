@@ -282,3 +282,30 @@ benchmark-retrieval: verify-toolchain
 .PHONY: benchmark-faults
 benchmark-faults: verify-toolchain
 	$(UV) run --locked python -m tests.performance faults --profile faults-e59-v1 --authorization "$(FAULTS_AUTHORIZATION)" --output "$(FAULTS_OUTPUT)"
+
+SMOKE_MODE ?= application
+.PHONY: benchmark-smoke benchmark-help
+benchmark-smoke: verify-toolchain
+	$(UV) run --locked python -m tests.performance smoke --profile instant-v1 --mode "$(SMOKE_MODE)" --authorization "$(SMOKE_AUTHORIZATION)" --output "$(SMOKE_OUTPUT)"
+
+# Help is available without Python dependencies, Docker, or a toolchain check.
+benchmark-help:
+	@printf '%s\n' \
+	  'Owned loopback benchmarks: fake/fake/fake/off, one worker; no provider credentials.' \
+	  'All runs require explicit operator authorization; tokens record it, they do not grant it.' \
+	  'make benchmark-smoke SMOKE_OUTPUT=<new-dir> SMOKE_AUTHORIZATION=e510_local_smoke_user_approved_v1 [SMOKE_MODE=application|research]' \
+	  '  One Run, instant-v1, at most 128 HTTP requests / 64 calls / 40 business seconds.' \
+	  'make benchmark-capacity CAPACITY_OUTPUT=<new-dir> CAPACITY_AUTHORIZATION=e56_local_capacity_user_approved_v1' \
+	  '  Manual capacity-e56-v1: API and SSE capacity ladder.' \
+	  'make benchmark-queue QUEUE_OUTPUT=<new-dir> QUEUE_AUTHORIZATION=e57_local_queue_user_approved_v1' \
+	  '  Manual queue-e57-v1: arrivals, backlog and bounded overload.' \
+	  'make benchmark-retrieval RETRIEVAL_OUTPUT=<new-dir> RETRIEVAL_AUTHORIZATION=e58_local_retrieval_user_approved_v1' \
+	  '  Manual retrieval-e58-v1: database scale with workspace/document filters.' \
+	  'make benchmark-faults FAULTS_OUTPUT=<new-dir> FAULTS_AUTHORIZATION=e59_local_faults_user_approved_v1' \
+	  '  Manual faults-e59-v1: fixed bounded recovery matrix.' \
+	  'Full suites are never ordinary PR/pytest workloads; CI runs only tiny instant cases.' \
+	  'Output: new absolute directory outside the repository, under an owned private parent.' \
+	  'JSON evidence is create-only in that directory; retain failures and partial results.' \
+	  'Business window excludes bounded environment startup and cleanup; no capacity/SLA claim.' \
+	  'CLI exit: 0 complete, 1 execution/evidence/cleanup failure, 2 invalid arguments, 130 interrupted.' \
+	  'GNU Make returns 2 for recipe failure; this is not the underlying business exit code.'

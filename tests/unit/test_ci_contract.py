@@ -1,5 +1,6 @@
 """Cross-check the shared contract against executable workflow and Make selectors."""
 
+import ast
 import re
 from pathlib import Path
 
@@ -157,6 +158,37 @@ def test_overlapping_routes_are_rejected_even_when_they_name_the_same_target():
         with pytest.raises(ValueError, match="exactly one execution target") as error:
             collection_ownership((node,), routes)
         assert "CANARY" not in str(error.value)
+
+
+def test_performance_tests_have_executed_routes_and_harness_is_not_collected():
+    for category, target in (("unit", "test-unit"), ("integration", "test-integration-core")):
+        paths = tuple((ROOT / "tests" / category).glob("test_performance*.py"))
+        assert paths and any(path.name == "test_performance_smoke.py" for path in paths)
+        for path in paths:
+            counts = collection_ownership((f"{path.relative_to(ROOT)}::test_probe",))
+            assert counts[target] == sum(counts.values()) == 1
+    for pattern in ("test_*.py", "*_test.py"):
+        assert not tuple((ROOT / "tests/performance").rglob(pattern))
+    with pytest.raises(ValueError, match="exactly one execution target"):
+        collection_ownership(("tests/performance/test_accidental_load.py::test_load",))
+
+
+def test_ci_runs_instant_performance_cases_without_full_benchmark_entrypoints():
+    workflow = _workflow()
+    assert not re.search(r"make\s+benchmark-(?:smoke|capacity|queue|retrieval|faults)\b", workflow)
+    assert "-m tests.performance" not in workflow
+    assert "schedule:" not in workflow
+    for path in (ROOT / "tests/integration").glob("test_performance*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "load_profile"
+            ):
+                assert len(node.args) == 1
+                assert isinstance(node.args[0], ast.Constant)
+                assert node.args[0].value.endswith("-instant-ci-v1")
 
 
 def test_classifier_depends_on_checkout_even_after_workflow_validation_failure():
