@@ -11,6 +11,7 @@ import socket
 import stat
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from math import isfinite
@@ -358,6 +359,8 @@ class IsolatedEnvironment:
     docker_socket: Path = Path("/var/run/docker.sock")
     call_profile: dict | None = None
     metrics: bool = False
+    capacity: bool = False
+    _ipc_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _process: OwnedProcess | None = field(default=None, init=False)
     _channel: socket.socket | None = field(default=None, init=False)
     _started: bool = field(default=False, init=False)
@@ -391,7 +394,7 @@ class IsolatedEnvironment:
             raise EnvironmentError("already_started")
         if type(self.profile) is not EnvironmentProfile or self.profile.name != PROFILE:
             raise EnvironmentError("invalid_profile")
-        if type(self.metrics) is not bool:
+        if type(self.metrics) is not bool or type(self.capacity) is not bool:
             raise EnvironmentError("invalid_profile")
         if self.call_profile is not None:
             from tests.performance.workload import parse_profile
@@ -438,6 +441,7 @@ class IsolatedEnvironment:
                     "output_dir": str(directory),
                     "channel_fd": child.fileno(),
                     "metrics": self.metrics,
+                    "capacity": self.capacity,
                     **(
                         {"call_profile": self.call_profile} if self.call_profile is not None else {}
                     ),
@@ -460,6 +464,21 @@ class IsolatedEnvironment:
             if isinstance(exc, Exception) and not isinstance(exc, EnvironmentError):
                 raise EnvironmentError("startup_failed") from None
             raise
+
+    def capacity_command(self, kind: str) -> dict:
+        if not self.capacity or not self._started or self._closed:
+            raise EnvironmentError("protocol_failed")
+        if kind not in {"start_worker", "health"}:
+            raise EnvironmentError("protocol_failed")
+        with self._ipc_lock:
+            send_packet(self._channel, {"kind": kind})
+            packet = receive_packet(self._channel, 15)
+            if packet.get("kind") != kind or packet.get("owner") != self._identity["owner"]:
+                self._result = packet if packet.get("kind") == "result" else None
+                raise EnvironmentError("protocol_failed")
+            if kind == "start_worker":
+                self._identity["process_ids"]["worker"] = packet["pid"]
+            return packet
 
     def close(self) -> dict:
         if self._closed:

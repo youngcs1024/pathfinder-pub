@@ -51,7 +51,14 @@ def main() -> None:
     from tests.performance.metrics import Collector
     from tests.performance.metrics_runtime import instrument, instrument_application
 
-    collector = Collector(role, Path(bootstrap["output_dir"])) if bootstrap.get("metrics") else None
+    if bootstrap.get("capacity") is True:
+        from tests.performance.capacity_metrics import CapacityCollector
+
+        collector = CapacityCollector(role, Path(bootstrap["output_dir"]))
+    else:
+        collector = (
+            Collector(role, Path(bootstrap["output_dir"])) if bootstrap.get("metrics") else None
+        )
     if role == "migrate":
         from alembic import command
         from alembic.config import Config

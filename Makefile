@@ -265,3 +265,7 @@ prepare-workflow-lint:
 
 lint-workflow:
 	python3 scripts/workflow_lint.py check
+
+.PHONY: benchmark-capacity
+benchmark-capacity: verify-toolchain
+	$(UV) run --locked python -m tests.performance capacity --profile capacity-e56-v1 --authorization "$(CAPACITY_AUTHORIZATION)" --output "$(CAPACITY_OUTPUT)"

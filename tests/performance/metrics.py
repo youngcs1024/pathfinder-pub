@@ -342,6 +342,10 @@ def http_counts(packets, facts):
 
 
 class Collector:
+    limit = LIMIT
+    sample_type = Sample
+    packet_type = Packet
+
     def __init__(self, role: Role, directory: Path | None = None, *, clock=monotonic, utc=None):
         if role not in ROLES:
             raise ValueError("invalid_role")
@@ -359,12 +363,12 @@ class Collector:
         self.active: ContextVar[tuple[int, ...]] = ContextVar("metrics_scopes", default=())
 
     def begin(self, metric: Metric, **fields) -> int | None:
-        if len(self.samples) >= LIMIT:
+        if len(self.samples) >= self.limit:
             self.dropped += 1
             return None
         ordinal = len(self.samples) + 1
         self.samples.append(
-            Sample(
+            self.sample_type(
                 ordinal=ordinal,
                 metric=metric,
                 started=self.clock(),
@@ -377,7 +381,9 @@ class Collector:
     def update(self, token: int | None, **fields) -> None:
         if token is not None:
             sample = self.samples[token - 1]
-            self.samples[token - 1] = Sample.model_validate({**sample.model_dump(), **fields})
+            self.samples[token - 1] = self.sample_type.model_validate(
+                {**sample.model_dump(), **fields}
+            )
 
     def end(self, token: int | None, outcome: Outcome = "succeeded", **fields) -> None:
         self.update(token, finished=self.clock(), outcome=outcome, **fields)
@@ -404,7 +410,7 @@ class Collector:
             )
 
     def packet(self):
-        return Packet(
+        return self.packet_type(
             role=self.role,
             process_id=self.process_id,
             started=self.started,
@@ -496,7 +502,9 @@ def count_sql(engine, collector: Collector):
 
 def validate_publication(name: str, record: Contract) -> None:
     if name in {f"metrics-{role}.json" for role in ROLES}:
-        if type(record) is not Packet or name != f"metrics-{record.role}.json":
+        from tests.performance.capacity_metrics import CapacityPacket
+
+        if type(record) not in {Packet, CapacityPacket} or name != f"metrics-{record.role}.json":
             raise ValueError("invalid_metrics_type")
     elif match := re.fullmatch(r"metrics-segment-(\d{3})-(started|finished)\.json", name):
         if (

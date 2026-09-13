@@ -76,7 +76,13 @@ def verified_port(container) -> int:
 
 class Supervisor:
     def __init__(
-        self, directory: Path, owner: str, channel: socket.socket, call_profile=None, metrics=False
+        self,
+        directory: Path,
+        owner: str,
+        channel: socket.socket,
+        call_profile=None,
+        metrics=False,
+        capacity=False,
     ) -> None:
         from tests.performance.workload import parse_profile
 
@@ -89,7 +95,16 @@ class Supervisor:
             raise EnvironmentError("invalid_profile")
         from tests.performance.metrics import Collector
 
-        self.metrics = Collector("supervisor", directory) if metrics else None
+        if type(capacity) is not bool:
+            raise EnvironmentError("invalid_profile")
+        self.capacity = capacity
+        self.database_url = None
+        if capacity:
+            from tests.performance.capacity_metrics import CapacityCollector
+
+            self.metrics = CapacityCollector("supervisor", directory)
+        else:
+            self.metrics = Collector("supervisor", directory) if metrics else None
         self.serving = False
         self.previous_stats = None
         self.next_sample = 0.0
@@ -170,7 +185,7 @@ class Supervisor:
         if role == "worker" and self.call_profile is not None:
             bootstrap.update(call_profile=self.call_profile, output_dir=str(self.directory))
         if self.metrics is not None and role in {"api", "worker"}:
-            bootstrap.update(metrics=True, output_dir=str(self.directory))
+            bootstrap.update(metrics=True, capacity=self.capacity, output_dir=str(self.directory))
         fds = tuple(extra[key] for key in ("socket_fd", "ready_fd") if key in extra)
         process = OwnedProcess.launch(role, env=env, bootstrap=bootstrap, fds=fds)
         self.processes[role] = process
@@ -217,13 +232,21 @@ class Supervisor:
                 except httpx.HTTPError:
                     pass
                 time.sleep(0.05)
+        self.database_url = database_url
+        if not self.capacity:
+            self.start_worker()
+        write_record(self.directory, "ready.json", self.identity)
+        return database_url
+
+    def start_worker(self):
         parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         try:
-            worker = self.launch("worker", database_url, ready_fd=child.fileno())
+            worker = self.launch("worker", self.database_url, ready_fd=child.fileno())
             child.close()
-            packet = receive_packet(
-                parent, max(1, START_SECONDS - (time.monotonic() - self.started))
+            timeout = (
+                10 if self.capacity else max(1, START_SECONDS - (time.monotonic() - self.started))
             )
+            packet = receive_packet(parent, timeout)
             if packet != {"owner": self.owner, "kind": "worker_ready"}:
                 raise EnvironmentError("ownership_mismatch")
             if worker.process.poll() is not None:
@@ -231,18 +254,18 @@ class Supervisor:
         finally:
             parent.close()
             child.close()
-        self.identity["process_ids"] = {
-            role: child.process.pid for role, child in self.processes.items()
-        }
-        write_record(self.directory, "ready.json", self.identity)
-        return database_url
+        return worker.process.pid
 
     def serve(self) -> str | None:
         while True:
             remaining = RUN_SECONDS - CLEANUP_SECONDS - (time.monotonic() - self.started)
             if remaining <= 0:
                 return "runtime_timeout"
-            if any(self.processes[role].process.poll() is not None for role in ("api", "worker")):
+            if any(
+                p.process.poll() is not None
+                for r, p in self.processes.items()
+                if r in {"api", "worker"}
+            ):
                 return "process_exited"
             if self.metrics is not None and time.monotonic() >= self.next_sample:
                 from tests.performance.metrics_runtime import sample_container
@@ -254,6 +277,19 @@ class Supervisor:
                     packet = receive_packet(self.channel, 0)
                 except EnvironmentError:
                     return "cancelled"  # Includes parent disconnect; still clean owned resources.
+                if self.capacity and packet == {"kind": "start_worker"}:
+                    pid = self.start_worker()
+                    send_packet(
+                        self.channel, {"kind": "start_worker", "owner": self.owner, "pid": pid}
+                    )
+                    continue
+                if self.capacity and packet == {"kind": "health"}:
+                    from tests.performance.capacity_metrics import owned_health
+
+                    send_packet(
+                        self.channel, {"kind": "health", "owner": self.owner, **owned_health(self)}
+                    )
+                    continue
                 return None if packet == {"kind": "stop"} else "protocol_failed"
 
     def cleanup(self) -> bool:
@@ -384,6 +420,7 @@ def main() -> int:
             channel,
             bootstrap.get("call_profile"),
             bootstrap.get("metrics", False),
+            bootstrap.get("capacity", False),
         ).run()
 
 

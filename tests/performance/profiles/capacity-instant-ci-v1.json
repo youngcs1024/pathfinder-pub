@@ -1,0 +1,1 @@
+{"schema_version":1,"name":"capacity-instant-ci-v1","warmup_seconds":5.0,"measurement_seconds":5.0,"drain_seconds":10.0}

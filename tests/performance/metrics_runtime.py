@@ -46,6 +46,8 @@ def instrument(root, collector: Collector):
         def engine(*args, **kwargs):
             value = original_engine(*args, **kwargs)
             stack.enter_context(count_sql(value, collector))
+            if hasattr(collector, "attach_pool"):
+                stack.callback(collector.attach_pool(value))
             return value
 
         stack.enter_context(patch.object(root, "create_database_engine", engine))

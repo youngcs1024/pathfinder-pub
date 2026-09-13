@@ -35,7 +35,7 @@ class Resources(Contract):
 
 class LoadProfile(Contract):
     schema_version: Literal[1] = 1
-    name: Literal["scheduler-smoke-v1", "low-load-v1"]
+    name: Literal["scheduler-smoke-v1", "low-load-v1", "capacity-api-v1"]
     seed: int = Field(default=54, ge=0, le=2**32 - 1)
     warmup_seconds: float = Field(ge=0, le=120)
     measurement_seconds: float = Field(gt=0, le=120)

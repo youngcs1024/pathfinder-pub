@@ -108,7 +108,7 @@ class CallRecord(Contract):
 def publish(directory: Path, name: str, record: Contract) -> None:
     """No free-form exception, payload, path or target string enters an artifact."""
     try:
-        if not name.startswith("metrics-") and (
+        if not name.startswith(("metrics-", "capacity-")) and (
             re.fullmatch(
                 r"(?:calls-(?:worker|ingest)-\d{3}-(?:started|finished)|smoke-(?:started|result)|call-profile|load-(?:manifest|started|result))\.json",
                 name,
@@ -130,8 +130,14 @@ def publish(directory: Path, name: str, record: Contract) -> None:
             }
             if type(record) is not expected[name]:
                 raise ValueError
+        if name.startswith("capacity-"):
+            from tests.performance.capacity_contracts import validate_publication
+
+            validate_publication(name, record)
         # Validate even model_copy/model_construct callers before creating a file.
         payload = type(record).model_validate_json(record.model_dump_json()).model_dump(mode="json")
+        if len(json.dumps(payload, allow_nan=False).encode()) > 32 * 1024 * 1024:
+            raise ValueError("artifact_limit")
         directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             fd = os.open(
