@@ -270,3 +270,45 @@ async def test_synthetic_approval_rejects_foreign_or_ineligible_run_before_http(
         await smoke.approve_synthetic(http, Session, tenant, uuid4())
     http.assert_not_called()
     assert http.mock_calls == []
+
+
+def test_primary_failure_survives_cleanup_and_publication_failures(tmp_path, monkeypatch):
+    class Environment:
+        def __init__(self, _, directory, **kwargs):
+            self.directory = directory
+            self.output_created = False
+
+        def __enter__(self):
+            self.directory.mkdir(mode=0o700)
+            self.output_created = True
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def close(self):
+            return {"status": "IN_PROGRESS", "resources_released": False}
+
+    async def fail(*args):
+        raise smoke.SmokeFailure("http_failed")
+
+    original = smoke.publish
+
+    def publish_failure(directory, name, value):
+        if name == "smoke-result.json":
+            raise environment.EnvironmentError("report_failed")
+        original(directory, name, value)
+
+    monkeypatch.setattr(smoke, "IsolatedEnvironment", Environment)
+    monkeypatch.setattr(smoke, "drive", fail)
+    monkeypatch.setattr(smoke, "publish", publish_failure)
+    result = smoke.run_smoke(tmp_path / "report", mode="research")
+    assert result.category == "http_failed" and result.failure_stage == "drive"
+    assert result.status == "IN_PROGRESS"
+    assert set(result.diagnostic_errors) == {
+        "cleanup_failed",
+        "metrics_incomplete",
+        "report_failed",
+    }
+    assert set(result.missing_roles) == {"api", "worker", "driver", "supervisor"}
+    assert "missing_role" in result.metrics_reasons

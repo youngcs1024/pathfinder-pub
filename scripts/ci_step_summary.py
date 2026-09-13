@@ -89,7 +89,8 @@ def step_summary(job: str, branch: str, payload: str) -> tuple[str, bool]:
     lines[2:2] = [
         *overview,
         "",
-        "Status diagnostics only; inspect the original check logs for causes.",
+        "This summary propagates check outcomes; it is not an additional root cause. "
+        "Inspect safe diagnostics and original check logs.",
         "",
     ]
     return "\n".join(lines), not issues

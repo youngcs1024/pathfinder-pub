@@ -49,7 +49,7 @@ def main() -> None:
     if type(bootstrap.get("metrics", False)) is not bool:
         raise EnvironmentError("invalid_profile")
     from tests.performance.metrics import Collector
-    from tests.performance.metrics_runtime import instrument
+    from tests.performance.metrics_runtime import instrument, instrument_application
 
     collector = Collector(role, Path(bootstrap["output_dir"])) if bootstrap.get("metrics") else None
     if role == "migrate":
@@ -64,15 +64,15 @@ def main() -> None:
 
         from app import main as api
 
-        with (
-            instrument(api, collector) if collector is not None else nullcontext(),
-            socket.socket(fileno=bootstrap["socket_fd"]) as listener,
-        ):
+        application = api.create_app(settings)
+        if collector is not None:
+            instrument_application(application, api, collector)
+        with socket.socket(fileno=bootstrap["socket_fd"]) as listener:
             if listener.getsockname()[0] != "127.0.0.1":
                 raise EnvironmentError("unsafe_binding")
             server = uvicorn.Server(
                 uvicorn.Config(
-                    api.create_app(settings),
+                    application,
                     lifespan="on",
                     access_log=False,
                     log_config=None,

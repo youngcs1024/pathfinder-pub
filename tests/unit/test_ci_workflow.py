@@ -196,11 +196,11 @@ def test_integration_matrix_shards_only_core_and_runs_demo_and_retrieval_once() 
     steps = _steps(job)
     core = steps["PostgreSQL integration core"]
     assert "if: ${{ !cancelled() && steps.setup.outcome == 'success' }}" in core
-    assert "        env:\n          PYTEST_ADDOPTS: >-" in core
+    assert "          PYTEST_ADDOPTS: >-" in core
     assert "--durations=20 -p tests.ci_sharding" in core
     assert "--ci-shard-index=${{ matrix.shard }} --ci-shard-count=2" in core
     assert "          PYTHONPATH: ${{ github.workspace }}" in core
-    assert workflow.count("PYTHONPATH:") == 1
+    assert workflow.count("PYTHONPATH:") == 2
     assert "run: make test-integration-core\n" in core
     assert workflow.count("-p tests.ci_sharding") == 1
     for name, target in (
@@ -250,7 +250,8 @@ def test_ci_workflow_security_scanners_are_pinned_and_fail_closed() -> None:
     for scan in trivy_steps:
         assert "severity: HIGH,CRITICAL" in scan
         assert "exit-code: 1" in scan
-        assert "format: table" in scan
+        assert "format: json" in scan
+        assert "version: v0.70.0" in scan
 
     assert "exit-code: 0" not in workflow
     assert "continue-on-error: true" not in workflow
@@ -270,6 +271,8 @@ def test_independent_checks_depend_only_on_setup_not_previous_check_success():
                 "Install locked JavaScript test runtime",
                 "UI asynchronous behavior",
                 "Summarize check outcomes",
+                "Validate safe diagnostics",
+                "Upload safe diagnostics",
             }:
                 continue
             condition = next(line.strip() for line in step.splitlines() if "if:" in line)
@@ -349,6 +352,8 @@ def test_static_feedback_precedes_runtime_tests_and_network_audit():
         "Unit tests",
         "Architecture constraints",
         "Audit locked dependencies",
+        "Validate safe diagnostics",
+        "Upload safe diagnostics",
         "Summarize check outcomes",
     ]
 
@@ -504,3 +509,20 @@ def test_ui_runtime_is_pinned_and_test_is_independent_of_python_checks():
     assert "run: make test-ui\n" in ui
     assert _workflow().count("run: make test-ui\n") == 1
     assert "continue-on-error" not in setup + ui
+
+
+def test_safe_diagnostic_upload_is_bounded_and_preserves_original_failures():
+    for job, body in _jobs(_workflow()).items():
+        steps = _steps(body)
+        validate = steps["Validate safe diagnostics"]
+        upload = steps["Upload safe diagnostics"]
+        for step in (validate, upload):
+            assert "!cancelled() && steps.checkout.outcome == 'success'" in step
+            assert "continue-on-error" not in step
+        assert "python -m scripts.ci_reports" in validate
+        assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in upload
+        assert "path: ${{ runner.temp }}/pf-diagnostics/diagnostics.json" in upload
+        assert "retention-days: 7" in upload and "if-no-files-found: error" in upload
+        assert "${{ github.run_id }}-${{ github.run_attempt }}-" + job in upload
+        assert "**" not in upload
+    assert "-p tests.ci_reports" in _workflow().split("\njobs:")[0]

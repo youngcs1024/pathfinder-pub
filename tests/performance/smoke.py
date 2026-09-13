@@ -108,6 +108,24 @@ class SmokeRecord(Contract):
         Field(default_factory=dict)
     )
     resources_released: bool = False
+    failure_stage: Literal["environment", "drive", "cleanup", "metrics", "report"] | None = None
+    diagnostic_errors: tuple[
+        Literal["cleanup_failed", "report_failed", "metrics_incomplete"], ...
+    ] = ()
+    missing_roles: tuple[Literal["driver", "api", "worker", "supervisor"], ...] = ()
+    metrics_reasons: tuple[
+        Literal[
+            "missing_role",
+            "missing_sample",
+            "missing_segment",
+            "missing_fact",
+            "write_failed",
+            "sample_limit",
+            "unfinished",
+            "clock_invalid",
+        ],
+        ...,
+    ] = ()
     metrics_status: Literal["PASS", "IN_PROGRESS", "NOT_RUN"] = "NOT_RUN"
 
 
@@ -751,9 +769,12 @@ def run_smoke(
     progress = {}
     category = None
     interrupted = None
+    stage = "environment"
+    diagnostic_errors = []
     try:
         with environment:
             publish(output_dir, "smoke-started.json", initial)
+            stage = "drive"
             asyncio.run(drive(environment, selected, mode, progress))
     except (KeyboardInterrupt, asyncio.CancelledError) as exc:
         category = "cancelled"
@@ -763,12 +784,16 @@ def run_smoke(
     cleanup = environment.close()
     released = cleanup.get("resources_released") is True
     if not released:
-        category = "cleanup_failed"
+        diagnostic_errors.append("cleanup_failed")
+        if category is None:
+            category, stage = "cleanup_failed", "cleanup"
     if environment.output_created:
         try:
             progress.update(partial_calls(output_dir))
         except Exception:
-            category = "report_failed"
+            diagnostic_errors.append("report_failed")
+            if category is None:
+                category, stage = "report_failed", "report"
     facts = progress.pop("_metrics_facts", ())
     decisions = progress.pop("_metrics_decisions", ())
     metrics_write_failed = progress.pop("_metrics_write_failed", False)
@@ -782,21 +807,35 @@ def run_smoke(
                 decisions=decisions,
             )
             if metrics_write_failed:
-                report = report.model_copy(update={"status": "IN_PROGRESS"})
+                report = report.model_copy(
+                    update={
+                        "status": "IN_PROGRESS",
+                        "incomplete_reasons": tuple(
+                            dict.fromkeys((*report.incomplete_reasons, "write_failed"))
+                        ),
+                    }
+                )
             publish(output_dir, "metrics-result.json", report)
             progress["metrics_status"] = report.status
-            if report.status != "PASS" and category is None:
-                category = "evidence_mismatch"
+            progress["missing_roles"] = report.missing_roles
+            progress["metrics_reasons"] = report.incomplete_reasons
+            if report.status != "PASS":
+                diagnostic_errors.append("metrics_incomplete")
+                if category is None:
+                    category, stage = "evidence_mismatch", "metrics"
         except Exception:
             progress["metrics_status"] = "IN_PROGRESS"
+            diagnostic_errors.append("report_failed")
             if category is None:
-                category = "report_failed"
+                category, stage = "report_failed", "metrics"
     result = SmokeRecord.model_validate(
         {
             **initial.model_dump(),
             **progress,
             "resources_released": released,
             "category": category,
+            "failure_stage": stage if category else None,
+            "diagnostic_errors": tuple(dict.fromkeys(diagnostic_errors)),
             "status": "PASS"
             if category is None and cleanup.get("status") == "PASS"
             else "IN_PROGRESS",
@@ -806,9 +845,16 @@ def run_smoke(
         try:
             publish(output_dir, "smoke-result.json", result)
         except EnvironmentError:
-            if interrupted is not None:
-                raise interrupted from None
-            raise
+            result = result.model_copy(
+                update={
+                    "status": "IN_PROGRESS",
+                    "category": result.category or "report_failed",
+                    "failure_stage": result.failure_stage or "report",
+                    "diagnostic_errors": tuple(
+                        dict.fromkeys((*result.diagnostic_errors, "report_failed"))
+                    ),
+                }
+            )
     if interrupted is not None:
         raise interrupted
     return result

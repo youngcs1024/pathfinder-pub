@@ -1,6 +1,15 @@
 FROM ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c AS uvbin
 
-FROM python:3.12.13-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2 AS builder
+FROM python:3.12.13-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2 AS python-base
+
+# Targeted Debian security fix shared by build and runtime; unavailable versions fail closed.
+RUN --mount=type=tmpfs,target=/var/lib/apt/lists \
+    --mount=type=tmpfs,target=/var/cache/apt \
+    apt-get update \
+    && apt-get install --yes --no-install-recommends --only-upgrade libpcre2-8-0=10.42-1+deb12u1 \
+    && test "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" = '10.42-1+deb12u1'
+
+FROM python-base AS builder
 
 COPY --from=uvbin /uv /usr/local/bin/uv
 
@@ -17,7 +26,7 @@ RUN uv sync \
     --no-dev \
     --no-editable
 
-FROM python:3.12.13-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2
+FROM python-base AS runtime
 
 WORKDIR /app
 

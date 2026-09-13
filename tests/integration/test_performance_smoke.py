@@ -12,7 +12,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.mark.parametrize("mode", ["research", "application"])
 def test_instant_real_api_worker_graph_database_sse_and_synthetic_approval(
-    tmp_path, mode, monkeypatch
+    tmp_path, mode, monkeypatch, request
 ):
     canary = "E53_INHERITED_PROVIDER_SECRET_CANARY"
     for key in (
@@ -24,9 +24,16 @@ def test_instant_real_api_worker_graph_database_sse_and_synthetic_approval(
     ):
         monkeypatch.setenv(key, canary)
     result = run_smoke(tmp_path / "smoke", mode=mode)
+    from tests.ci_reports import smoke_projection
+
+    request.node.user_properties.append(("smoke", smoke_projection(result)))
     # Fixed safe category on failure, never HTTP responses, model output or a DSN.
     if result.status != "PASS":
-        pytest.fail(f"e53_smoke_{result.category or 'incomplete'}", pytrace=False)
+        pytest.fail(
+            f"e53_smoke_{result.category or 'incomplete'}_stage_{result.failure_stage}"
+            f"_missing_{','.join(result.missing_roles)}",
+            pytrace=False,
+        )
     assert result.resources_released and result.unfinished_calls == 0
     assert result.model_attempts > 0 and result.event_count > 0
     assert result.mock_effects == (1 if mode == "application" else 0)

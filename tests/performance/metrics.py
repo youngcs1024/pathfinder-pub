@@ -416,6 +416,9 @@ class Collector:
         )
 
     def finish(self):
+        if getattr(self, "_finished", False):
+            return
+        self._finished = True
         self.write(f"metrics-{self.role}.json", self.packet())
 
     @contextmanager
@@ -588,6 +591,19 @@ class Report(Contract):
     )
     window: Literal["single_run_smoke_no_warmup"] = "single_run_smoke_no_warmup"
     packets: tuple[Packet, ...]
+    incomplete_reasons: tuple[
+        Literal[
+            "missing_role",
+            "missing_sample",
+            "missing_segment",
+            "missing_fact",
+            "write_failed",
+            "sample_limit",
+            "unfinished",
+            "clock_invalid",
+        ],
+        ...,
+    ] = ()
     missing_roles: tuple[Role, ...]
     recovered_segments: tuple[SegmentRecord, ...]
     summaries: tuple[Summary, ...]
@@ -775,7 +791,21 @@ def build_report(
         )
         or any(difference(p.started, p.finished).value is None for p in packets)
     )
+    reasons = {
+        "missing_role": bool(absent),
+        "missing_sample": missing_samples,
+        "missing_segment": missing_segments,
+        "missing_fact": not facts,
+        "write_failed": any(p.write_failed for p in packets),
+        "sample_limit": any(p.dropped for p in packets),
+        "unfinished": any(s.outcome == "pending" for s in samples),
+        "clock_invalid": any(
+            difference(s.started, s.finished).reason == "clock_invalid" for s in samples
+        )
+        or any(difference(p.started, p.finished).value is None for p in packets),
+    }
     return Report(
+        incomplete_reasons=tuple(key for key, present in reasons.items() if present),
         source_commit=source_commit,
         lock_digest=lock_digest,
         status="IN_PROGRESS" if bad else "PASS",

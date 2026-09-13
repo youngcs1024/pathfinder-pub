@@ -100,6 +100,15 @@ CHECKS = {
         Check("evaluate", "Evaluate required CI results", ("checkout",)),
     ),
 }
+# Diagnostic publication is required evidence, including for future baseline reuse.
+CHECKS = {
+    job: (
+        *checks,
+        Check("diagnostics", "Validate safe diagnostics", ("checkout",)),
+        Check("upload", "Upload safe diagnostics", ("checkout",)),
+    )
+    for job, checks in CHECKS.items()
+}
 BRANCHES = {"contracts": ("operational", "eval"), "integration": ("0", "1")}
 HEAVY_JOBS = tuple(job for job in CHECKS if job not in {"preflight", "ci-gate"})
 JOB_PREREQUISITES = {

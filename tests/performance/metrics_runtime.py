@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, asynccontextmanager, contextmanager
 from time import monotonic
 from unittest.mock import patch
 
@@ -18,6 +18,19 @@ from tests.performance.metrics import (
     difference,
     missing,
 )
+
+
+def instrument_application(application, root, collector):
+    """Flush within ASGI shutdown, before Uvicorn re-raises captured signals."""
+    original = application.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(app):
+        with instrument(root, collector):
+            async with original(app):
+                yield
+
+    application.router.lifespan_context = lifespan
 
 
 @contextmanager

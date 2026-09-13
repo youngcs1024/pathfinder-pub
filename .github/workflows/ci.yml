@@ -26,7 +26,9 @@ env:
   PF_AUTH_MODE: fake
   PF_TRACE_MODE: off
   PYTEST_TMPDIR: /tmp
-  PYTEST_ADDOPTS: --durations=20
+  PYTEST_ADDOPTS: --durations=20 -p tests.ci_reports
+  PYTHONPATH: ${{ github.workspace }}
+  PF_CI_PYTEST_REPORTS: ${{ runner.temp }}/pf-pytest
 
 jobs:
   preflight:
@@ -74,6 +76,30 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: false
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
 
+      - name: Validate safe diagnostics
+        id: diagnostics
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: preflight
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "classify": {"outcome": ${{ toJSON(steps.classify.outcome) }}, "conclusion": ${{ toJSON(steps.classify.conclusion) }}},
+            "links": {"outcome": ${{ toJSON(steps.links.outcome) }}, "conclusion": ${{ toJSON(steps.links.conclusion) }}},
+            "secret_scan": {"outcome": ${{ toJSON(steps.secret_scan.outcome) }}, "conclusion": ${{ toJSON(steps.secret_scan.conclusion) }}}
+            }
+        run: python -m scripts.ci_reports
+
+      - name: Upload safe diagnostics
+        id: upload
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-preflight-single
+          path: ${{ runner.temp }}/pf-diagnostics/diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Summarize check outcomes
         if: ${{ always() && steps.checkout.outcome == 'success' }}
         env:
@@ -85,6 +111,8 @@ jobs:
             "classify": {"outcome": ${{ toJSON(steps.classify.outcome) }}, "conclusion": ${{ toJSON(steps.classify.conclusion) }}},
             "links": {"outcome": ${{ toJSON(steps.links.outcome) }}, "conclusion": ${{ toJSON(steps.links.conclusion) }}},
             "secret_scan": {"outcome": ${{ toJSON(steps.secret_scan.outcome) }}, "conclusion": ${{ toJSON(steps.secret_scan.conclusion) }}}
+            ,"diagnostics": {"outcome": ${{ toJSON(steps.diagnostics.outcome) }}, "conclusion": ${{ toJSON(steps.diagnostics.conclusion) }}}
+            ,"upload": {"outcome": ${{ toJSON(steps.upload.outcome) }}, "conclusion": ${{ toJSON(steps.upload.conclusion) }}}
             }
         run: python scripts/ci_step_summary.py
 
@@ -120,12 +148,40 @@ jobs:
       - name: Collect all tests
         id: collect
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        env:
+          PF_CI_TEST_STEP: collect
         run: make test-collect
 
       - name: Validate real CI routing
         id: routing
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && steps.collect.outcome == 'success' }}
         run: make test-ci-routing
+
+      - name: Validate safe diagnostics
+        id: diagnostics
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: python-validation
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "setup": {"outcome": ${{ toJSON(steps.setup.outcome) }}, "conclusion": ${{ toJSON(steps.setup.conclusion) }}},
+            "format": {"outcome": ${{ toJSON(steps.format.outcome) }}, "conclusion": ${{ toJSON(steps.format.conclusion) }}},
+            "rules": {"outcome": ${{ toJSON(steps.rules.outcome) }}, "conclusion": ${{ toJSON(steps.rules.conclusion) }}},
+            "collect": {"outcome": ${{ toJSON(steps.collect.outcome) }}, "conclusion": ${{ toJSON(steps.collect.conclusion) }}},
+            "routing": {"outcome": ${{ toJSON(steps.routing.outcome) }}, "conclusion": ${{ toJSON(steps.routing.conclusion) }}}
+            }
+        run: python -m scripts.ci_reports
+
+      - name: Upload safe diagnostics
+        id: upload
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-python-validation-single
+          path: ${{ runner.temp }}/pf-diagnostics/diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Summarize check outcomes
         if: ${{ always() && steps.checkout.outcome == 'success' }}
@@ -140,6 +196,8 @@ jobs:
             "rules": {"outcome": ${{ toJSON(steps.rules.outcome) }}, "conclusion": ${{ toJSON(steps.rules.conclusion) }}},
             "collect": {"outcome": ${{ toJSON(steps.collect.outcome) }}, "conclusion": ${{ toJSON(steps.collect.conclusion) }}},
             "routing": {"outcome": ${{ toJSON(steps.routing.outcome) }}, "conclusion": ${{ toJSON(steps.routing.conclusion) }}}
+            ,"diagnostics": {"outcome": ${{ toJSON(steps.diagnostics.outcome) }}, "conclusion": ${{ toJSON(steps.diagnostics.conclusion) }}}
+            ,"upload": {"outcome": ${{ toJSON(steps.upload.outcome) }}, "conclusion": ${{ toJSON(steps.upload.conclusion) }}}
             }
         run: python scripts/ci_step_summary.py
 
@@ -175,17 +233,48 @@ jobs:
       - name: Unit tests
         id: unit
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        env:
+          PF_CI_TEST_STEP: unit
         run: make test-unit
 
       - name: Architecture constraints
         id: architecture
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        env:
+          PF_CI_TEST_STEP: architecture
         run: make test-architecture
 
       - name: Audit locked dependencies
         id: audit
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: make audit-deps
+
+      - name: Validate safe diagnostics
+        id: diagnostics
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: quality
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "setup": {"outcome": ${{ toJSON(steps.setup.outcome) }}, "conclusion": ${{ toJSON(steps.setup.conclusion) }}},
+            "setup_node": {"outcome": ${{ toJSON(steps.setup_node.outcome) }}, "conclusion": ${{ toJSON(steps.setup_node.conclusion) }}},
+            "ui": {"outcome": ${{ toJSON(steps.ui.outcome) }}, "conclusion": ${{ toJSON(steps.ui.conclusion) }}},
+            "unit": {"outcome": ${{ toJSON(steps.unit.outcome) }}, "conclusion": ${{ toJSON(steps.unit.conclusion) }}},
+            "architecture": {"outcome": ${{ toJSON(steps.architecture.outcome) }}, "conclusion": ${{ toJSON(steps.architecture.conclusion) }}},
+            "audit": {"outcome": ${{ toJSON(steps.audit.outcome) }}, "conclusion": ${{ toJSON(steps.audit.conclusion) }}}
+            }
+        run: python -m scripts.ci_reports
+
+      - name: Upload safe diagnostics
+        id: upload
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-quality-single
+          path: ${{ runner.temp }}/pf-diagnostics/diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Summarize check outcomes
         if: ${{ always() && steps.checkout.outcome == 'success' }}
@@ -201,6 +290,8 @@ jobs:
             "unit": {"outcome": ${{ toJSON(steps.unit.outcome) }}, "conclusion": ${{ toJSON(steps.unit.conclusion) }}},
             "architecture": {"outcome": ${{ toJSON(steps.architecture.outcome) }}, "conclusion": ${{ toJSON(steps.architecture.conclusion) }}},
             "audit": {"outcome": ${{ toJSON(steps.audit.outcome) }}, "conclusion": ${{ toJSON(steps.audit.conclusion) }}}
+            ,"diagnostics": {"outcome": ${{ toJSON(steps.diagnostics.outcome) }}, "conclusion": ${{ toJSON(steps.diagnostics.conclusion) }}}
+            ,"upload": {"outcome": ${{ toJSON(steps.upload.outcome) }}, "conclusion": ${{ toJSON(steps.upload.conclusion) }}}
             }
         run: python scripts/ci_step_summary.py
 
@@ -228,17 +319,46 @@ jobs:
       - name: Operational contracts
         id: operational
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'operational' }}
+        env:
+          PF_CI_TEST_STEP: operational
         run: make test-operational-contracts
 
       - name: Eval harness contracts
         id: eval
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'eval' }}
+        env:
+          PF_CI_TEST_STEP: eval
         run: make test-eval-contracts
 
       - name: Accepted offline research regression
         id: regression
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.suite == 'eval' }}
         run: make evals-regression
+
+      - name: Validate safe diagnostics
+        id: diagnostics
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: contracts
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "setup": {"outcome": ${{ toJSON(steps.setup.outcome) }}, "conclusion": ${{ toJSON(steps.setup.conclusion) }}},
+            "operational": {"outcome": ${{ toJSON(steps.operational.outcome) }}, "conclusion": ${{ toJSON(steps.operational.conclusion) }}},
+            "eval": {"outcome": ${{ toJSON(steps.eval.outcome) }}, "conclusion": ${{ toJSON(steps.eval.conclusion) }}},
+            "regression": {"outcome": ${{ toJSON(steps.regression.outcome) }}, "conclusion": ${{ toJSON(steps.regression.conclusion) }}}
+            }
+        run: python -m scripts.ci_reports
+
+      - name: Upload safe diagnostics
+        id: upload
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-contracts-${{ matrix.suite }}
+          path: ${{ runner.temp }}/pf-diagnostics/diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Summarize check outcomes
         if: ${{ always() && steps.checkout.outcome == 'success' }}
@@ -252,6 +372,8 @@ jobs:
             "operational": {"outcome": ${{ toJSON(steps.operational.outcome) }}, "conclusion": ${{ toJSON(steps.operational.conclusion) }}},
             "eval": {"outcome": ${{ toJSON(steps.eval.outcome) }}, "conclusion": ${{ toJSON(steps.eval.conclusion) }}},
             "regression": {"outcome": ${{ toJSON(steps.regression.outcome) }}, "conclusion": ${{ toJSON(steps.regression.conclusion) }}}
+            ,"diagnostics": {"outcome": ${{ toJSON(steps.diagnostics.outcome) }}, "conclusion": ${{ toJSON(steps.diagnostics.conclusion) }}}
+            ,"upload": {"outcome": ${{ toJSON(steps.upload.outcome) }}, "conclusion": ${{ toJSON(steps.upload.conclusion) }}}
             }
         run: python scripts/ci_step_summary.py
 
@@ -280,8 +402,9 @@ jobs:
         id: core
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         env:
+          PF_CI_TEST_STEP: core
           PYTEST_ADDOPTS: >-
-            --durations=20 -p tests.ci_sharding
+            --durations=20 -p tests.ci_sharding -p tests.ci_reports
             --ci-shard-index=${{ matrix.shard }} --ci-shard-count=2
           PYTHONPATH: ${{ github.workspace }}
         run: make test-integration-core
@@ -289,12 +412,41 @@ jobs:
       - name: Deterministic PostgreSQL retrieval regression
         id: retrieval
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.shard == 0 }}
+        env:
+          PF_CI_TEST_STEP: retrieval
         run: make evals-retrieval
 
       - name: Canonical offline product demo
         id: demo
         if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.shard == 0 }}
+        env:
+          PF_CI_TEST_STEP: demo
         run: make demo
+
+      - name: Validate safe diagnostics
+        id: diagnostics
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: integration
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "setup": {"outcome": ${{ toJSON(steps.setup.outcome) }}, "conclusion": ${{ toJSON(steps.setup.conclusion) }}},
+            "core": {"outcome": ${{ toJSON(steps.core.outcome) }}, "conclusion": ${{ toJSON(steps.core.conclusion) }}},
+            "retrieval": {"outcome": ${{ toJSON(steps.retrieval.outcome) }}, "conclusion": ${{ toJSON(steps.retrieval.conclusion) }}},
+            "demo": {"outcome": ${{ toJSON(steps.demo.outcome) }}, "conclusion": ${{ toJSON(steps.demo.conclusion) }}}
+            }
+        run: python -m scripts.ci_reports
+
+      - name: Upload safe diagnostics
+        id: upload
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-integration-${{ matrix.shard }}
+          path: ${{ runner.temp }}/pf-diagnostics/diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Summarize check outcomes
         if: ${{ always() && steps.checkout.outcome == 'success' }}
@@ -308,6 +460,8 @@ jobs:
             "core": {"outcome": ${{ toJSON(steps.core.outcome) }}, "conclusion": ${{ toJSON(steps.core.conclusion) }}},
             "retrieval": {"outcome": ${{ toJSON(steps.retrieval.outcome) }}, "conclusion": ${{ toJSON(steps.retrieval.conclusion) }}},
             "demo": {"outcome": ${{ toJSON(steps.demo.outcome) }}, "conclusion": ${{ toJSON(steps.demo.conclusion) }}}
+            ,"diagnostics": {"outcome": ${{ toJSON(steps.diagnostics.outcome) }}, "conclusion": ${{ toJSON(steps.diagnostics.conclusion) }}}
+            ,"upload": {"outcome": ${{ toJSON(steps.upload.outcome) }}, "conclusion": ${{ toJSON(steps.upload.conclusion) }}}
             }
         run: python scripts/ci_step_summary.py
 
@@ -335,7 +489,9 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           exit-code: 1
-          format: table
+          version: v0.70.0
+          format: json
+          output: ${{ runner.temp }}/pf-trivy-filesystem.json
 
       - name: Build application image
         id: build
@@ -359,7 +515,9 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           exit-code: 1
-          format: table
+          version: v0.70.0
+          format: json
+          output: ${{ runner.temp }}/pf-trivy-library.json
 
       - name: Scan application image OS vulnerabilities
         id: os
@@ -375,7 +533,9 @@ jobs:
           # for which the vendor has not published a fixed package.
           ignore-unfixed: true
           exit-code: 1
-          format: table
+          version: v0.70.0
+          format: json
+          output: ${{ runner.temp }}/pf-trivy-os.json
 
       - name: Scan application image secrets
         id: secret_scan
@@ -387,12 +547,42 @@ jobs:
           scanners: secret
           severity: HIGH,CRITICAL
           exit-code: 1
-          format: table
+          version: v0.70.0
+          format: json
+          output: ${{ runner.temp }}/pf-trivy-secret_scan.json
 
       - name: Record CI local image content ID
         id: image
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: docker image inspect --format '{{.Id}}' "$IMAGE_TAG"
+        run: docker image inspect --format '{{.Id}}' "$IMAGE_TAG" > "$RUNNER_TEMP/pf-image-id.txt"
+
+      - name: Validate safe diagnostics
+        id: diagnostics
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: image-security
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "filesystem": {"outcome": ${{ toJSON(steps.filesystem.outcome) }}, "conclusion": ${{ toJSON(steps.filesystem.conclusion) }}},
+            "build": {"outcome": ${{ toJSON(steps.build.outcome) }}, "conclusion": ${{ toJSON(steps.build.conclusion) }}},
+            "smoke": {"outcome": ${{ toJSON(steps.smoke.outcome) }}, "conclusion": ${{ toJSON(steps.smoke.conclusion) }}},
+            "library": {"outcome": ${{ toJSON(steps.library.outcome) }}, "conclusion": ${{ toJSON(steps.library.conclusion) }}},
+            "os": {"outcome": ${{ toJSON(steps.os.outcome) }}, "conclusion": ${{ toJSON(steps.os.conclusion) }}},
+            "secret_scan": {"outcome": ${{ toJSON(steps.secret_scan.outcome) }}, "conclusion": ${{ toJSON(steps.secret_scan.conclusion) }}},
+            "image": {"outcome": ${{ toJSON(steps.image.outcome) }}, "conclusion": ${{ toJSON(steps.image.conclusion) }}}
+            }
+        run: python -m scripts.ci_reports
+
+      - name: Upload safe diagnostics
+        id: upload
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-image-security-single
+          path: ${{ runner.temp }}/pf-diagnostics/diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Summarize check outcomes
         if: ${{ always() && steps.checkout.outcome == 'success' }}
@@ -409,6 +599,8 @@ jobs:
             "os": {"outcome": ${{ toJSON(steps.os.outcome) }}, "conclusion": ${{ toJSON(steps.os.conclusion) }}},
             "secret_scan": {"outcome": ${{ toJSON(steps.secret_scan.outcome) }}, "conclusion": ${{ toJSON(steps.secret_scan.conclusion) }}},
             "image": {"outcome": ${{ toJSON(steps.image.outcome) }}, "conclusion": ${{ toJSON(steps.image.conclusion) }}}
+            ,"diagnostics": {"outcome": ${{ toJSON(steps.diagnostics.outcome) }}, "conclusion": ${{ toJSON(steps.diagnostics.conclusion) }}}
+            ,"upload": {"outcome": ${{ toJSON(steps.upload.outcome) }}, "conclusion": ${{ toJSON(steps.upload.conclusion) }}}
             }
         run: python scripts/ci_step_summary.py
 
@@ -445,6 +637,28 @@ jobs:
             --integration '${{ needs.integration.result }}' \
             --image-security '${{ needs.image-security.result }}'
 
+      - name: Validate safe diagnostics
+        id: diagnostics
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          PF_CI_JOB: ci-gate
+          PF_CI_STEPS: >-
+            {
+            "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
+            "evaluate": {"outcome": ${{ toJSON(steps.evaluate.outcome) }}, "conclusion": ${{ toJSON(steps.evaluate.conclusion) }}}
+            }
+        run: python -m scripts.ci_reports
+
+      - name: Upload safe diagnostics
+        id: upload
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ github.run_id }}-${{ github.run_attempt }}-ci-gate-single
+          path: ${{ runner.temp }}/pf-diagnostics/diagnostics.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Summarize check outcomes
         if: ${{ always() && steps.checkout.outcome == 'success' }}
         env:
@@ -454,5 +668,7 @@ jobs:
             {
             "checkout": {"outcome": ${{ toJSON(steps.checkout.outcome) }}, "conclusion": ${{ toJSON(steps.checkout.conclusion) }}},
             "evaluate": {"outcome": ${{ toJSON(steps.evaluate.outcome) }}, "conclusion": ${{ toJSON(steps.evaluate.conclusion) }}}
+            ,"diagnostics": {"outcome": ${{ toJSON(steps.diagnostics.outcome) }}, "conclusion": ${{ toJSON(steps.diagnostics.conclusion) }}}
+            ,"upload": {"outcome": ${{ toJSON(steps.upload.outcome) }}, "conclusion": ${{ toJSON(steps.upload.conclusion) }}}
             }
         run: python scripts/ci_step_summary.py

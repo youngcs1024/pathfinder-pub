@@ -437,3 +437,14 @@ def test_old_eight_job_baseline_cannot_satisfy_shared_precheck_contract():
     jobs["jobs"] = [job for job in jobs["jobs"] if job["name"] != "python-validation"]
     jobs["total_count"] = len(jobs["jobs"])
     assert not ci._full_attempt(jobs, _run())
+
+
+def test_old_attempt_without_diagnostic_publication_is_not_a_baseline():
+    jobs = _jobs()
+    for job in jobs["jobs"]:
+        job["steps"] = [
+            step
+            for step in job["steps"]
+            if step["name"] not in {"Validate safe diagnostics", "Upload safe diagnostics"}
+        ]
+    assert not ci._full_attempt(jobs, _run())
