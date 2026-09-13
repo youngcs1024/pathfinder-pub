@@ -42,7 +42,7 @@ def assert_workflow_contract(workflow):
         for check, block in zip(checks, blocks, strict=False):
             assert re.findall(r"^        id: (\w+)$", block, re.MULTILINE) == [check.step_id]
             explicit_dependencies = tuple(re.findall(r"steps\.(\w+)\.outcome == 'success'", block))
-            if check.step_id in {"checkout", "setup", "classify", "filesystem", "evaluate"}:
+            if check.step_id in {"checkout", "setup", "filesystem", "evaluate"}:
                 # These first checks use Actions' implicit success() after checkout.
                 assert "        if:" not in block
                 assert check.prerequisites == (() if check.step_id == "checkout" else ("checkout",))
@@ -157,3 +157,16 @@ def test_overlapping_routes_are_rejected_even_when_they_name_the_same_target():
         with pytest.raises(ValueError, match="exactly one execution target") as error:
             collection_ownership((node,), routes)
         assert "CANARY" not in str(error.value)
+
+
+def test_classifier_depends_on_checkout_even_after_workflow_validation_failure():
+    workflow = _workflow()
+    start = workflow.index("      - name: Classify change set conservatively\n")
+    end = workflow.index("      - name: Check public repository boundary\n", start)
+    block = workflow[start:end]
+    expected = "!cancelled() && steps.checkout.outcome == 'success'"
+    assert expected in block
+    for incorrect in ("success()", "!cancelled() && steps.workflow.outcome == 'success'"):
+        changed = workflow[:start] + block.replace(expected, incorrect) + workflow[end:]
+        with pytest.raises(AssertionError):
+            assert_workflow_contract(changed)
