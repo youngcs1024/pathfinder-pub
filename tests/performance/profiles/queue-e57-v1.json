@@ -1,0 +1,1 @@
+{"schema_version":1,"name":"queue-e57-v1","warmup_seconds":15.0,"measurement_seconds":120.0,"drain_seconds":30.0,"baseline_warmup":2,"baseline_samples":10}

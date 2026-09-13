@@ -11,7 +11,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from tests.performance.environment import EnvironmentError
-from tests.performance.workload import CallProfile, Contract
+from tests.performance.workload import CallPolicy, Contract
 
 type Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 type StopReason = Literal[
@@ -35,7 +35,7 @@ class Resources(Contract):
 
 class LoadProfile(Contract):
     schema_version: Literal[1] = 1
-    name: Literal["scheduler-smoke-v1", "low-load-v1", "capacity-api-v1"]
+    name: Literal["scheduler-smoke-v1", "low-load-v1", "capacity-api-v1", "queue-arrivals-v1"]
     seed: int = Field(default=54, ge=0, le=2**32 - 1)
     warmup_seconds: float = Field(ge=0, le=120)
     measurement_seconds: float = Field(gt=0, le=120)
@@ -94,7 +94,7 @@ class Manifest(Contract):
     environment_profile: Literal["environment-v1"]
     profile: LoadProfile
     profile_digest: Digest
-    call_profile: CallProfile
+    call_profile: CallPolicy
     call_profile_digest: Digest
 
     @model_validator(mode="after")

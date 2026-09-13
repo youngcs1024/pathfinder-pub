@@ -269,3 +269,7 @@ lint-workflow:
 .PHONY: benchmark-capacity
 benchmark-capacity: verify-toolchain
 	$(UV) run --locked python -m tests.performance capacity --profile capacity-e56-v1 --authorization "$(CAPACITY_AUTHORIZATION)" --output "$(CAPACITY_OUTPUT)"
+
+.PHONY: benchmark-queue
+benchmark-queue: verify-toolchain
+	$(UV) run --locked python -m tests.performance queue --profile queue-e57-v1 --authorization "$(QUEUE_AUTHORIZATION)" --output "$(QUEUE_OUTPUT)"

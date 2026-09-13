@@ -22,7 +22,14 @@ from app.tools.fake_search import FakeSearch
 from app.tools.search import SearchPermanentError, SearchTransientError, normalize_search_result
 from app.worker.fake_research_adapter import DeterministicResearchFakeChatAdapter
 from tests.performance.environment import EnvironmentError
-from tests.performance.workload import KINDS, CallProfile, CallRecord, parse_profile, publish
+from tests.performance.workload import (
+    KINDS,
+    CallProfile,
+    CallRecord,
+    QueueCallRecord,
+    parse_profile,
+    publish,
+)
 
 QUERY = "Compare the synthetic Python backend role and prepare a grounded application"
 RESUME = "# Synthetic Resume\n\nThe synthetic candidate builds Python APIs and PostgreSQL services."
@@ -62,7 +69,8 @@ class Calls:
         ordinal = self.counts[kind]
         delay = self.policy.delays[kind]
         seconds = self.random[kind].uniform(delay.minimum, delay.maximum)
-        record = CallRecord(
+        record_type = QueueCallRecord if self.policy.schema_version == 2 else CallRecord
+        record = record_type(
             process=self.process,
             sequence=sum(self.counts.values()),
             call=kind,

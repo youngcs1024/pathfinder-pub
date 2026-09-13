@@ -10,7 +10,6 @@ from unittest.mock import patch
 from sqlalchemy import text
 
 from tests.performance.metrics import (
-    SEGMENT_LIMIT,
     Collector,
     Resources,
     Value,
@@ -77,7 +76,7 @@ def instrument(root, collector: Collector):
                     job = await super().claim_due_job(**kwargs)
                     if job is not None:
                         collector.claims += 1
-                        if collector.claims > SEGMENT_LIMIT:
+                        if collector.claims > collector.segment_limit:
                             collector.dropped += 1
                             active = None
                         else:

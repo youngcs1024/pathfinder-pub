@@ -70,6 +70,45 @@ class CallProfile(Contract):
         return self
 
 
+class QueueCallProfile(CallProfile):
+    schema_version: Literal[2] = 2
+    name: Literal["queue-delayed-v1", "queue-instant-ci-v1"]
+    seed: Literal[57] = 57
+    max_calls: Literal[2047] = 2047
+
+    @model_validator(mode="after")
+    def queue_policy(self):
+        if self.faults:
+            raise ValueError("invalid_faults")
+        instant = self.name == "queue-instant-ci-v1"
+        expected = {
+            kind: Delay(
+                minimum=0.0 if instant else (0.4 if kind == "chat" else 0.02),
+                maximum=0.0 if instant else (0.6 if kind == "chat" else 0.05),
+            )
+            for kind in KINDS
+        }
+        if self.delays != expected:
+            raise ValueError("invalid_delays")
+        return self
+
+
+type CallPolicy = QueueCallProfile | CallProfile
+
+
+def queue_profile(*, instant=False):
+    return QueueCallProfile(
+        name="queue-instant-ci-v1" if instant else "queue-delayed-v1",
+        delays={
+            kind: Delay(
+                minimum=0.0 if instant else (0.4 if kind == "chat" else 0.02),
+                maximum=0.0 if instant else (0.6 if kind == "chat" else 0.05),
+            )
+            for kind in KINDS
+        },
+    )
+
+
 def profile(name: Literal["instant-v1", "delayed-v1"] = "instant-v1") -> CallProfile:
     return CallProfile(
         name=name,
@@ -83,10 +122,15 @@ def profile(name: Literal["instant-v1", "delayed-v1"] = "instant-v1") -> CallPro
     )
 
 
-def parse_profile(value: object) -> CallProfile:
+def parse_profile(value: object) -> CallPolicy:
     try:
         # Round-trip validates tuple fields at the JSON IPC boundary, and rejects non-JSON data.
-        return CallProfile.model_validate_json(json.dumps(value, allow_nan=False))
+        cls = (
+            QueueCallProfile
+            if isinstance(value, dict) and value.get("schema_version") == 2
+            else CallProfile
+        )
+        return cls.model_validate_json(json.dumps(value, allow_nan=False))
     except (TypeError, ValueError, ValidationError):
         raise EnvironmentError("invalid_profile") from None
 
@@ -105,17 +149,35 @@ class CallRecord(Contract):
     elapsed_seconds: float = Field(ge=0)
 
 
+class QueueCallRecord(CallRecord):
+    schema_version: Literal[2] = 2
+    sequence: int = Field(ge=1, le=2048)
+    ordinal: int = Field(ge=1, le=2048)
+
+
 def publish(directory: Path, name: str, record: Contract) -> None:
     """No free-form exception, payload, path or target string enters an artifact."""
     try:
-        if not name.startswith(("metrics-", "capacity-")) and (
+        if not name.startswith(("metrics-", "capacity-", "queue-")) and (
             re.fullmatch(
-                r"(?:calls-(?:worker|ingest)-\d{3}-(?:started|finished)|smoke-(?:started|result)|call-profile|load-(?:manifest|started|result))\.json",
+                r"(?:calls-(?:worker|ingest)-\d{3,4}-(?:started|finished)|smoke-(?:started|result)|call-profile|load-(?:manifest|started|result))\.json",
                 name,
             )
             is None
         ):
             raise ValueError
+        if name.startswith("calls-"):
+            if (
+                type(record) not in {CallRecord, QueueCallRecord}
+                or name != f"calls-{record.process}-{record.sequence:03}-{record.phase}.json"
+            ):
+                raise ValueError("invalid_call_record")
+        if name == "call-profile.json" and type(record) not in {CallProfile, QueueCallProfile}:
+            raise ValueError("invalid_call_profile")
+        if name.startswith("queue-"):
+            from tests.performance.queue_contracts import validate_publication
+
+            validate_publication(name, record)
         if name.startswith("metrics-"):
             from tests.performance.metrics import validate_publication
 

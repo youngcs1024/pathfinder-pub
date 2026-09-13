@@ -24,6 +24,8 @@ POSTGRES_IMAGE = "pgvector/pgvector:0.8.5-pg16"
 PROFILE = "environment-v1"
 START_SECONDS = 120
 RUN_SECONDS = 240
+QUEUE_PROFILE = "environment-queue-v1"
+QUEUE_RUN_SECONDS = 420
 STOP_SECONDS = 20
 CLEANUP_SECONDS = 70
 PACKET_LIMIT = 8192
@@ -58,10 +60,10 @@ class EnvironmentError(Exception):
 
 @dataclass(frozen=True)
 class EnvironmentProfile:
-    name: Literal["environment-v1"]
+    name: Literal["environment-v1", "environment-queue-v1"]
 
     def __post_init__(self) -> None:
-        if self.name != PROFILE:
+        if self.name not in {PROFILE, QUEUE_PROFILE}:
             raise EnvironmentError("invalid_profile")
 
 
@@ -242,14 +244,14 @@ def validate_record(payload: dict) -> None:
     """E5.2 metadata only: allowlisted fields AND constrained values, never body redaction."""
     fixed = {
         "schema_version": {1},
-        "profile": {PROFILE},
+        "profile": {PROFILE, QUEUE_PROFILE},
         "image": {POSTGRES_IMAGE},
         "status": {"IN_PROGRESS", "PASS", "BLOCKED"},
         "kind": {"result"},
         "category": CATEGORIES | {None},
         "primary_category": CATEGORIES | {None},
         "startup_limit_seconds": {START_SECONDS},
-        "runtime_limit_seconds": {RUN_SECONDS},
+        "runtime_limit_seconds": {RUN_SECONDS, QUEUE_RUN_SECONDS},
         "database_cpu": {1},
         "database_memory_bytes": {1024**3},
     }
@@ -392,14 +394,23 @@ class IsolatedEnvironment:
     def start(self) -> IsolatedEnvironment:
         if self._started or self._closed:
             raise EnvironmentError("already_started")
-        if type(self.profile) is not EnvironmentProfile or self.profile.name != PROFILE:
+        if type(self.profile) is not EnvironmentProfile or self.profile.name not in {
+            PROFILE,
+            QUEUE_PROFILE,
+        }:
             raise EnvironmentError("invalid_profile")
         if type(self.metrics) is not bool or type(self.capacity) is not bool:
+            raise EnvironmentError("invalid_profile")
+        if self.profile.name == QUEUE_PROFILE and not (self.capacity and self.metrics):
             raise EnvironmentError("invalid_profile")
         if self.call_profile is not None:
             from tests.performance.workload import parse_profile
 
             self.call_profile = parse_profile(self.call_profile).model_dump(mode="json")
+        if self.profile.name == QUEUE_PROFILE and (
+            self.call_profile is None or self.call_profile.get("schema_version") != 2
+        ):
+            raise EnvironmentError("invalid_profile")
         self._started = True
         directory = create_output_directory(self.output_dir)
         self._output_created = True
@@ -417,6 +428,8 @@ class IsolatedEnvironment:
         # docker-py falls back to ~/.docker when DOCKER_CONFIG has no config.json.
         # An existing empty config blocks auth/proxy/context inheritance without changing HOME.
         write_record(directory, "config.json", {})
+        if self.profile.name == QUEUE_PROFILE and not (self.capacity and self.metrics):
+            raise EnvironmentError("invalid_profile")
         if self.call_profile is not None:
             from tests.performance.workload import parse_profile, publish
 
@@ -440,6 +453,7 @@ class IsolatedEnvironment:
                     "owner": owner,
                     "output_dir": str(directory),
                     "channel_fd": child.fileno(),
+                    "queue": self.profile.name == QUEUE_PROFILE,
                     "metrics": self.metrics,
                     "capacity": self.capacity,
                     **(
@@ -468,11 +482,13 @@ class IsolatedEnvironment:
     def capacity_command(self, kind: str) -> dict:
         if not self.capacity or not self._started or self._closed:
             raise EnvironmentError("protocol_failed")
-        if kind not in {"start_worker", "health"}:
+        if kind not in {"start_worker", "health"} and not (
+            kind == "stop_worker" and self.profile.name == QUEUE_PROFILE
+        ):
             raise EnvironmentError("protocol_failed")
         with self._ipc_lock:
             send_packet(self._channel, {"kind": kind})
-            packet = receive_packet(self._channel, 15)
+            packet = receive_packet(self._channel, 30 if kind == "stop_worker" else 15)
             if packet.get("kind") != kind or packet.get("owner") != self._identity["owner"]:
                 self._result = packet if packet.get("kind") == "result" else None
                 raise EnvironmentError("protocol_failed")

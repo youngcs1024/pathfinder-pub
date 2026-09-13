@@ -51,7 +51,11 @@ def main() -> None:
     from tests.performance.metrics import Collector
     from tests.performance.metrics_runtime import instrument, instrument_application
 
-    if bootstrap.get("capacity") is True:
+    if bootstrap.get("queue") is True:
+        from tests.performance.queue_metrics import QueueCollector
+
+        collector = QueueCollector(role, Path(bootstrap["output_dir"]))
+    elif bootstrap.get("capacity") is True:
         from tests.performance.capacity_metrics import CapacityCollector
 
         collector = CapacityCollector(role, Path(bootstrap["output_dir"]))

@@ -16,6 +16,8 @@ from tests.performance.environment import (
     CLEANUP_SECONDS,
     POSTGRES_IMAGE,
     PROFILE,
+    QUEUE_PROFILE,
+    QUEUE_RUN_SECONDS,
     RUN_SECONDS,
     START_SECONDS,
     EnvironmentError,
@@ -83,6 +85,7 @@ class Supervisor:
         call_profile=None,
         metrics=False,
         capacity=False,
+        queue=False,
     ) -> None:
         from tests.performance.workload import parse_profile
 
@@ -97,9 +100,17 @@ class Supervisor:
 
         if type(capacity) is not bool:
             raise EnvironmentError("invalid_profile")
+        if type(queue) is not bool or (queue and not (capacity and metrics)):
+            raise EnvironmentError("invalid_profile")
+        self.queue = queue
+        self.worker_stopped = False
         self.capacity = capacity
         self.database_url = None
-        if capacity:
+        if queue:
+            from tests.performance.queue_metrics import QueueCollector
+
+            self.metrics = QueueCollector("supervisor", directory)
+        elif capacity:
             from tests.performance.capacity_metrics import CapacityCollector
 
             self.metrics = CapacityCollector("supervisor", directory)
@@ -123,11 +134,15 @@ class Supervisor:
         self.identity: dict = {
             "schema_version": 1,
             "owner": self.owner,
-            "profile": PROFILE,
+            "profile": QUEUE_PROFILE if self.queue else PROFILE,
             "image": POSTGRES_IMAGE,
             "container_name": self.name,
         }
         self.cleanup_failures: list[str] = []
+
+    @property
+    def runtime_seconds(self):
+        return QUEUE_RUN_SECONDS if self.queue else RUN_SECONDS
 
     def create_database(self) -> str:
         # Import only in the clean supervisor process; do not mutate pytest's TC configuration.
@@ -185,7 +200,12 @@ class Supervisor:
         if role == "worker" and self.call_profile is not None:
             bootstrap.update(call_profile=self.call_profile, output_dir=str(self.directory))
         if self.metrics is not None and role in {"api", "worker"}:
-            bootstrap.update(metrics=True, capacity=self.capacity, output_dir=str(self.directory))
+            bootstrap.update(
+                metrics=True,
+                capacity=self.capacity,
+                queue=self.queue,
+                output_dir=str(self.directory),
+            )
         fds = tuple(extra[key] for key in ("socket_fd", "ready_fd") if key in extra)
         process = OwnedProcess.launch(role, env=env, bootstrap=bootstrap, fds=fds)
         self.processes[role] = process
@@ -202,7 +222,7 @@ class Supervisor:
                 **self.identity,
                 "status": "IN_PROGRESS",
                 "startup_limit_seconds": START_SECONDS,
-                "runtime_limit_seconds": RUN_SECONDS,
+                "runtime_limit_seconds": self.runtime_seconds,
                 "database_cpu": 1,
                 "database_memory_bytes": 1024**3,
             },
@@ -257,7 +277,7 @@ class Supervisor:
         return worker.process.pid
 
     def serve(self) -> str | None:
-        deadline = self.started + RUN_SECONDS - CLEANUP_SECONDS
+        deadline = self.started + self.runtime_seconds - CLEANUP_SECONDS
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -268,7 +288,7 @@ class Supervisor:
             if any(
                 p.process.poll() is not None
                 for r, p in self.processes.items()
-                if r in {"api", "worker"}
+                if r in {"api", "worker"} and not (r == "worker" and self.worker_stopped)
             ):
                 return "process_exited"
             if self.metrics is not None and time.monotonic() >= self.next_sample:
@@ -285,6 +305,17 @@ class Supervisor:
                     pid = self.start_worker()
                     send_packet(
                         self.channel, {"kind": "start_worker", "owner": self.owner, "pid": pid}
+                    )
+                    continue
+                if self.queue and packet == {"kind": "stop_worker"}:
+                    child = self.processes.get("worker")
+                    if child is None or self.worker_stopped:
+                        raise EnvironmentError("protocol_failed")
+                    if not child.close():
+                        raise EnvironmentError("cleanup_failed")
+                    self.worker_stopped = True
+                    send_packet(
+                        self.channel, {"kind": "stop_worker", "owner": self.owner, "stopped": True}
                     )
                     continue
                 if self.capacity and packet == {"kind": "health"}:
@@ -356,12 +387,15 @@ class Supervisor:
             if self.metrics is not None:
                 signal.setitimer(
                     signal.ITIMER_REAL,
-                    max(1, RUN_SECONDS - CLEANUP_SECONDS - (time.monotonic() - self.started)),
+                    max(
+                        1,
+                        self.runtime_seconds - CLEANUP_SECONDS - (time.monotonic() - self.started),
+                    ),
                 )
             category = self.serve()
         except LifecycleInterrupted:
             elapsed = time.monotonic() - self.started
-            if self.serving and elapsed >= RUN_SECONDS - CLEANUP_SECONDS:
+            if self.serving and elapsed >= self.runtime_seconds - CLEANUP_SECONDS:
                 category = "runtime_timeout"
             elif not self.serving and elapsed >= START_SECONDS:
                 category = "startup_timeout"
@@ -390,7 +424,7 @@ class Supervisor:
             released = False
         result = {
             "kind": "result",
-            "profile": PROFILE,
+            "profile": QUEUE_PROFILE if self.queue else PROFILE,
             "status": "PASS" if released and category is None else "IN_PROGRESS",
             "category": category if released else "cleanup_failed",
             "primary_category": category,
@@ -425,6 +459,7 @@ def main() -> int:
             bootstrap.get("call_profile"),
             bootstrap.get("metrics", False),
             bootstrap.get("capacity", False),
+            bootstrap.get("queue", False),
         ).run()
 
 

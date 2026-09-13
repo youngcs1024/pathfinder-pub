@@ -346,6 +346,8 @@ class Collector:
     def limit(self):
         return LIMIT
 
+    segment_limit = SEGMENT_LIMIT
+    segment_type = SegmentRecord
     sample_type = Sample
     packet_type = Packet
 
@@ -409,7 +411,7 @@ class Collector:
             sample = self.samples[token - 1]
             self.write(
                 f"metrics-segment-{sample.claim_ordinal:03}-{phase}.json",
-                SegmentRecord(process_id=self.process_id, phase=phase, sample=sample),
+                self.segment_type(process_id=self.process_id, phase=phase, sample=sample),
             )
 
     def packet(self):
@@ -506,12 +508,18 @@ def count_sql(engine, collector: Collector):
 def validate_publication(name: str, record: Contract) -> None:
     if name in {f"metrics-{role}.json" for role in ROLES}:
         from tests.performance.capacity_metrics import CapacityPacket
+        from tests.performance.queue_metrics import QueuePacket
 
-        if type(record) not in {Packet, CapacityPacket} or name != f"metrics-{record.role}.json":
+        if (
+            type(record) not in {Packet, CapacityPacket, QueuePacket}
+            or name != f"metrics-{record.role}.json"
+        ):
             raise ValueError("invalid_metrics_type")
     elif match := re.fullmatch(r"metrics-segment-(\d{3})-(started|finished)\.json", name):
+        from tests.performance.queue_metrics import QueueSegment
+
         if (
-            type(record) is not SegmentRecord
+            type(record) not in {SegmentRecord, QueueSegment}
             or int(match[1]) != record.sample.claim_ordinal
             or match[2] != record.phase
         ):

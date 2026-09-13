@@ -1,0 +1,1 @@
+{"schema_version":1,"name":"queue-instant-ci-v1","warmup_seconds":0.0,"measurement_seconds":2.0,"drain_seconds":10.0,"baseline_warmup":0,"baseline_samples":2}
