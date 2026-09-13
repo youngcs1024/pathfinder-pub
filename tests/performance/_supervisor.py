@@ -75,7 +75,16 @@ def verified_port(container) -> int:
 
 
 class Supervisor:
-    def __init__(self, directory: Path, owner: str, channel: socket.socket) -> None:
+    def __init__(
+        self, directory: Path, owner: str, channel: socket.socket, call_profile=None
+    ) -> None:
+        from tests.performance.workload import parse_profile
+
+        self.call_profile = (
+            parse_profile(call_profile).model_dump(mode="json")
+            if call_profile is not None
+            else None
+        )
         self.directory = directory
         self.owner = UUID(owner).hex
         self.channel = channel
@@ -150,6 +159,8 @@ class Supervisor:
         if "api_origin" in self.identity:
             env["PF_MOCK_PORTAL_BASE_URL"] = self.identity["api_origin"]
         bootstrap = {"owner": self.owner, **extra}
+        if role == "worker" and self.call_profile is not None:
+            bootstrap.update(call_profile=self.call_profile, output_dir=str(self.directory))
         fds = tuple(extra[key] for key in ("socket_fd", "ready_fd") if key in extra)
         process = OwnedProcess.launch(role, env=env, bootstrap=bootstrap, fds=fds)
         self.processes[role] = process
@@ -340,7 +351,12 @@ class Supervisor:
 def main() -> int:
     bootstrap = json.loads(sys.stdin.buffer.read(8193))
     with socket.socket(fileno=bootstrap["channel_fd"]) as channel:
-        return Supervisor(Path(bootstrap["output_dir"]), bootstrap["owner"], channel).run()
+        return Supervisor(
+            Path(bootstrap["output_dir"]),
+            bootstrap["owner"],
+            channel,
+            bootstrap.get("call_profile"),
+        ).run()
 
 
 if __name__ == "__main__":

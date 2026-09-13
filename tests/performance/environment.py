@@ -356,6 +356,7 @@ class IsolatedEnvironment:
     profile: EnvironmentProfile
     output_dir: Path
     docker_socket: Path = Path("/var/run/docker.sock")
+    call_profile: dict | None = None
     _process: OwnedProcess | None = field(default=None, init=False)
     _channel: socket.socket | None = field(default=None, init=False)
     _started: bool = field(default=False, init=False)
@@ -363,6 +364,11 @@ class IsolatedEnvironment:
     _identity: dict = field(default_factory=dict, init=False)
     _database_url: str | None = field(default=None, init=False)
     _result: dict | None = field(default=None, init=False)
+    _output_created: bool = field(default=False, init=False)
+
+    @property
+    def output_created(self) -> bool:
+        return self._output_created
 
     @property
     def identity(self) -> dict:
@@ -384,8 +390,13 @@ class IsolatedEnvironment:
             raise EnvironmentError("already_started")
         if type(self.profile) is not EnvironmentProfile or self.profile.name != PROFILE:
             raise EnvironmentError("invalid_profile")
+        if self.call_profile is not None:
+            from tests.performance.workload import parse_profile
+
+            self.call_profile = parse_profile(self.call_profile).model_dump(mode="json")
         self._started = True
         directory = create_output_directory(self.output_dir)
+        self._output_created = True
         try:
             docker_host = validate_docker_socket(self.docker_socket)
         except EnvironmentError as exc:
@@ -400,6 +411,10 @@ class IsolatedEnvironment:
         # docker-py falls back to ~/.docker when DOCKER_CONFIG has no config.json.
         # An existing empty config blocks auth/proxy/context inheritance without changing HOME.
         write_record(directory, "config.json", {})
+        if self.call_profile is not None:
+            from tests.performance.workload import parse_profile, publish
+
+            publish(directory, "call-profile.json", parse_profile(self.call_profile))
         parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         self._channel = parent
         owner = uuid4().hex
@@ -419,6 +434,9 @@ class IsolatedEnvironment:
                     "owner": owner,
                     "output_dir": str(directory),
                     "channel_fd": child.fileno(),
+                    **(
+                        {"call_profile": self.call_profile} if self.call_profile is not None else {}
+                    ),
                 },
                 fds=(child.fileno(),),
             )

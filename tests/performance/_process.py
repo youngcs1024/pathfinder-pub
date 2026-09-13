@@ -7,7 +7,7 @@ import json
 import os
 import socket
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
@@ -82,9 +82,19 @@ def main() -> None:
 
         # Adapt only the operational readiness marker in this child. The production assembly,
         # lifecycle, runner, graph, repositories and factory remain the actual implementations.
+        adapters = nullcontext()
+        if "call_profile" in bootstrap:
+            from tests.performance.adapters import Calls, worker_adapters
+            from tests.performance.workload import parse_profile
+
+            calls = Calls(
+                parse_profile(bootstrap["call_profile"]), directory=Path(bootstrap["output_dir"])
+            )
+            adapters = worker_adapters(worker, calls)
         with (
             patch.object(worker, "_clear_worker_ready_marker", lambda _path: None),
             patch.object(worker, "_worker_readiness_marker", readiness),
+            adapters,
         ):
             asyncio.run(worker.run_worker(settings))
     else:
