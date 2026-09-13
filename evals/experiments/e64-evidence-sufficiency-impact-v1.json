@@ -1,0 +1,204 @@
+{
+  "artifact_kind": "quality_experiment_impact_v1",
+  "review_id": "e64_evidence_sufficiency_v1",
+  "reviewed_source_sha": "cbe8faf383e5a9fe72730d33128cc2c10c733b68",
+  "baseline_source_sha": "6ee09703fd19dd3f68813bb40f2b314fba512995",
+  "baseline_src_tree": "99d2c2195add7c2644fe4f8efd7f26d1337faa15",
+  "plan_path": "evals/experiments/e63-evidence-sufficiency-v1.json",
+  "plan_digest": "sha256:7e7ae136f40a1eb2f7d292fa0f6ddb191fbd2e0b9e95726e8f0a7755210284ff",
+  "selected_branch": "A",
+  "experiment_only": true,
+  "candidate_location": "tests/evals",
+  "candidate_graph_version": "pathfinder-research-e7a-exp-v1",
+  "candidate_output_contract": "e7a_research_output_v1",
+  "reviewed_production_graph_version": "pathfinder-research-v6",
+  "reviewed_output_versions": [
+    1,
+    2
+  ],
+  "reviewed_database_revision": "0015_e3_run_request_identity",
+  "image_boundary": "tests_and_evals_excluded_no_production_assembly",
+  "database": {
+    "admission": "owned_disposable_handle_only_no_arbitrary_dsn",
+    "schema_change": "extend_runs_graph_check_only",
+    "both_arms": "same_fixture_schema",
+    "business_enums": "unchanged",
+    "result_authority": "test_postgresql",
+    "result_reader": "test_only_candidate_contract",
+    "production_migration": "none",
+    "new_tables": false
+  },
+  "output_policy": {
+    "sufficient": "grounded_valid_draft_eligible_not_authorized",
+    "partial": "supported_facts_and_gaps_no_action",
+    "insufficient": "explicit_unknowns_no_action",
+    "conflicting": "conflicts_and_sources_no_action",
+    "resume_only": "allowed_without_invented_job_match",
+    "technical_failure": "existing_failure_or_cancellation_not_semantic_outcome"
+  },
+  "budget": {
+    "model_calls_per_run": 12,
+    "tool_calls_per_run": 8,
+    "research_passes_per_run": 2,
+    "assessor_calls_per_pass": 1,
+    "allocation": "existing_shared_budget"
+  },
+  "impacts": [
+    {
+      "area": "document_representation",
+      "disposition": "unchanged",
+      "reviewed_files": [
+        "src/app/retrieval/chunking.py",
+        "src/app/retrieval/documents.py"
+      ],
+      "requirements": [
+        "keep_normalization_chunking_embedding",
+        "preserve_document_chunk_references"
+      ]
+    },
+    {
+      "area": "retrieval_strategy",
+      "disposition": "unchanged",
+      "reviewed_files": [
+        "src/app/db/documents.py",
+        "src/app/tools/document_retrieval.py"
+      ],
+      "requirements": [
+        "keep_ranking_top_k_profile",
+        "preserve_workspace_allowlist"
+      ]
+    },
+    {
+      "area": "output_contract",
+      "disposition": "dev_only",
+      "reviewed_files": [
+        "src/app/domain/research.py",
+        "src/app/agents/research_nodes.py"
+      ],
+      "requirements": [
+        "independent_experiment_output_contract",
+        "grounded_sufficient_draft_only",
+        "partial_insufficient_conflicting_without_action",
+        "retain_legitimate_resume_only_draft",
+        "technical_errors_are_not_insufficiency"
+      ]
+    },
+    {
+      "area": "graph_nodes",
+      "disposition": "dev_only",
+      "reviewed_files": [
+        "src/app/agents/research_graph.py",
+        "src/app/agents/research_contracts.py"
+      ],
+      "requirements": [
+        "distinct_experiment_graph_identity",
+        "reuse_langgraph_factory_registry_ports",
+        "bounded_gap_followup_no_scope_expansion",
+        "no_second_runtime_or_production_root"
+      ]
+    },
+    {
+      "area": "model_budget",
+      "disposition": "dev_only",
+      "reviewed_files": [
+        "src/app/domain/runs.py",
+        "src/app/llm/factory.py"
+      ],
+      "requirements": [
+        "assessor_uses_existing_shared_budget",
+        "keep_all_e63_resource_and_exit_limits"
+      ]
+    },
+    {
+      "area": "db_schema",
+      "disposition": "dev_only",
+      "reviewed_files": [
+        "src/app/db/models.py",
+        "src/app/db/readiness.py",
+        "tests/evals/quality_generation.py"
+      ],
+      "requirements": [
+        "owned_disposable_handle_only",
+        "extend_runs_graph_check_only",
+        "same_fixture_schema_for_both_arms",
+        "persist_truthful_candidate_version_and_output",
+        "test_only_candidate_reader",
+        "no_production_migration_or_new_tables"
+      ]
+    },
+    {
+      "area": "http_behavior",
+      "disposition": "unchanged",
+      "reviewed_files": [
+        "src/app/api/schemas/runs.py",
+        "src/app/db/runs.py"
+      ],
+      "requirements": [
+        "keep_production_api_ui_and_result_readers",
+        "generation_is_not_full_business_evidence"
+      ]
+    },
+    {
+      "area": "sse_latency",
+      "disposition": "unchanged",
+      "reviewed_files": [
+        "src/app/api/routes/events.py"
+      ],
+      "requirements": [
+        "keep_sse_polling_replay_and_authorization"
+      ]
+    },
+    {
+      "area": "request_admission",
+      "disposition": "unchanged",
+      "reviewed_files": [
+        "src/app/domain/runs.py",
+        "src/app/db/jobs.py"
+      ],
+      "requirements": [
+        "keep_admission_idempotency_and_single_worker"
+      ]
+    },
+    {
+      "area": "rollback",
+      "disposition": "adoption_only",
+      "reviewed_files": [
+        "src/app/worker/main.py",
+        "src/app/worker/langgraph_executor.py",
+        "scripts/release.sh"
+      ],
+      "requirements": [
+        "retain_baseline_and_failed_partial_artifacts",
+        "drain_or_cancel_nonterminal_with_old_version",
+        "reconcile_executing_action_before_switch",
+        "never_migrate_pending_approval_or_delete_checkpoint",
+        "rollback_requires_all_result_versions_readable",
+        "reject_audit_or_idempotency_losing_downgrade"
+      ]
+    }
+  ],
+  "adoption_requirements": [
+    "separate_implementation_and_deployment_authorization",
+    "new_production_graph_and_versioned_output_union",
+    "writer_executor_api_ui_fake_prompt_eval_alignment",
+    "append_from_actual_alembic_head_if_needed",
+    "orm_check_readiness_release_backup_restore_alignment",
+    "old_terminal_reading_and_nonterminal_drain",
+    "approval_binding_reconciliation_interrupt_resume_budget_tests",
+    "compatible_rollback_preserves_audit_and_result_reading"
+  ],
+  "e65_handoff": [
+    "real_source_binding_and_reviewed_allowed_diff",
+    "cross_source_paired_slot_execution",
+    "owned_database_fixture_and_candidate_reader",
+    "resource_collection_and_budget_enforcement",
+    "adoption_rule_execution_and_failure_retention",
+    "semantic_scope_budget_and_legitimate_resume_regressions",
+    "separate_full_business_and_recovery_acceptance"
+  ],
+  "verification_limit": "impact_registration_only",
+  "execution_readiness": "NOT_VERIFIED",
+  "candidate_execution": "NOT_RUN",
+  "adoption": "NOT_RUN",
+  "deployment": "NOT_RUN"
+}
