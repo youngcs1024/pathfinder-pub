@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "low-load-v1",
+  "seed": 54,
+  "warmup_seconds": 5.0,
+  "measurement_seconds": 20.0,
+  "drain_seconds": 10.0,
+  "arrival_rate": 0.1,
+  "connections": 2,
+  "max_requests": 3,
+  "max_inflight": 2,
+  "max_run_seconds": 35.0,
+  "max_queue_depth": 4
+}

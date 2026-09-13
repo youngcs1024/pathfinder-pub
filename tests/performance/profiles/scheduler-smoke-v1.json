@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "scheduler-smoke-v1",
+  "seed": 54,
+  "warmup_seconds": 0.0,
+  "measurement_seconds": 1.0,
+  "drain_seconds": 1.0,
+  "arrival_rate": 2.0,
+  "connections": 1,
+  "max_requests": 2,
+  "max_inflight": 1,
+  "max_run_seconds": 2.0,
+  "max_queue_depth": 2
+}

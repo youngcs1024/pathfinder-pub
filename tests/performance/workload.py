@@ -110,12 +110,22 @@ def publish(directory: Path, name: str, record: Contract) -> None:
     try:
         if (
             re.fullmatch(
-                r"(?:calls-(?:worker|ingest)-\d{3}-(?:started|finished)|smoke-(?:started|result)|call-profile)\.json",
+                r"(?:calls-(?:worker|ingest)-\d{3}-(?:started|finished)|smoke-(?:started|result)|call-profile|load-(?:manifest|started|result))\.json",
                 name,
             )
             is None
         ):
             raise ValueError
+        if name.startswith("load-"):
+            from tests.performance.contracts import Manifest, Result, Started
+
+            expected = {
+                "load-manifest.json": Manifest,
+                "load-started.json": Started,
+                "load-result.json": Result,
+            }
+            if type(record) is not expected[name]:
+                raise ValueError
         # Validate even model_copy/model_construct callers before creating a file.
         payload = type(record).model_validate_json(record.model_dump_json()).model_dump(mode="json")
         directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
