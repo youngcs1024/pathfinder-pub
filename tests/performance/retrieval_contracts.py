@@ -316,6 +316,16 @@ class Result(Contract):
     manifest_digest: Digest | None = None
     status: Literal["PASS", "IN_PROGRESS", "NOT_RUN"] = "IN_PROGRESS"
     stop: Stop
+    stage: Literal[
+        "environment",
+        "generation",
+        "analyze",
+        "layout",
+        "measurement",
+        "plans",
+        "reconcile",
+        "finalizing",
+    ] = "environment"
     diagnostics: tuple[Stop, ...] = ()
     samples: tuple[Sample, ...] = Field(default=(), max_length=65)
     summaries: tuple[Summary, ...] = Field(default=(), max_length=45)

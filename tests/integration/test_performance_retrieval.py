@@ -18,7 +18,9 @@ pytestmark = pytest.mark.integration
 
 def checked(result):
     if result.status != "PASS":
-        pytest.fail(f"e58_{result.stop}_{'_'.join(result.diagnostics)}", pytrace=False)
+        pytest.fail(
+            f"e58_{result.stage}_{result.stop}_{'_'.join(result.diagnostics)}", pytrace=False
+        )
     assert result.completeness and result.correctness and result.resources_released
     assert result.pool_remaining == 0
     assert result.attempts == result.adapter_calls == len(result.samples) == 6

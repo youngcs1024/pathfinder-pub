@@ -102,6 +102,7 @@ class Experiment:
         self.observer = QueryObserver()
         self.complete = False
         self.pool_remaining = None
+        self.stage = "environment"
 
     async def observe(self, operation, *args):
         started = monotonic()
@@ -199,6 +200,7 @@ class Experiment:
                         )
                     )
             for query in range(self.profile.query_count):
+                self.stage = "plans"
                 await self.guard()
                 self.plans.append(await self.observe(explain, self.engine, query, captured[query]))
         finally:
@@ -237,6 +239,7 @@ class Experiment:
         try:
             async with asyncio.timeout(max(0, self.deadline - monotonic())):
                 await self.guard(force=True)
+                self.stage = "generation"
                 self.dataset = await create_dataset(
                     self.sessions,
                     self.manifest.point,
@@ -244,10 +247,12 @@ class Experiment:
                     lambda value: setattr(self, "dataset", value),
                 )
                 await self.guard(force=True)
+                self.stage = "analyze"
                 # Statistics preparation is outside all latency samples and only touches
                 # this already-owned database. Keep the production query planner settings.
                 async with self.engine.connect() as connection, connection.begin():
                     await connection.exec_driver_sql("ANALYZE")
+                self.stage = "layout"
                 self.before_layout = await self.observe(layout, self.sessions, self.dataset)
                 check_layout(self.manifest.point, self.before_layout)
                 tenant = self.dataset.tenants[0]
@@ -267,13 +272,16 @@ class Experiment:
                     ),
                 )
                 with self.observer.attach(self.engine):
+                    self.stage = "measurement"
                     await self.measure(service)
+                self.stage = "reconcile"
                 self.final_layout = await self.observe(self.facts)
                 check_layout(self.manifest.point, self.final_layout)
                 require(self.attempts == self.adapter.calls == self.profile.max_attempts)
                 require(len(self.plans) == self.profile.query_count)
                 await self.guard(force=True)
                 self.complete = True
+                self.stage = "finalizing"
         finally:
             # Retain partial DB facts only while the original work deadline still permits
             # the read. Never steal the supervisor's cleanup reserve or replace an error.
@@ -285,10 +293,13 @@ class Experiment:
                     except Exception:
                         pass
             finally:
-                await self.engine.dispose()
                 self.pool_remaining = self.metrics.checked_out
+                # dispose replaces the pool; detach while the original pool still exists.
                 detach()
-                self.metrics.finish()
+                try:
+                    await self.engine.dispose()
+                finally:
+                    self.metrics.finish()
 
 
 def make_manifest(environment, profile, point, authorization, sha):
@@ -349,24 +360,31 @@ def run_point(output_dir, *, point, profile, authorization):
             interrupted = error
     finally:
         cleanup = environment.close()
-    released = cleanup.get("resources_released") is True and not cleanup.get("category")
+    released = cleanup.get("resources_released") is True
     if not released:
         diagnostics.append("cleanup_failed")
+    if cleanup.get("category") and reason == "window_complete":
+        reason = (
+            "deadline"
+            if cleanup["category"] == "runtime_timeout"
+            else classify(EnvironmentError(cleanup["category"]))
+        )
     packets_valid = True
+    process_identities = set()
+    finished = monotonic()
     if experiment is not None:
         for role in ("driver", "api", "supervisor"):
             try:
                 packet = safe_read(output_dir / f"metrics-{role}.json", CapacityPacket)
                 require(packet.role == role and not packet.write_failed and packet.dropped == 0)
                 require(packet.pool_remaining == 0)
-                expected_pid = (
-                    experiment.metrics.process_id
-                    if role == "driver"
-                    else environment.identity["process_ids"]["api"]
-                    if role == "api"
-                    else environment._process.process.pid
-                )
-                require(packet.process_id == expected_pid)
+                # E5.5 process_id is a collector UUID, not an operating-system PID.
+                # Child packets belong to this create-only, owned environment directory.
+                require(packet.process_id not in process_identities)
+                require(started <= packet.started <= packet.finished <= finished)
+                if role == "driver":
+                    require(packet.process_id == experiment.metrics.process_id)
+                process_identities.add(packet.process_id)
             except Exception:
                 packets_valid = False
         if not packets_valid:
@@ -379,6 +397,7 @@ def run_point(output_dir, *, point, profile, authorization):
         manifest_digest=digest(manifest) if manifest else None,
         status=status,
         stop=reason,
+        stage=experiment.stage if experiment else "environment",
         diagnostics=tuple(diagnostics),
         resources_released=released,
         samples=tuple(experiment.samples) if experiment else (),

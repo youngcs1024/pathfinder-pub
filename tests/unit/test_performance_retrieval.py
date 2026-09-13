@@ -310,7 +310,8 @@ async def test_timeout_keeps_failed_and_not_run_samples(tmp_path):
     assert "CANARY" not in experiment.samples[0].model_dump_json()
 
 
-def test_cleanup_failure_does_not_hide_original_failure(tmp_path, monkeypatch):
+@pytest.mark.parametrize("released", [False, True])
+def test_cleanup_failure_does_not_hide_original_failure(tmp_path, monkeypatch, released):
     class Broken:
         output_created = True
 
@@ -322,7 +323,10 @@ def test_cleanup_failure_does_not_hide_original_failure(tmp_path, monkeypatch):
             raise EnvironmentError("startup_failed")
 
         def close(self):
-            return {"resources_released": False, "category": "cleanup_failed"}
+            return {
+                "resources_released": released,
+                "category": "startup_failed" if released else "cleanup_failed",
+            }
 
     monkeypatch.setattr(runtime, "source_sha", lambda: "a" * 40)
     monkeypatch.setattr(runtime, "IsolatedEnvironment", Broken)
@@ -333,4 +337,5 @@ def test_cleanup_failure_does_not_hide_original_failure(tmp_path, monkeypatch):
         authorization="ci_instant",
     )
     assert result.status == "IN_PROGRESS" and result.stop == "environment_failed"
-    assert result.diagnostics == ("cleanup_failed",) and not result.resources_released
+    assert result.diagnostics == (() if released else ("cleanup_failed",))
+    assert result.resources_released == released
