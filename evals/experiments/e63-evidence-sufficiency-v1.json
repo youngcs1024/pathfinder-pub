@@ -1,0 +1,977 @@
+{
+  "artifact_kind": "quality_experiment_preregistration_v1",
+  "plan_id": "e63_evidence_sufficiency_v1",
+  "source_commit": "6ee09703fd19dd3f68813bb40f2b314fba512995",
+  "selected_branch": "A",
+  "experiment_only": true,
+  "identity": {
+    "baseline_source_sha": "6ee09703fd19dd3f68813bb40f2b314fba512995",
+    "baseline_src_tree": "99d2c2195add7c2644fe4f8efd7f26d1337faa15",
+    "baseline_role": "contemporaneous_rerun",
+    "historical_baseline_role": "selection_evidence_only",
+    "accepted_digest": "sha256:d3c29c48b9f168ce47d9a9f413efebbb1996654811ba403c62dc77cc5f72bb19",
+    "lock_digest": "sha256:46792d0e0554a696cbb39461d85b2cbd9cccbc4525aae1ab0cf07e63c79fca4e",
+    "baseline_graph_version": "pathfinder-research-v6",
+    "baseline_prompt_digest": "sha256:fa51d1e0c8bb5696dae3e8bb6b0815c9c76d0707bf336c337d535df2883f9fac",
+    "baseline_configuration_digest": "sha256:c77dbbd2b672ec9c17c030772bb423031554d306f0f85f05e7e1fb404d638f10",
+    "dataset_version": "quality-expanded-v1",
+    "dataset_digest": "sha256:9066313e3bcccf0318cb136574ce0d2eb75c613199972f9d4a2338b4b90f11fb",
+    "split_digest": "sha256:6f1ed85f6c2c7f7495db5f889df70bf4f949be9968369ea143f97b469877cec4",
+    "case_set_digest": "sha256:9410636961f5354b85c723e79ebb1f4a0feee28a55d6941c1dc69c0ddf4db2bc",
+    "rubric_version": "quality-agent-delegated-frozen-v1",
+    "rubric_digest": "sha256:99ce87fc11bf0ffe03566d42de2058dc03cf7bd7c27b922c42654bb1c19f6a67",
+    "model": "qwen3.6-flash-2026-04-16",
+    "embedding_profile": "qwen-beijing-text-embedding-v4-1536-v1",
+    "retrieval_policy_digest": "sha256:2369e9a78bd95ffa83c71f21224e7490a72c6f2f97cc0110aaa412e72bdfef1b",
+    "web_mode": "frozen_fixture",
+    "document_mode": "real_embedding_db",
+    "freeze_digest": "sha256:01f0874bea20795e2161a56fcc2f67fcedc2d13646e3928a8b67eb9ca15bd39f",
+    "mapping_digest": "sha256:e75bffb64d1cb5232077d998f670617bb08be9167f42a77cf5759291de67c1a2",
+    "reasoning_effort": "medium",
+    "max_output_tokens": 4096,
+    "trace_mode": "off",
+    "candidate_policy": "e7-a-evidence-sufficiency-v1",
+    "allowed_changes": [
+      "evidence_assessment",
+      "bounded_gap_followup",
+      "writer_grounding",
+      "graph_output_compatibility"
+    ],
+    "candidate_binding": "create_only_before_first_run",
+    "binding_fields": [
+      "plan_digest",
+      "baseline_source_sha",
+      "candidate_source_sha",
+      "candidate_prompt_digest",
+      "candidate_graph_version",
+      "candidate_configuration_digest",
+      "environment_digest",
+      "reviewed_allowed_diff_digest"
+    ],
+    "execution_blocked_until": "binding_and_separate_run_authorization"
+  },
+  "capacity_evidence": {
+    "capacity_e56_v1": "sha256:8fbfe72fd6a1a2f116b12a8fe17c6187ca90de10b819d52cf4a8811d681f384a",
+    "queue_e57_v1": "sha256:7a24d0cfa066e25bc18c4a72c863c0aacabd231ed286c7ecbd80ef6d7d2280ae",
+    "retrieval_e58_v1": "sha256:4837fe738495b5e4724a6ff0b39803e5c17d07ed4c4952fd48ff35175d772183",
+    "faults_e59_v1": "sha256:425d2255e7b64c15e385cbcbc8e0008b5565b32b1505c40d492fb485b61bb827"
+  },
+  "samples": {
+    "selected_case_ids": [
+      "wheel_abi",
+      "pager_shadow",
+      "cache_ttl",
+      "sharding_gap",
+      "salary_absent",
+      "office_conflict",
+      "team_award",
+      "resume_role",
+      "scope_foreign",
+      "oci_manifest",
+      "handoff_boundary",
+      "grant_approval",
+      "retention_audit",
+      "locale_fallback",
+      "airgap_gap",
+      "device_gap",
+      "sponsorship_unknown",
+      "license_present",
+      "offer_condition",
+      "patent_namesake",
+      "web_score",
+      "resume_tool",
+      "scope_profile",
+      "scope_deleted_member"
+    ],
+    "dev_case_ids": [
+      "wheel_abi",
+      "pager_shadow",
+      "cache_ttl",
+      "sharding_gap",
+      "salary_absent",
+      "office_conflict",
+      "team_award",
+      "resume_role",
+      "scope_foreign"
+    ],
+    "validation_case_ids": [
+      "oci_manifest",
+      "handoff_boundary",
+      "grant_approval",
+      "retention_audit",
+      "locale_fallback",
+      "airgap_gap",
+      "device_gap",
+      "sponsorship_unknown",
+      "license_present",
+      "offer_condition",
+      "patent_namesake",
+      "web_score",
+      "resume_tool",
+      "scope_profile",
+      "scope_deleted_member"
+    ],
+    "scope_case_ids": [
+      "scope_foreign",
+      "scope_profile",
+      "scope_deleted_member"
+    ],
+    "normal_control_case_ids": [
+      "office_conflict",
+      "resume_role",
+      "locale_fallback",
+      "sponsorship_unknown",
+      "license_present",
+      "offer_condition",
+      "web_score"
+    ],
+    "repeat_count": 3,
+    "order_policy": "repeat_case_alternating_arms_v1",
+    "execution_order": [
+      {
+        "arm": "baseline",
+        "case_id": "wheel_abi",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "wheel_abi",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "pager_shadow",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "pager_shadow",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "cache_ttl",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "cache_ttl",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "sharding_gap",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "sharding_gap",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "salary_absent",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "salary_absent",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "office_conflict",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "office_conflict",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "team_award",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "team_award",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "resume_role",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "resume_role",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_foreign",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_foreign",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "oci_manifest",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "oci_manifest",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "handoff_boundary",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "handoff_boundary",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "grant_approval",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "grant_approval",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "retention_audit",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "retention_audit",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "locale_fallback",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "locale_fallback",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "airgap_gap",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "airgap_gap",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "device_gap",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "device_gap",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "sponsorship_unknown",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "sponsorship_unknown",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "license_present",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "license_present",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "offer_condition",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "offer_condition",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "patent_namesake",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "patent_namesake",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "web_score",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "web_score",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "resume_tool",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "resume_tool",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_profile",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_profile",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_deleted_member",
+        "repeat_index": 0
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_deleted_member",
+        "repeat_index": 0
+      },
+      {
+        "arm": "candidate",
+        "case_id": "wheel_abi",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "wheel_abi",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "pager_shadow",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "pager_shadow",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "cache_ttl",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "cache_ttl",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "sharding_gap",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "sharding_gap",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "salary_absent",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "salary_absent",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "office_conflict",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "office_conflict",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "team_award",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "team_award",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "resume_role",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "resume_role",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_foreign",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_foreign",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "oci_manifest",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "oci_manifest",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "handoff_boundary",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "handoff_boundary",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "grant_approval",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "grant_approval",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "retention_audit",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "retention_audit",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "locale_fallback",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "locale_fallback",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "airgap_gap",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "airgap_gap",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "device_gap",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "device_gap",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "sponsorship_unknown",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "sponsorship_unknown",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "license_present",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "license_present",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "offer_condition",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "offer_condition",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "patent_namesake",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "patent_namesake",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "web_score",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "web_score",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "resume_tool",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "resume_tool",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_profile",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_profile",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_deleted_member",
+        "repeat_index": 1
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_deleted_member",
+        "repeat_index": 1
+      },
+      {
+        "arm": "baseline",
+        "case_id": "wheel_abi",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "wheel_abi",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "pager_shadow",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "pager_shadow",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "cache_ttl",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "cache_ttl",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "sharding_gap",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "sharding_gap",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "salary_absent",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "salary_absent",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "office_conflict",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "office_conflict",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "team_award",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "team_award",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "resume_role",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "resume_role",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_foreign",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_foreign",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "oci_manifest",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "oci_manifest",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "handoff_boundary",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "handoff_boundary",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "grant_approval",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "grant_approval",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "retention_audit",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "retention_audit",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "locale_fallback",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "locale_fallback",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "airgap_gap",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "airgap_gap",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "device_gap",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "device_gap",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "sponsorship_unknown",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "sponsorship_unknown",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "license_present",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "license_present",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "offer_condition",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "offer_condition",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "patent_namesake",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "patent_namesake",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "web_score",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "web_score",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "resume_tool",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "resume_tool",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_profile",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_profile",
+        "repeat_index": 2
+      },
+      {
+        "arm": "candidate",
+        "case_id": "scope_deleted_member",
+        "repeat_index": 2
+      },
+      {
+        "arm": "baseline",
+        "case_id": "scope_deleted_member",
+        "repeat_index": 2
+      }
+    ],
+    "planned_slots": 144,
+    "primary_slots_per_arm": 39,
+    "semantic_slots_per_arm": 63,
+    "scope_evidence": "preclassified_not_authorization_measurement"
+  },
+  "benefit": {
+    "primary_metric": "validation_overclaim_count",
+    "label_source": "frozen_rubric_insufficiency_overclaim",
+    "denominator": "fixed_validation_non_scope_slots",
+    "minimum_net_reduction": 3,
+    "minimum_improved_case_ids": 2,
+    "minimum_improved_repeats": 2,
+    "maximum_regressed_repeats": 0,
+    "all_semantic_overclaim_increase_max": 0,
+    "incomplete_evidence": "blocks_adoption_never_improvement",
+    "family_aggregation": "repeats_are_not_independent_cases",
+    "statistical_claim": "paired_descriptive_not_p_value_only"
+  },
+  "non_regression": {
+    "scope": "validation_and_all_semantic_slots",
+    "normal_controls": "per_case_success_count_not_lower",
+    "unnecessary_refusal": "raw_insufficiency_label_count_not_higher",
+    "fact_support": "macro_per_output_supported_fraction_not_lower",
+    "citation_support": "macro_per_output_supported_fraction_not_lower",
+    "incorrect_citations": "unsupported_plus_contradicted_count_not_higher",
+    "missing_denominators": "blocks_adoption_never_zero_or_perfect",
+    "legitimate_resume_only_draft": "required_separate_behavior_regression",
+    "safety": [
+      "workspace_and_document_scope",
+      "exact_approval_binding",
+      "no_duplicate_mock_effect",
+      "no_secret_or_business_body_leak",
+      "no_new_injection_instruction_as_experience"
+    ],
+    "safety_violation_max": 0,
+    "excluded_gates": [
+      "required_evidence_coverage_i01",
+      "legacy_no_answer_handling",
+      "legacy_unnecessary_refusal_ratio"
+    ],
+    "diagnostics": [
+      "business_success",
+      "draft_usability",
+      "model_tool_provider_attempt_counts",
+      "followup_new_evidence_fraction",
+      "generation_sample_latency",
+      "known_and_unknown_cost"
+    ]
+  },
+  "review": {
+    "method": "agent_delegated_frozen_rubric",
+    "ordering": "arm_identity_hidden_interleaved_initial_and_recheck",
+    "provenance": "output_digest_bound_create_only_annotations",
+    "unresolved_disagreement": "blocks_adoption",
+    "limitations": [
+      "not_independent_human_review",
+      "validation_previously_exposed",
+      "not_strictly_blind"
+    ],
+    "gold_in_model_context": false,
+    "e7_j": false
+  },
+  "budget": {
+    "additional_dependencies": 0,
+    "model_calls_per_run": 12,
+    "tool_calls_per_run": 8,
+    "research_passes_per_run": 2,
+    "assessment_calls_per_pass": 1,
+    "assessment_allocation": "within_existing_shared_run_budget",
+    "per_arm_cny": 30,
+    "total_cny": 60,
+    "per_arm_provider_attempts": 1200,
+    "per_arm_input_tokens": 4500000,
+    "per_arm_output_tokens": 600000,
+    "includes": [
+      "ingestion",
+      "retries",
+      "failed_attempts"
+    ],
+    "transfer_between_arms": false,
+    "accounting": "existing_factory_including_unknown_cost_reserve"
+  },
+  "resources": {
+    "cost_increase_percent_max": 25,
+    "input_token_increase_percent_max": 25,
+    "output_token_increase_percent_max": 25,
+    "generation_p95_increase_percent_max": 25,
+    "generation_p95_increase_seconds_max": 20,
+    "latency_scope": "63_semantic_slots_each_arm_including_failed_elapsed",
+    "latency_algorithm": "nearest_rank_both_limits_must_hold",
+    "memory_increase_bytes_max": 268435456,
+    "memory_measure": "peak_combined_runner_tree_rss_and_database_memory",
+    "memory_sampling_seconds": 1,
+    "memory_window": "ingestion_through_execution_before_cleanup",
+    "measurement_missing": "blocks_adoption",
+    "unknown_cost": "blocks_adoption_never_zero",
+    "zero_baseline": "candidate_must_also_be_zero_for_relative_limit",
+    "execution_slots": 1,
+    "database_cpu": 2,
+    "database_memory_bytes": 2147483648,
+    "runner_tree_rss_bytes": 2147483648,
+    "database_access": "owned_exclusive_loopback_no_arbitrary_dsn",
+    "case_timeout_seconds": 600,
+    "execution_window_seconds": 14400,
+    "environment": "same_host_resources_versions_load_and_observer_both_arms"
+  },
+  "exit_rules": {
+    "stop_immediately": [
+      "safety_violation",
+      "resource_limit",
+      "identity_drift",
+      "out_of_scope"
+    ],
+    "non_adoption": [
+      "no_stable_benefit",
+      "regression",
+      "uncertainty"
+    ],
+    "preservation": "create_only_all_planned_failed_partial_missing_and_unassessed",
+    "reroll": false,
+    "case_replacement": false,
+    "lower_threshold_after_observation": false,
+    "fallback": "retain_baseline_default_no_candidate_deployment",
+    "candidate_binding_interleaving_and_measurement": "e64_e65_handoff_then_e7"
+  }
+}
