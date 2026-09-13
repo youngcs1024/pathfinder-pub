@@ -1,5 +1,6 @@
 """Preregistration integrity and offline/privacy boundaries; no candidate execution."""
 
+import io
 import json
 import socket
 from collections import Counter
@@ -213,14 +214,20 @@ def test_changed_source_bytes_are_rejected(monkeypatch, resource):
         "freeze": ROOT / "evals/datasets/quality_expanded_v1/freeze.json",
         "mapping": ROOT / "evals/datasets/quality_expanded_v1/mapping.json",
     }[resource]
-    read = Path.read_bytes
+    original_open = Path.open
+    injected = []
 
-    def changed(path):
-        return b"{}" if path == target else read(path)
+    def changed(path, *args, **kwargs):
+        if path == target:
+            injected.append(path)
+            return io.BytesIO(b"{}")
+        return original_open(path, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "read_bytes", changed)
+    # Both bounded dataset reads and read_bytes use open; assert the fault actually ran.
+    monkeypatch.setattr(Path, "open", changed)
     with pytest.raises(ExperimentPlanError):
         validate_experiment_plan(plan)
+    assert injected == [target]
 
 
 @pytest.mark.parametrize(
