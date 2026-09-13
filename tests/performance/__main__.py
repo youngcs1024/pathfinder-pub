@@ -8,19 +8,28 @@ from tests.performance.capacity import run_suite
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["capacity", "queue"])
-    parser.add_argument("--profile", required=True, choices=["capacity-e56-v1", "queue-e57-v1"])
+    parser.add_argument("command", choices=["capacity", "queue", "retrieval-scale"])
+    parser.add_argument(
+        "--profile", required=True, choices=["capacity-e56-v1", "queue-e57-v1", "retrieval-e58-v1"]
+    )
     parser.add_argument(
         "--authorization",
         required=True,
-        choices=["e56_local_capacity_user_approved_v1", "e57_local_queue_user_approved_v1"],
+        choices=[
+            "e56_local_capacity_user_approved_v1",
+            "e57_local_queue_user_approved_v1",
+            "e58_local_retrieval_user_approved_v1",
+        ],
     )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
         from tests.performance.queue import run_suite as run_queue
+        from tests.performance.retrieval_scale import run_suite as run_retrieval
 
-        execute = run_queue if args.command == "queue" else run_suite
+        execute = {"queue": run_queue, "capacity": run_suite, "retrieval-scale": run_retrieval}[
+            args.command
+        ]
         suite = execute(
             args.output, authorization=args.authorization, selected_profile=args.profile
         )

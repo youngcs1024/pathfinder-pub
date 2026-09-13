@@ -158,7 +158,7 @@ class QueueCallRecord(CallRecord):
 def publish(directory: Path, name: str, record: Contract) -> None:
     """No free-form exception, payload, path or target string enters an artifact."""
     try:
-        if not name.startswith(("metrics-", "capacity-", "queue-")) and (
+        if not name.startswith(("metrics-", "capacity-", "queue-", "retrieval-")) and (
             re.fullmatch(
                 r"(?:calls-(?:worker|ingest)-\d{3,4}-(?:started|finished)|smoke-(?:started|result)|call-profile|load-(?:manifest|started|result))\.json",
                 name,
@@ -176,6 +176,10 @@ def publish(directory: Path, name: str, record: Contract) -> None:
             raise ValueError("invalid_call_profile")
         if name.startswith("queue-"):
             from tests.performance.queue_contracts import validate_publication
+
+            validate_publication(name, record)
+        if name.startswith("retrieval-"):
+            from tests.performance.retrieval_contracts import validate_publication
 
             validate_publication(name, record)
         if name.startswith("metrics-"):

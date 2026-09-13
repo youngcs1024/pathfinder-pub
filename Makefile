@@ -273,3 +273,7 @@ benchmark-capacity: verify-toolchain
 .PHONY: benchmark-queue
 benchmark-queue: verify-toolchain
 	$(UV) run --locked python -m tests.performance queue --profile queue-e57-v1 --authorization "$(QUEUE_AUTHORIZATION)" --output "$(QUEUE_OUTPUT)"
+
+.PHONY: benchmark-retrieval
+benchmark-retrieval: verify-toolchain
+	$(UV) run --locked python -m tests.performance retrieval-scale --profile retrieval-e58-v1 --authorization "$(RETRIEVAL_AUTHORIZATION)" --output "$(RETRIEVAL_OUTPUT)"
