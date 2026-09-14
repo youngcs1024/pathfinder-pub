@@ -1,0 +1,219 @@
+{
+  "artifact_kind": "e7a_semantics_v1",
+  "source_commit": "b2337ef60793223852ed01b81b7baa218c59ae97",
+  "implementation_package_digest": "sha256:64aa45e24e93c458fb5f03bba5045fd075c97ef327bca9c05e28a20e8747620d",
+  "dataset_manifest_digest": "sha256:9066313e3bcccf0318cb136574ce0d2eb75c613199972f9d4a2338b4b90f11fb",
+  "dataset_cases_digest": "sha256:f02b70807b24c04b52bff8f954f40ce956f7fe0d9cb307b1df564bad3cc49b2e",
+  "accepted_baseline_digest": "sha256:d3c29c48b9f168ce47d9a9f413efebbb1996654811ba403c62dc77cc5f72bb19",
+  "policy": [
+    "sufficiency_relative_to_requested_task",
+    "known_skill_gap_allows_honest_draft",
+    "missing_information_remains_unknown",
+    "candidate_facts_from_allowed_resume",
+    "job_facts_from_allowed_job_sources",
+    "conflicting_no_automatic_followup",
+    "draft_eligibility_is_not_action_authorization",
+    "generation_slice_creates_no_action_or_approval",
+    "technical_failure_is_not_semantic_insufficiency",
+    "labels_never_enter_runtime",
+    "regressions_add_no_comparison_slots"
+  ],
+  "cases": [
+    {
+      "case_id": "e7a_unrelated_only",
+      "category": "unrelated_only",
+      "origin": "synthetic_regression",
+      "source_case_id": null,
+      "sources": [
+        {
+          "alias": "e7a_unrelated_resume",
+          "kind": "resume",
+          "digest": "sha256:4d5e9c16b578998f338ab11ea2dc6ddf926ee3a1483e64097542c5758990dc05"
+        }
+      ],
+      "old_evidence_sufficient": true,
+      "old_behavior": [
+        "nonempty_evidence_true",
+        "application_requires_draft_when_true"
+      ],
+      "observed_output_digest": null,
+      "observed_review_digest": null,
+      "expected_outcome": "insufficient",
+      "report_policy": [
+        "state_requested_facts_unknown"
+      ],
+      "draft_eligible": false,
+      "followup_policy": "retrievable_gap_once_within_shared_budget",
+      "forbidden_inferences": [
+        "infer_relevance_from_presence",
+        "invent_candidate_experience",
+        "infer_absence_from_missing_information"
+      ]
+    },
+    {
+      "case_id": "start_unknown",
+      "category": "partial_support",
+      "origin": "dev_code_characterization",
+      "source_case_id": "start_unknown",
+      "sources": [
+        {
+          "alias": "resume_start_unknown",
+          "kind": "resume",
+          "digest": "sha256:79772d0ca19405609f1d659c4021a8cd37c07abe66994c4dfe6b3a5d5d1a3fc8"
+        }
+      ],
+      "old_evidence_sufficient": true,
+      "old_behavior": [
+        "nonempty_evidence_true"
+      ],
+      "observed_output_digest": null,
+      "observed_review_digest": null,
+      "expected_outcome": "partial",
+      "report_policy": [
+        "report_supported_graduation",
+        "state_start_date_unknown"
+      ],
+      "draft_eligible": false,
+      "followup_policy": "retrievable_gap_once_within_shared_budget",
+      "forbidden_inferences": [
+        "infer_start_date_from_graduation",
+        "infer_unavailability_from_missing_date"
+      ]
+    },
+    {
+      "case_id": "pager_shadow",
+      "category": "claim_strength",
+      "origin": "e4_observed",
+      "source_case_id": "pager_shadow",
+      "sources": [
+        {
+          "alias": "resume_pager_shadow",
+          "kind": "resume",
+          "digest": "sha256:827f1af82a76035b663ab59272dd28e01806428b110b1dd36033609138784cdd"
+        }
+      ],
+      "old_evidence_sufficient": true,
+      "old_behavior": [
+        "nonempty_evidence_true",
+        "application_requires_draft_when_true",
+        "observed_overclaim"
+      ],
+      "observed_output_digest": "sha256:6daeecaf0a7e9949f4687794c889976ff369cbb64f4b04f19ca25ce85ebc0996",
+      "observed_review_digest": "sha256:52cdb50d37b2288d6997eb26b241e6c34670c5536d73986b0b14cd524c7e39de",
+      "expected_outcome": "sufficient",
+      "report_policy": [
+        "attribute_shadowing_and_timeline_only"
+      ],
+      "draft_eligible": true,
+      "followup_policy": "none",
+      "forbidden_inferences": [
+        "claim_independent_incident_response",
+        "claim_independent_recovery",
+        "infer_job_match_without_job_evidence"
+      ]
+    },
+    {
+      "case_id": "office_conflict",
+      "category": "material_conflict",
+      "origin": "e4_observed",
+      "source_case_id": "office_conflict",
+      "sources": [
+        {
+          "alias": "web_office_conflict",
+          "kind": "web",
+          "digest": "sha256:fe8b6ed15f287598eb0e8d27c7e17a6f531547c998765b6773ee786d64b371a5"
+        }
+      ],
+      "old_evidence_sufficient": true,
+      "old_behavior": [
+        "nonempty_evidence_true",
+        "observed_conflict_preserved"
+      ],
+      "observed_output_digest": "sha256:b9701c9fcea94c429cea3af85ce8af221f36fd8ac33f8ef7b2fa1f13a0e828f9",
+      "observed_review_digest": "sha256:bc94613f8034835dc30ac6d2aa0c0c2b6cfa2856018fb5ad461c4a75a469e24b",
+      "expected_outcome": "conflicting",
+      "report_policy": [
+        "present_unresolved_locations_and_sources"
+      ],
+      "draft_eligible": false,
+      "followup_policy": "none",
+      "forbidden_inferences": [
+        "arbitrarily_choose_location",
+        "invent_supersession",
+        "automatic_conflict_followup"
+      ]
+    },
+    {
+      "case_id": "e7a_resume_only",
+      "category": "legitimate_resume_only",
+      "origin": "synthetic_regression",
+      "source_case_id": null,
+      "sources": [
+        {
+          "alias": "e7a_resume_only_resume",
+          "kind": "resume",
+          "digest": "sha256:d370abb65da6445379cce5fd828ff8e3210a41558ff56b6e8ac5c864c01ce276"
+        }
+      ],
+      "old_evidence_sufficient": true,
+      "old_behavior": [
+        "nonempty_evidence_true",
+        "application_requires_draft_when_true"
+      ],
+      "observed_output_digest": null,
+      "observed_review_digest": null,
+      "expected_outcome": "sufficient",
+      "report_policy": [
+        "write_grounded_generic_draft"
+      ],
+      "draft_eligible": true,
+      "followup_policy": "none",
+      "forbidden_inferences": [
+        "blanket_refusal_without_web",
+        "invent_job_requirements",
+        "claim_precise_job_match"
+      ]
+    },
+    {
+      "case_id": "sharding_gap",
+      "category": "known_skill_gap",
+      "origin": "e4_observed",
+      "source_case_id": "sharding_gap",
+      "sources": [
+        {
+          "alias": "resume_sharding_gap",
+          "kind": "resume",
+          "digest": "sha256:fa8bdcf50fbe240e596c0ce93a0749194c6eaa89afe066517519ed00e6d9dc95"
+        },
+        {
+          "alias": "web_sharding_gap",
+          "kind": "web",
+          "digest": "sha256:e8bd155cf36884ca5bf93dfc553a3e05408dbf3dc822f507d1cbb6c264dc4179"
+        }
+      ],
+      "old_evidence_sufficient": true,
+      "old_behavior": [
+        "nonempty_evidence_true",
+        "application_requires_draft_when_true",
+        "observed_overclaim"
+      ],
+      "observed_output_digest": "sha256:c7639ff4ff897064cba287b723870e5336a8339656d92cecfff516cc10dcef4b",
+      "observed_review_digest": "sha256:31c18a0c8fd39b52f05d917a81ca2484f73bbbd59b7f0dab7ff4711e151417ee",
+      "expected_outcome": "sufficient",
+      "report_policy": [
+        "write_honest_draft_with_explicit_skill_gap"
+      ],
+      "draft_eligible": true,
+      "followup_policy": "none",
+      "forbidden_inferences": [
+        "claim_sharding_experience",
+        "equate_single_instance_with_sharding",
+        "blanket_refusal_for_known_skill_gap"
+      ]
+    }
+  ],
+  "verification_limit": "semantics_and_legacy_characterization_only",
+  "candidate_execution": "NOT_RUN",
+  "adoption": "NOT_RUN",
+  "deployment": "NOT_RUN"
+}
