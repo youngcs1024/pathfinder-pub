@@ -742,9 +742,18 @@ def test_budget_rejects_bypass_instances_and_model_control_fields():
         allocate_budget(usage(), stage="writer")
 
 
-def test_zero_research_allowance_means_stop_not_a_free_call():
-    allocation = allocate_budget(usage(tool_calls=(8, 0)), stage="research")
+@pytest.mark.parametrize(
+    "current",
+    [
+        usage(tool_calls=(8, 0)),
+        usage(plan_calls=2, research_calls=(3, 0), tool_calls=(8, 0)),
+    ],
+)
+def test_zero_research_allowance_means_stop_not_a_free_call(current):
+    allocation = allocate_budget(current, stage="research")
     assert allocation.model_calls == allocation.tool_calls == 0
+    assert allocation.reserved_model_calls == 3
+    assert allocate_budget(current, stage="assessment").model_calls == 1
     with pytest.raises(E7AContractError, match=r"^budget_exhausted$"):
         allocate_budget(usage(plan_calls=2), stage="plan")
     with pytest.raises(E7AContractError, match=r"^configuration_error$"):

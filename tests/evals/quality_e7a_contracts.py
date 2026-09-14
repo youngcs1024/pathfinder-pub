@@ -496,6 +496,10 @@ def allocate_budget(
         _fail("budget_exhausted")
     if stage == "assessment":
         return BudgetAllocation(1, reserved_model_calls=2)
+    if tools == 0:
+        # Exhausted retrieval must stop, not reserve a nonexistent followup tool.
+        # Assessment and the limited report can still use their protected calls.
+        return BudgetAllocation(0, reserved_model_calls=3)
     reserved_models, reserved_tools = 3, 0
     if pass_number == 1:
         entry_models = remaining + usage.research_calls[0]
