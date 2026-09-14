@@ -1,0 +1,381 @@
+{
+  "artifact_kind": "quality_experiment_implementation_v1",
+  "package_id": "e65_evidence_sufficiency_v1",
+  "source_commit": "662073d4965d2b85d25b74b4d1c6e06d647bcfcb",
+  "baseline_source_sha": "6ee09703fd19dd3f68813bb40f2b314fba512995",
+  "baseline_src_tree": "99d2c2195add7c2644fe4f8efd7f26d1337faa15",
+  "plan_path": "evals/experiments/e63-evidence-sufficiency-v1.json",
+  "plan_digest": "sha256:7e7ae136f40a1eb2f7d292fa0f6ddb191fbd2e0b9e95726e8f0a7755210284ff",
+  "impact_path": "evals/experiments/e64-evidence-sufficiency-impact-v1.json",
+  "impact_digest": "sha256:44aac606cb913af1afdb032615b8e381684f1c4d6c401017cf1077856c24794d",
+  "selected_branch": "A",
+  "experiment_only": true,
+  "candidate_graph_version": "pathfinder-research-e7a-exp-v1",
+  "candidate_output_contract": "e7a_research_output_v1",
+  "inherited_rules": [
+    "identity",
+    "capacity_evidence",
+    "samples",
+    "benefit",
+    "non_regression",
+    "review",
+    "budget",
+    "resources",
+    "exit_rules"
+  ],
+  "steps": [
+    {
+      "step": "E7-A.1",
+      "depends_on": [
+        "E6.5"
+      ],
+      "read_files": [
+        "evals/datasets/quality_expanded_v1/cases.jsonl",
+        "evals/baselines/quality/e410-agent-v1.json",
+        "src/app/agents/research_nodes.py"
+      ],
+      "modify_files": [],
+      "create_files": [
+        "evals/experiments/e7a-semantics-v1.json",
+        "tests/evals/test_quality_e7a_semantics.py"
+      ],
+      "deliverables": [
+        "five_cases_unrelated_partial_overclaim_conflict_resume_only",
+        "logical_source_ids_old_expected_and_forbidden_inference",
+        "existing_dev_cases_or_separate_synthetic_regression_not_new_comparison_slots",
+        "no_gold_in_runtime"
+      ],
+      "failure_paths": [
+        "missing_source",
+        "unsupported_inference",
+        "resume_only_blanket_refusal"
+      ],
+      "acceptance_commands": [
+        "make test-eval-contracts"
+      ],
+      "test_files": [
+        "tests/evals/test_quality_e7a_semantics.py"
+      ],
+      "handoffs": []
+    },
+    {
+      "step": "E7-A.2",
+      "depends_on": [
+        "E7-A.1"
+      ],
+      "read_files": [
+        "src/app/agents/research_contracts.py",
+        "src/app/domain/research.py",
+        "src/app/domain/runs.py"
+      ],
+      "modify_files": [],
+      "create_files": [
+        "tests/evals/quality_e7a_contracts.py",
+        "tests/evals/test_quality_e7a_contracts.py"
+      ],
+      "deliverables": [
+        "strict_assessment_and_experiment_output_types",
+        "four_outcomes_and_derived_boolean_consistency",
+        "actual_evidence_ids_and_bounded_gaps",
+        "reserve_assessor_followup_writer_within_shared_budget"
+      ],
+      "failure_paths": [
+        "reserved_context_fields",
+        "unknown_evidence_id",
+        "unbounded_gap",
+        "contradictory_output",
+        "budget_exhausted"
+      ],
+      "acceptance_commands": [
+        "make test-eval-contracts"
+      ],
+      "test_files": [
+        "tests/evals/test_quality_e7a_contracts.py"
+      ],
+      "handoffs": []
+    },
+    {
+      "step": "E7-A.3",
+      "depends_on": [
+        "E7-A.2"
+      ],
+      "read_files": [
+        "src/app/llm/factory.py",
+        "src/app/agents/prompting.py"
+      ],
+      "modify_files": [],
+      "create_files": [
+        "tests/evals/quality_e7a_assessment.py",
+        "tests/evals/prompts/e7a-assessment-v1.txt",
+        "tests/evals/test_quality_e7a_assessment.py"
+      ],
+      "deliverables": [
+        "factory_structured_assessment_once_per_pass",
+        "empty_evidence_deterministic_insufficient",
+        "versioned_prompt_hash_no_hidden_reasoning",
+        "technical_failure_and_cancellation_not_semantic_outcome"
+      ],
+      "failure_paths": [
+        "invalid_json",
+        "unknown_evidence_id",
+        "provider_timeout",
+        "cancellation",
+        "budget_exhausted",
+        "prompt_injection",
+        "body_or_secret_leak"
+      ],
+      "acceptance_commands": [
+        "make test-eval-contracts"
+      ],
+      "test_files": [
+        "tests/evals/test_quality_e7a_assessment.py"
+      ],
+      "handoffs": []
+    },
+    {
+      "step": "E7-A.4",
+      "depends_on": [
+        "E7-A.3"
+      ],
+      "read_files": [
+        "src/app/agents/research_graph.py",
+        "src/app/tools/registry.py"
+      ],
+      "modify_files": [],
+      "create_files": [
+        "tests/evals/quality_e7a_graph.py",
+        "tests/evals/test_quality_e7a_graph.py"
+      ],
+      "deliverables": [
+        "reuse_langgraph_factory_registry_narrow_ports",
+        "partial_insufficient_retrievable_gaps_only",
+        "conflicting_no_followup_no_arbitrary_resolution",
+        "one_followup_with_remaining_shared_budget",
+        "stable_query_and_evidence_dedup_no_new_evidence_stop"
+      ],
+      "failure_paths": [
+        "repeated_query",
+        "no_new_evidence",
+        "tool_timeout",
+        "cancellation",
+        "scope_expansion",
+        "new_tool_request",
+        "budget_exhausted"
+      ],
+      "acceptance_commands": [
+        "make test-eval-contracts"
+      ],
+      "test_files": [
+        "tests/evals/test_quality_e7a_graph.py"
+      ],
+      "handoffs": []
+    },
+    {
+      "step": "E7-A.5",
+      "depends_on": [
+        "E7-A.4"
+      ],
+      "read_files": [
+        "src/app/agents/research_nodes.py",
+        "src/app/domain/research.py",
+        "src/app/api/schemas/runs.py"
+      ],
+      "modify_files": [
+        "tests/evals/quality_e7a_graph.py"
+      ],
+      "create_files": [
+        "tests/evals/quality_e7a_writer.py",
+        "tests/evals/prompts/e7a-writer-v1.txt",
+        "tests/evals/test_quality_e7a_writer.py"
+      ],
+      "deliverables": [
+        "sufficient_grounded_valid_draft_eligible_not_authorized",
+        "partial_supported_facts_and_gaps_no_action",
+        "insufficient_explicit_unknowns_no_action",
+        "conflicting_sources_no_action",
+        "resume_only_allowed_without_invented_job_match",
+        "legitimate_limited_report_completed_not_application_success",
+        "generation_slice_creates_no_action_or_approval"
+      ],
+      "failure_paths": [
+        "ungrounded_draft",
+        "invalid_citation",
+        "contradictory_boolean",
+        "unnecessary_resume_refusal",
+        "technical_failure_masked_as_insufficiency"
+      ],
+      "acceptance_commands": [
+        "make test-eval-contracts"
+      ],
+      "test_files": [
+        "tests/evals/test_quality_e7a_writer.py"
+      ],
+      "handoffs": [
+        "semantic_scope_budget_and_legitimate_resume_regressions"
+      ]
+    },
+    {
+      "step": "E7-A.6",
+      "depends_on": [
+        "E7-A.5"
+      ],
+      "read_files": [
+        "src/app/db/models.py",
+        "src/app/db/runs.py",
+        "src/app/db/readiness.py",
+        "src/app/worker/langgraph_executor.py",
+        "tests/integration/db/test_quality_generation_pipeline.py"
+      ],
+      "modify_files": [
+        "tests/evals/quality_generation.py",
+        "tests/evals/quality_generation_support.py",
+        "tests/evals/quality_generation_fixtures.py",
+        "tests/evals/quality_run.py",
+        "tests/evals/test_quality_generation.py"
+      ],
+      "create_files": [
+        "tests/evals/quality_experiment_database.py",
+        "tests/evals/test_quality_experiment_database.py",
+        "tests/integration/db/test_quality_e7a_pipeline.py"
+      ],
+      "deliverables": [
+        "owned_disposable_handle_not_boolean_or_dsn",
+        "both_arms_identical_fixture_extend_only_runs_graph_check",
+        "new_run_job_and_tenant_facts_true_experiment_identity",
+        "postgres_result_json_authority_strict_test_reader",
+        "same_generation_slot_seam_baseline_default_preserved",
+        "no_global_version_patch_no_api_worker_or_persistent_checkpoint",
+        "explicit_fixture_schema_identity_not_production_readiness",
+        "factory_registry_postgres_accounting"
+      ],
+      "failure_paths": [
+        "foreign_handle_or_arbitrary_dsn",
+        "schema_drift",
+        "mislabelled_v6_run",
+        "invalid_candidate_result",
+        "persistence_failure",
+        "cross_workspace",
+        "accounting_failure",
+        "candidate_in_production_reader"
+      ],
+      "acceptance_commands": [
+        "make test-eval-contracts",
+        "make test-integration-core"
+      ],
+      "test_files": [
+        "tests/evals/test_quality_experiment_database.py",
+        "tests/evals/test_quality_generation.py",
+        "tests/integration/db/test_quality_e7a_pipeline.py"
+      ],
+      "handoffs": [
+        "owned_database_fixture_and_candidate_reader",
+        "separate_full_business_and_recovery_acceptance"
+      ]
+    },
+    {
+      "step": "E7-A.7",
+      "depends_on": [
+        "E7-A.6"
+      ],
+      "read_files": [
+        "tests/evals/quality_experiment.py",
+        "tests/evals/quality_experiment_impact.py",
+        "tests/evals/quality_compare.py",
+        "tests/evals/quality_score.py",
+        "tests/evals/quality_baseline_delegated.py"
+      ],
+      "modify_files": [
+        "tests/evals/quality_run.py"
+      ],
+      "create_files": [
+        "tests/evals/quality_experiment_binding.py",
+        "tests/evals/quality_experiment_execution.py",
+        "tests/evals/quality_experiment_resources.py",
+        "tests/evals/quality_experiment_decision.py",
+        "tests/evals/test_quality_experiment_binding.py",
+        "tests/evals/test_quality_experiment_execution.py",
+        "tests/evals/test_quality_experiment_resources.py",
+        "tests/evals/test_quality_experiment_decision.py",
+        "tests/integration/db/test_quality_experiment_execution.py"
+      ],
+      "deliverables": [
+        "create_only_binding_before_first_run_real_git_objects_and_import_origin",
+        "freeze_shared_harness_identity_baseline_src_and_candidate_code_allowed_diff",
+        "same_harness_both_arms_isolated_imports_single_active_slot",
+        "existing_quality_run_entry_dispatches_fixed_144_slots",
+        "per_arm_persistent_budget_includes_ingestion_retry_failure",
+        "same_observer_and_owned_db_resources_e63_limits",
+        "reuse_frozen_rubric_digest_bound_arm_hidden_agent_review",
+        "evaluate_all_e63_benefit_non_regression_resource_and_safety_rules",
+        "preserve_planned_failed_partial_missing_unassessed_cleanup_failure",
+        "decision_is_experiment_recommendation_not_baseline_acceptance_or_deployment"
+      ],
+      "failure_paths": [
+        "source_or_environment_drift",
+        "dirty_or_unresolved_source",
+        "wrong_import_origin",
+        "slot_order_duplicate_missing",
+        "cross_arm_budget_transfer",
+        "resource_limit",
+        "unknown_cost_or_missing_measurement",
+        "unresolved_review_disagreement",
+        "safety_regression",
+        "cleanup_failure",
+        "no_stable_benefit"
+      ],
+      "acceptance_commands": [
+        "make test-eval-contracts",
+        "make test-integration-core"
+      ],
+      "test_files": [
+        "tests/evals/test_quality_experiment_binding.py",
+        "tests/evals/test_quality_experiment_execution.py",
+        "tests/evals/test_quality_experiment_resources.py",
+        "tests/evals/test_quality_experiment_decision.py",
+        "tests/integration/db/test_quality_experiment_execution.py"
+      ],
+      "handoffs": [
+        "real_source_binding_and_reviewed_allowed_diff",
+        "cross_source_paired_slot_execution",
+        "resource_collection_and_budget_enforcement",
+        "adoption_rule_execution_and_failure_retention"
+      ]
+    }
+  ],
+  "shared_modify_files": [
+    ".github/public-files.json"
+  ],
+  "file_policy": "exact_paths_create_at_own_step_no_future_placeholders",
+  "authorization": "package_registration_only_each_step_separately_authorized",
+  "manual_gates": [
+    "separate_live_material_resource_budget_and_run_authorization",
+    "actual_candidate_source_binding_after_implementation",
+    "digest_bound_review_no_fabricated_human_labels",
+    "separate_production_implementation_acceptance_and_deployment"
+  ],
+  "forbidden": [
+    "production_source_or_api_changes",
+    "production_migration_or_new_tables",
+    "production_dependency_or_lock_changes",
+    "new_runtime_root_or_second_worker",
+    "branches_b_c_d_or_j",
+    "old_dataset_rubric_manifest_baseline_rewrite",
+    "arbitrary_dsn_or_shared_service_fault_injection",
+    "unapproved_live_or_private_upload",
+    "automatic_acceptance_deployment_or_e8_execution",
+    "file_deletion_or_evidence_reroll"
+  ],
+  "production_followup": [
+    "new_graph_and_output_union_api_ui_executor_prompt_fake_alignment",
+    "actual_alembic_head_orm_readiness_release_backup_restore_alignment_if_needed",
+    "old_results_readable_nonterminal_drain_and_executing_reconciliation",
+    "exact_approval_cancellation_revocation_unknown_and_interrupt_resume_budget_tests",
+    "compatible_rollback_no_checkpoint_or_audit_loss"
+  ],
+  "verification_limit": "implementation_registration_only",
+  "execution_readiness": "NOT_VERIFIED",
+  "candidate_execution": "NOT_RUN",
+  "adoption": "NOT_RUN",
+  "deployment": "NOT_RUN",
+  "next_step": "E7-A.1"
+}
