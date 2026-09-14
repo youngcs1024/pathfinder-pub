@@ -266,14 +266,21 @@ async def test_sufficient_without_designated_resume_fails():
         await call(node, context)
 
 
-async def test_invalid_input_fails_before_provider_and_usage():
+@pytest.mark.parametrize("malformed", [True, False])
+async def test_invalid_input_fails_before_provider_and_usage(malformed):
     context = context_for()
-    context = replace(
-        context, evidence=(context.evidence[0].model_copy(update={"source_id": "forged"}),)
-    )
+    if malformed:
+        context = replace(
+            context, evidence=(context.evidence[0].model_copy(update={"source_id": "forged"}),)
+        )
+        category = "invalid_schema"
+    else:
+        # Self-consistent document identity, but no delivered source resolves it.
+        context = replace(context, sources=())
+        category = "invalid_evidence_reference"
     node, adapter, _, _ = setup(response())
     published = []
-    with pytest.raises(E7AAssessmentError, match="invalid_evidence_reference"):
+    with pytest.raises(E7AAssessmentError, match=category):
         await call(node, context, published=published)
     assert not adapter.calls and not published
 
