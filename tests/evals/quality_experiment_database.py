@@ -134,6 +134,18 @@ def validate_graph_check(snapshot, versions):
         _fail("schema_drift")
 
 
+def require_local_docker_host(host):
+    # Resolve Testcontainers' environment/context selection before it opens a client.
+    if host is not None and (
+        type(host) is not str
+        or not host.startswith("unix:///")
+        or "\x00" in host
+        or "?" in host
+        or "#" in host
+    ):
+        _fail("unsafe_binding")
+
+
 class OwnedDatabaseHandle:
     __slots__ = ("_owner", "_pid")
 
@@ -237,7 +249,9 @@ class OwnedExperimentDatabase:
         try:
             from testcontainers.community.postgres import PostgresContainer
             from testcontainers.core.container import DockerContainer
+            from testcontainers.core.docker_client import get_docker_host
 
+            require_local_docker_host(get_docker_host())
             password = uuid4().hex
             self._container = PostgresContainer(
                 POSTGRES_IMAGE,

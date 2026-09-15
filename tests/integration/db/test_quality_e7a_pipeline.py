@@ -105,6 +105,7 @@ async def test_owned_candidate_persists_four_outcomes_and_real_accounting(owned,
         raw = row.result_json
         assert row.graph_version == GRAPH_VERSION and row.status == "completed"
         assert row.limits_json == dict(DEFAULT_RUN_LIMITS)
+        assert await session.scalar(text("SELECT to_regclass('public.checkpoints')")) is None
         assert raw["assessment"]["outcome"] == outcome
         assert (raw["application_draft"] is not None) == (outcome == "sufficient")
         assert await session.scalar(select(func.count()).select_from(ActionIntent)) == 0
@@ -200,7 +201,17 @@ async def test_tenant_reader_and_schema_drift_fail_closed(owned, tmp_path):
         await owner.read_result(foreign, fixture, context=context)
     async with owner._sessions.begin() as session:
         await session.execute(
-            update(Run).where(Run.id == fixture.run_id).values(graph_version=CURRENT_GRAPH_VERSION)
+            update(Run)
+            .where(Run.id == fixture.run_id)
+            .values(result_json={**raw, "evidence_sufficient": False})
+        )
+    with pytest.raises(ExperimentDatabaseError, match="invalid_result"):
+        await owner.read_result(state.tenant, fixture, context=context)
+    async with owner._sessions.begin() as session:
+        await session.execute(
+            update(Run)
+            .where(Run.id == fixture.run_id)
+            .values(result_json=raw, graph_version=CURRENT_GRAPH_VERSION)
         )
     with pytest.raises(ExperimentDatabaseError, match="invalid_run"):
         await owner.read_result(state.tenant, fixture, context=context)
@@ -298,3 +309,32 @@ async def test_budget_stops_during_ingestion_and_retains_unexecuted_slots(owned,
     )
     assert report.stop_reason == "budget" and report.not_run == 2
     assert report.total_usage.provider_attempts == 1 and not report.measurement_complete
+
+
+async def test_cancellation_during_result_commit_retains_slot_and_accounting(
+    owned, tmp_path, monkeypatch
+):
+    owner = require_owned_database(owned)
+    state = await prepare_quality_generation(owned_database=owned, **args_for(tmp_path))
+    original = owner.finish_run
+    attempted = False
+
+    async def interrupt(*args, **kwargs):
+        nonlocal attempted
+        if not attempted:
+            attempted = True
+            raise asyncio.CancelledError
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(owner, "finish_run", interrupt)
+    with pytest.raises(asyncio.CancelledError):
+        await run_quality_generation_slot(state, 0)
+    with pytest.raises(asyncio.CancelledError):
+        await finish_quality_generation(state)
+    report = ExperimentGenerationReportV1.model_validate_json(
+        (tmp_path / "candidate/report.json").read_bytes()
+    )
+    assert report.failed == 1 and report.not_run == 0 and report.stop_reason == "cancelled"
+    assert report.cases[0].observation.provider_attempts > 0
+    async with owner._sessions() as session:
+        assert (await session.get(Run, state.runs[0].run_id)).status == "cancelled"

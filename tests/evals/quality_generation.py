@@ -523,6 +523,10 @@ class GenerationSession:
     cancellation: BaseException | None = None
     active: bool = False
     closed: bool = False
+    active_tools: object = None
+    active_run: object = None
+    active_guard: GenerationGuard | None = None
+    active_started: float = 0.0
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -804,6 +808,7 @@ async def _execute_generation_slot(state, index):
     slot = manifest.execution_order[index]
     case = state.cases[slot.case_id]
     case_guard = GenerationGuard(guard.markers)
+    state.active_guard = case_guard
     tools = None
     graph_input = None
     output = None
@@ -813,6 +818,7 @@ async def _execute_generation_slot(state, index):
     timed_out = False
     rejected = case.scope_expectation == "reject"
     started = monotonic()
+    state.active_started = started
     prefix = f"case.{index}."
     try:
         if rejected:
@@ -828,6 +834,7 @@ async def _execute_generation_slot(state, index):
                 graph_input = await state.owner.create_run(
                     tenant, payload, document_id, policy.case_timeout_seconds, arm=state.arm
                 )
+            state.active_run = graph_input
             context = LLMInvocationContext(
                 tenant.workspace_id, tenant.actor_user_id, run_id=graph_input.run_id
             )
@@ -877,6 +884,7 @@ async def _execute_generation_slot(state, index):
                 prefix,
                 recorder,
             )
+            state.active_tools = tools
             authorize = None
             if state.owner is not None:
 
@@ -1212,6 +1220,9 @@ async def execute_generation_slot(state, index):
     if state.owner is not None:
         state.owner.claim_slot(token)
     state.active = True
+    state.active_run = state.active_tools = None
+    state.active_guard = GenerationGuard(state.guard.markers)
+    state.active_started = monotonic()
     try:
         if state.owner is not None:
             await state.owner.verify()
@@ -1219,14 +1230,49 @@ async def execute_generation_slot(state, index):
             return await _execute_generation_slot(state, index)
     except asyncio.CancelledError as error:
         state.cancellation, state.stop = error, "cancelled"
+        await _preserve_interrupted_slot(state, index)
         raise
     except Exception:
         state.stop = "integrity"
+        await _preserve_interrupted_slot(state, index)
         raise
     finally:
         state.active = False
         if state.owner is not None:
             state.owner.release_slot(token)
+
+
+async def _preserve_interrupted_slot(state, index):
+    """Unexpected cancellation during post-graph I/O must retain usage and its slot."""
+    if state.active_run is not None:
+        state.runs[index] = state.active_run
+        try:
+            if state.owner is not None:
+                await state.owner.finish_run(state.tenant, state.active_run, None, state.stop)
+            else:
+                await _finish_test_run(
+                    state.sessions, state.tenant, state.active_run.run_id, None, state.stop
+                )
+        except (Exception, asyncio.CancelledError):
+            # Commit acknowledgement may be unknown; do not overwrite terminal facts.
+            state.active_guard.integrity_failed = True
+            state.stop = "integrity"
+    if len(state.results) == index:
+        files = {f.name: f.digest for f in state.artifacts.files}
+        state.results.append(
+            _case_observation(
+                state.manifest,
+                index,
+                state.recorder,
+                executed=True,
+                failure=state.stop,
+                guard=state.active_guard,
+                tools=state.active_tools,
+                elapsed=monotonic() - state.active_started,
+                digest=files.get(f"output-{index:04d}.json"),
+                private_digest=files.get(f"case-{index:04d}.json"),
+            )
+        )
 
 
 async def run_generation(sessions: AsyncSessionFactory | None = None, **kwargs):

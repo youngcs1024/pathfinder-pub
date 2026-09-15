@@ -245,3 +245,18 @@ async def test_cleanup_rejects_foreign_container_and_retains_failure(monkeypatch
     assert owner.cleanup_failed and not stopped
     with pytest.raises(ExperimentDatabaseError, match="invalid_handle"):
         require_owned_database(handle)
+
+
+@pytest.mark.parametrize(
+    "host", ["tcp://127.0.0.1:2375", "ssh://remote", "http://remote", "unix://remote/socket", True]
+)
+def test_remote_docker_context_rejected_before_client_creation(host):
+    with pytest.raises(ExperimentDatabaseError, match="unsafe_binding"):
+        module.require_local_docker_host(host)
+
+
+@pytest.mark.parametrize(
+    "host", [None, "unix:///var/run/docker.sock", "unix:///run/user/1000/docker.sock"]
+)
+def test_local_unix_docker_context_allowed(host):
+    module.require_local_docker_host(host)
