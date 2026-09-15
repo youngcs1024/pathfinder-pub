@@ -126,8 +126,14 @@ class _QualityAttemptRecorder(LiveAttemptRecorder):
 
     failed_logical_call: str | None = None
 
+    def __init__(self, delegate, manifest, *, experiment_hooks=None):
+        super().__init__(delegate, manifest)
+        self.experiment_hooks = experiment_hooks
+
     async def prepare(self, attempt):
         try:
+            if self.experiment_hooks is not None:
+                await self.experiment_hooks.before_attempt(attempt)
             await super().prepare(attempt)
         except BaseException:
             self.failed_logical_call = CURRENT_LOGICAL_CALL.get()
@@ -136,6 +142,8 @@ class _QualityAttemptRecorder(LiveAttemptRecorder):
     async def finalize(self, attempt, outcome):
         try:
             await super().finalize(attempt, outcome)
+            if self.experiment_hooks is not None:
+                await self.experiment_hooks.after_attempt(attempt, outcome)
         except BaseException:
             self.failed_logical_call = CURRENT_LOGICAL_CALL.get()
             raise
@@ -687,3 +695,14 @@ async def run_quality_retrieval(
     if cancellation is not None:
         raise cancellation from None
     return report
+
+
+def experiment_main(argv=None):
+    """Explicit experiment commands; import/default retrieval never starts a process."""
+    from tests.evals.quality_experiment_execution import main
+
+    return main(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(experiment_main())

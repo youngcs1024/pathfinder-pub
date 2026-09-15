@@ -376,3 +376,52 @@ async def test_factory_observation_spans_nodes_and_preserves_retry_grouping():
         )
     assert seen == ["case.0.chat.1", "case.0.chat.1", "case.0.chat.2"]
     assert observed.count == 2
+
+
+async def test_experiment_hook_requires_owned_handle_before_any_io(tmp_path):
+    from tests.evals.quality_generation import prepare_generation_session
+
+    args = generation_inputs(tmp_path / "output", tmp_path / "private", selected=["mixed_alpha"])
+    with pytest.raises(QualityGenerationError, match="experiment_hooks_require_owned_database"):
+        await prepare_generation_session(experiment_hooks=object(), **args)
+    assert not (tmp_path / "output").exists()
+
+
+def test_followup_reference_diagnostic_is_shared_and_body_free():
+    from types import SimpleNamespace as NS
+
+    from tests.evals.quality_generation import _experiment_graph_statistics
+
+    searches = [
+        NS(research_pass_number=1, results=[NS(source_id="first")]),
+        NS(research_pass_number=2, results=[NS(source_id="first"), NS(source_id="second")]),
+    ]
+    docs = [NS(research_pass_number=2, chunk_ids=("chunk-one",))]
+    result = _experiment_graph_statistics(searches, docs)
+    assert result == {
+        "followup_tool_calls": 2,
+        "new_returned_references": 2,
+        "candidate_pass_summaries": [],
+    }
+    assert "first" not in json.dumps(result) and "chunk-one" not in json.dumps(result)
+
+
+async def test_experiment_recorder_preserves_prepare_and_finalize_failure_boundaries():
+    from types import SimpleNamespace as NS
+
+    from tests.evals.quality_run import _QualityAttemptRecorder
+
+    calls = []
+
+    class Hooks:
+        async def before_attempt(self, attempt):
+            calls.append("before")
+            raise ValueError("content must not escape")
+
+        async def after_attempt(self, attempt, outcome):
+            calls.append("after")
+
+    recorder = _QualityAttemptRecorder(NS(), NS(), experiment_hooks=Hooks())
+    with pytest.raises(ValueError):
+        await recorder.prepare(NS())
+    assert calls == ["before"] and not recorder.attempts

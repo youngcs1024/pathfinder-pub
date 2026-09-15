@@ -527,6 +527,7 @@ class GenerationSession:
     active_run: object = None
     active_guard: GenerationGuard | None = None
     active_started: float = 0.0
+    experiment_hooks: object = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -557,6 +558,7 @@ async def prepare_generation_session(
     sensitive_markers: tuple[str, ...] = (),
     owned_database=None,
     arm: str = "baseline",
+    experiment_hooks=None,
 ) -> GenerationSession:
     """Manual caller must own the disposable database exclusively; no concurrent worker.
 
@@ -572,6 +574,8 @@ async def prepare_generation_session(
         sessions = owner._sessions
     if arm not in {"baseline", "candidate"} or (arm == "candidate" and owner is None):
         raise QualityGenerationError("invalid_generation_arm")
+    if experiment_hooks is not None and owner is None:
+        raise QualityGenerationError("experiment_hooks_require_owned_database")
     graph_version = GRAPH_VERSION if arm == "candidate" else CURRENT_GRAPH_VERSION
     guard = GenerationGuard(secret_markers(sensitive_markers))
     try:
@@ -690,7 +694,9 @@ async def prepare_generation_session(
                 }
             )
         )
-        recorder = _QualityAttemptRecorder(delegate, admission)
+        if experiment_hooks is not None:
+            experiment_hooks.bind(owned_database, manifest, policy)
+        recorder = _QualityAttemptRecorder(delegate, admission, experiment_hooks=experiment_hooks)
         factory = replace(factory, recorder=recorder, trace_sink=NoOpTraceSink())
         artifacts = GenerationArtifacts.reserve(
             output_dir, private_root, manifest.experiment_id, guard, PROJECT_ROOT
@@ -714,6 +720,7 @@ async def prepare_generation_session(
         repository=repository,
         owner=owner,
         arm=arm,
+        experiment_hooks=experiment_hooks,
     )
     token = object()
     if owner is not None:
@@ -814,6 +821,7 @@ async def _execute_generation_slot(state, index):
     output = None
     evidence = None
     output_digest = private_digest = None
+    graph_statistics = None
     failure = None
     timed_out = False
     rejected = case.scope_expectation == "reject"
@@ -945,6 +953,11 @@ async def _execute_generation_slot(state, index):
                         json.dumps(raw["payload"], allow_nan=False), strict=True
                     )
                     output = generated.output
+                    graph_statistics = _experiment_graph_statistics(
+                        generated.research_state.research.search_calls,
+                        generated.research_state.research.document_retrieval_calls,
+                        summaries=generated.research_state.summaries,
+                    )
                     evidence = evidence_context(generated.research_state, scope)
                 else:
                     graph = build_research_state_graph(
@@ -976,7 +989,11 @@ async def _execute_generation_slot(state, index):
                             tool_runtime=tools, agent_loop_control=control
                         ),
                     )
-                    output = ResearchGraphOutputStateV1.model_validate_json(json.dumps(raw)).output
+                    parsed = ResearchGraphOutputStateV1.model_validate_json(json.dumps(raw))
+                    output = parsed.output
+                    graph_statistics = _experiment_graph_statistics(
+                        parsed.search_calls, parsed.document_retrieval_calls
+                    )
             if _stop_category(recorder) == "cancelled":
                 raise asyncio.CancelledError
             case_guard.scan(output.model_dump_json())
@@ -1133,6 +1150,8 @@ async def _execute_generation_slot(state, index):
     )
     state.results.append(result)
     artifacts.write(f"case-{index:04d}.json", result)
+    if state.experiment_hooks is not None:
+        state.experiment_hooks.record_slot(index, result, graph_statistics)
     stop = _global_failure(case_guard, recorder)
     if failure in {"configuration", "integrity", "safety", "cancelled", "budget"}:
         stop = failure
@@ -1289,3 +1308,25 @@ async def run_generation(sessions: AsyncSessionFactory | None = None, **kwargs):
     except Exception:
         state.stop = state.stop or "integrity"
     return await finish_generation_session(state)
+
+
+def _experiment_graph_statistics(search_calls, document_calls, *, summaries=()):
+    """Identical returned-reference diagnostic for both arms; never claim entailment.
+
+    Count pass-two tools with newly returned source/chunk identities. Candidate graph
+    content-dedup summaries are additional diagnostics, not substituted into that ratio.
+    No raw identity, query, evidence or reasoning is exported.
+    """
+    first, second = set(), set()
+    pass_two = 0
+    for kind, calls in (("web", search_calls), ("document", document_calls)):
+        for call in calls:
+            ids = tuple(x.source_id for x in call.results) if kind == "web" else call.chunk_ids
+            target = first if call.research_pass_number == 1 else second
+            target.update((kind, str(x)) for x in ids)
+            pass_two += call.research_pass_number == 2
+    return {
+        "followup_tool_calls": pass_two,
+        "new_returned_references": len(second - first),
+        "candidate_pass_summaries": [x.model_dump(mode="json") for x in summaries],
+    }
