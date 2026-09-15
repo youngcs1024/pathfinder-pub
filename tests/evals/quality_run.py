@@ -84,7 +84,7 @@ SUITE_VERSION = "quality-retrieval-v1"
 NO_CHAT_PROMPT_DIGEST = quality_digest(b"quality-retrieval-v1:no-chat-prompt")
 
 
-async def run_quality_generation(sessions: AsyncSessionFactory, **kwargs):
+async def run_quality_generation(sessions: AsyncSessionFactory | None = None, **kwargs):
     """Manual generation entry; keyword contract is documented by run_generation.
 
     A local import keeps existing retrieval imports and historical suite behavior stable.
@@ -92,6 +92,25 @@ async def run_quality_generation(sessions: AsyncSessionFactory, **kwargs):
     from tests.evals.quality_generation import run_generation
 
     return await run_generation(sessions, **kwargs)
+
+
+async def prepare_quality_generation(sessions: AsyncSessionFactory | None = None, **kwargs):
+    """Prepare once; an authorized caller can interleave whole slots across arms."""
+    from tests.evals.quality_generation import prepare_generation_session
+
+    return await prepare_generation_session(sessions, **kwargs)
+
+
+async def run_quality_generation_slot(session, index: int):
+    from tests.evals.quality_generation import execute_generation_slot
+
+    return await execute_generation_slot(session, index)
+
+
+async def finish_quality_generation(session):
+    from tests.evals.quality_generation import finish_generation_session
+
+    return await finish_generation_session(session)
 
 
 class QualityRetrievalError(Exception):

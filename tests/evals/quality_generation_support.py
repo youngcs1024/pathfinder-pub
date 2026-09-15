@@ -7,6 +7,9 @@ import os
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
+
+from pydantic import Field, model_validator
 
 from tests.evals.contracts import TRUSTED_CONTEXT_CANARY
 from tests.evals.live_chat import FOREIGN_WORKSPACE_CANARY, SECRET_CANARY
@@ -22,6 +25,36 @@ from tests.evals.quality_contracts import (
     QualitySafetyCountsV1,
 )
 from tests.evals.quality_dataset import quality_digest
+
+
+class ExperimentGenerationStartV1(QualityGenerationStartV1):
+    artifact_contract: Literal["e7a-generation-start-v1"] = "e7a-generation-start-v1"
+    arm: Literal["baseline", "candidate"]
+    fixture_version: Literal["e7a-generation-database-v1"]
+    schema_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    production_schema: Literal[False] = False
+    output_contract: Literal["research_output_v2", "e7a_research_output_v1"]
+    assessment_policy_version: Literal["e7a-evidence-assessment-v1"] | None
+    assessment_prompt_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def arm_identity(self):
+        candidate = self.arm == "candidate"
+        if (
+            self.manifest.graph_version
+            != ("pathfinder-research-e7a-exp-v1" if candidate else "pathfinder-research-v6")
+            or self.output_contract
+            != ("e7a_research_output_v1" if candidate else "research_output_v2")
+            or (self.assessment_policy_version is not None) != candidate
+            or (self.assessment_prompt_digest is not None) != candidate
+        ):
+            raise ValueError("invalid experiment identity")
+        return self
+
+
+class ExperimentGenerationReportV1(QualityGenerationReportV1):
+    artifact_contract: Literal["e7a-generation-report-v1"] = "e7a-generation-report-v1"
+    start: ExperimentGenerationStartV1
 
 
 class QualityGenerationError(Exception):
@@ -90,12 +123,16 @@ def checked_directory(path: Path, *, private: bool = True) -> Path:
 
 
 PUBLIC_TYPES = (
+    ExperimentGenerationStartV1,
+    ExperimentGenerationReportV1,
     QualityGenerationStartV1,
     QualityGenerationCaseV1,
     QualityGenerationReportV1,
     QualityRetrievalRepresentationV1,
 )
 PRIVATE_TYPES = (
+    ExperimentGenerationStartV1,
+    ExperimentGenerationReportV1,
     QualityGenerationStartV1,
     QualityPrivateSourcesV1,
     QualityPrivateCaseV1,

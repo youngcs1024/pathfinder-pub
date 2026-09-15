@@ -270,3 +270,109 @@ async def test_observed_tool_integrity_failure_blocks_later_model_call():
     model = _ObservedChat(Model(), guard, "case.0.", Recorder())
     with pytest.raises(QualityGenerationError, match="generation_integrity_stopped"):
         await model.invoke((), (), {"graph_node": "plan"})
+
+
+@pytest.mark.parametrize("value", [None, True, "postgresql://localhost/test"])
+async def test_candidate_requires_owned_handle_before_publication(tmp_path, value):
+    args = generation_inputs(tmp_path / "public", tmp_path / "private", arm="candidate")
+    args["owned_database"] = value
+    with pytest.raises(Exception) as error:
+        await run_quality_generation(None, **args)
+    assert type(error.value).__name__ in {"QualityGenerationError", "ExperimentDatabaseError"}
+    assert not (tmp_path / "public").exists()
+
+
+def test_candidate_identity_distinct_legacy_configuration_unchanged():
+    from tests.evals.quality_generation import (
+        generation_configuration_digest,
+        generation_prompt_digest,
+    )
+    from tests.evals.quality_generation_fixtures import generation_factory
+
+    factory = generation_factory()
+    baseline = generation_inputs(None, None, factory=factory)
+    candidate = generation_inputs(None, None, factory=factory, arm="candidate")
+    assert baseline["manifest"].graph_version == "pathfinder-research-v6"
+    assert candidate["manifest"].graph_version == "pathfinder-research-e7a-exp-v1"
+    assert generation_prompt_digest() == generation_prompt_digest(arm="baseline")
+    assert (
+        generation_configuration_digest(baseline["policy"], factory)
+        == baseline["manifest"].configuration_digest
+    )
+    assert candidate["manifest"].configuration_digest != baseline["manifest"].configuration_digest
+    assert candidate["manifest"].prompt_digest != baseline["manifest"].prompt_digest
+
+
+@pytest.mark.parametrize(
+    "index,changes",
+    [
+        (0, {"closed": True}),
+        (0, {"active": True}),
+        (0, {"stop": "integrity"}),
+        (True, {}),
+        (1, {}),
+        (-1, {}),
+    ],
+)
+async def test_slot_admission_rejects_before_execution(index, changes):
+    from types import SimpleNamespace
+
+    from tests.evals.quality_generation import execute_generation_slot
+
+    state = SimpleNamespace(
+        closed=False,
+        active=False,
+        stop=None,
+        complete_representation=True,
+        results=[],
+        manifest=SimpleNamespace(execution_order=[object()]),
+    )
+    for key, value in changes.items():
+        setattr(state, key, value)
+    with pytest.raises(QualityGenerationError, match="generation_slot_unavailable"):
+        await execute_generation_slot(state, index)
+
+
+async def test_factory_observation_spans_nodes_and_preserves_retry_grouping():
+    from dataclasses import fields
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.llm.factory import LLMFactory
+    from app.llm.invocations import LLMInvocationContext
+    from app.llm.ports import ChatModelResult, ProviderAdapterError
+    from tests.evals.live_chat import CURRENT_LOGICAL_CALL
+    from tests.evals.quality_generation import _GenerationFactory, _ObservedChat
+    from tests.evals.quality_generation_fixtures import generation_factory
+    from tests.evals.test_quality_e7a_assessment import Adapter
+    from tests.unit.llm.test_factory import CHAT_MESSAGES, CHAT_METADATA
+
+    seen = []
+
+    class RetryAdapter(Adapter):
+        async def invoke(self, messages, tools, metadata, *, attempt):
+            seen.append(CURRENT_LOGICAL_CALL.get())
+            return await super().invoke(messages, tools, metadata, attempt=attempt)
+
+    adapter = RetryAdapter(
+        ProviderAdapterError(category="provider_timeout", retryable=True),
+        ChatModelResult(content="ok"),
+        ChatModelResult(content="ok"),
+    )
+    factory = generation_factory(adapter)
+    context = LLMInvocationContext(uuid4(), uuid4(), run_id=uuid4())
+    observed = _ObservedChat(
+        factory.create_chat_model(context),
+        GenerationGuard(),
+        "case.0.",
+        SimpleNamespace(stop_reason=None),
+    )
+    wrapper = _GenerationFactory(
+        **{f.name: getattr(factory, f.name) for f in fields(LLMFactory)}, observed_chat=observed
+    )
+    for node in ("evidence_assessment", "write_report"):
+        await wrapper.create_chat_model(context).invoke(
+            CHAT_MESSAGES, (), {**CHAT_METADATA, "graph_node": node}
+        )
+    assert seen == ["case.0.chat.1", "case.0.chat.1", "case.0.chat.2"]
+    assert observed.count == 2

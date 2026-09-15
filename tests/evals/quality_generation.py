@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -91,7 +91,27 @@ from tests.evals.quality_dataset import (
     validate_quality_mapping,
     validate_quality_run,
 )
+from tests.evals.quality_e7a_assessment import load_assessment_prompt
+from tests.evals.quality_e7a_contracts import ASSESSMENT_POLICY_VERSION, OUTPUT_CONTRACT
+from tests.evals.quality_e7a_graph import (
+    GRAPH_VERSION,
+    E7AGenerationResultV1,
+    E7AGraphError,
+    E7AGraphRuntime,
+    E7ASourceScope,
+    E7AUsageOwner,
+    build_e7a_generation_graph,
+    evidence_context,
+)
+from tests.evals.quality_e7a_writer import load_writer_prompt as load_e7a_writer_prompt
+from tests.evals.quality_experiment_database import (
+    FIXTURE_VERSION,
+    ExperimentDatabaseError,
+    require_owned_database,
+)
 from tests.evals.quality_generation_support import (
+    ExperimentGenerationReportV1,
+    ExperimentGenerationStartV1,
     GenerationArtifacts,
     GenerationGuard,
     GenerationSafetyError,
@@ -104,8 +124,19 @@ from tests.evals.quality_run import _QualityAttemptRecorder, _representation, _s
 GENERATION_SUITE_VERSION = "quality-generation-v1"
 
 
-def generation_prompt_digest() -> str:
+def generation_prompt_digest(*, arm="baseline") -> str:
     versions = runtime_version_metadata()
+    if arm == "candidate":
+        return quality_identity_digest(
+            [
+                versions.plan_prompt_version,
+                versions.research_prompt_version,
+                load_assessment_prompt().version,
+                load_e7a_writer_prompt().version,
+            ]
+        )
+    if arm != "baseline":
+        raise QualityGenerationError("invalid_generation_arm")
     return quality_identity_digest(
         [
             versions.plan_prompt_version,
@@ -115,7 +146,21 @@ def generation_prompt_digest() -> str:
     )
 
 
-def generation_configuration_digest(policy: QualityGenerationPolicyV1, factory: LLMFactory) -> str:
+def generation_configuration_digest(
+    policy: QualityGenerationPolicyV1, factory: LLMFactory, *, arm="baseline"
+) -> str:
+    if arm == "candidate":
+        return quality_identity_digest(
+            {
+                "baseline_configuration": generation_configuration_digest(policy, factory),
+                "graph_version": GRAPH_VERSION,
+                "output_contract": OUTPUT_CONTRACT,
+                "assessment_policy_version": ASSESSMENT_POLICY_VERSION,
+                "prompt_digest": generation_prompt_digest(arm=arm),
+            }
+        )
+    if arm != "baseline":
+        raise QualityGenerationError("invalid_generation_arm")
     return quality_identity_digest(
         {
             "suite": GENERATION_SUITE_VERSION,
@@ -202,6 +247,7 @@ class _ObservedTools:
     def __init__(self, delegate, guard, prefix, recorder):
         self.delegate, self.guard, self.prefix = delegate, guard, prefix
         self.recorder = recorder
+        self.authorize = None
         self.records: list[QualityPrivateToolV1] = []
         self.calls = 0
 
@@ -212,6 +258,8 @@ class _ObservedTools:
         self.delegate.validate_call(call)
 
     async def execute(self, call):
+        if self.authorize is not None:
+            await self.authorize()
         self.guard.check()
         if self.recorder.stop_reason:
             raise QualityGenerationError("generation_stopped")
@@ -243,12 +291,15 @@ class _ObservedTools:
 
 
 class _ObservedChat:
-    def __init__(self, delegate, guard, prefix, recorder):
+    def __init__(self, delegate, guard, prefix, recorder, *, authorize=None):
         self.delegate, self.guard, self.prefix = delegate, guard, prefix
         self.recorder = recorder
+        self.authorize = authorize
         self.count = 0
 
     async def invoke(self, messages, tools, metadata):
+        if self.authorize is not None:
+            await self.authorize()
         self.guard.check()
         if self.recorder.stop_reason:
             raise QualityGenerationError("generation_stopped")
@@ -440,8 +491,50 @@ def _global_failure(guard, recorder):
     return _stop_category(recorder)
 
 
-async def run_generation(
-    sessions: AsyncSessionFactory,
+@dataclass(repr=False)
+class GenerationSession:
+    sessions: AsyncSessionFactory
+    dataset: QualityDataset
+    prepared: dict
+    sources: tuple
+    webs: dict
+    manifest: QualityRunManifestV1
+    policy: QualityGenerationPolicyV1
+    start: QualityGenerationStartV1
+    recorder: object
+    factory: LLMFactory
+    artifacts: GenerationArtifacts
+    guard: GenerationGuard
+    repository: object
+    owner: object = None
+    arm: str = "baseline"
+    tenant: TenantContext | None = None
+    actual_repository: object = None
+    documents: dict = field(default_factory=dict)
+    chunks: dict = field(default_factory=dict)
+    cases: dict = field(default_factory=dict)
+    representations: list = field(default_factory=list)
+    results: list = field(default_factory=list)
+    runs: dict = field(default_factory=dict)
+    usage_owners: dict = field(default_factory=dict)
+    complete_representation: bool = False
+    ingestion_seconds: float = 0.0
+    stop: str | None = None
+    cancellation: BaseException | None = None
+    active: bool = False
+    closed: bool = False
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class _GenerationFactory(LLMFactory):
+    observed_chat: object = None
+
+    def create_chat_model(self, context):
+        return self.observed_chat
+
+
+async def prepare_generation_session(
+    sessions: AsyncSessionFactory | None = None,
     *,
     dataset_root: Path,
     dataset: QualityDataset,
@@ -458,12 +551,24 @@ async def run_generation(
     repository=None,
     git_probe: Callable[[], str] | None = None,
     sensitive_markers: tuple[str, ...] = (),
-) -> QualityGenerationReportV1:
+    owned_database=None,
+    arm: str = "baseline",
+) -> GenerationSession:
     """Manual caller must own the disposable database exclusively; no concurrent worker.
 
     Live requires explicit mode, confirmation and an injected governed Factory. Test seams
     are trusted Python arguments, never tool/model input. All output paths are caller-owned.
     """
+    owner = None
+    if owned_database is not None:
+        owner = require_owned_database(owned_database)
+        await owner.verify()
+        if sessions is not None and sessions is not owner._sessions:
+            raise QualityGenerationError("foreign_generation_sessions")
+        sessions = owner._sessions
+    if arm not in {"baseline", "candidate"} or (arm == "candidate" and owner is None):
+        raise QualityGenerationError("invalid_generation_arm")
+    graph_version = GRAPH_VERSION if arm == "candidate" else CURRENT_GRAPH_VERSION
     guard = GenerationGuard(secret_markers(sensitive_markers))
     try:
         manifest = QualityRunManifestV1.model_validate_json(manifest.model_dump_json())
@@ -480,6 +585,10 @@ async def run_generation(
             dataset, mapping, prepared, rules_digest=mapping_rules_digest
         )
         delegate = SqlAlchemyInvocationRecorder(sessions)
+        if factory is None and arm == "candidate":
+            from tests.evals.quality_generation_fixtures import E7AFakeChatAdapter
+
+            factory = LLMFactory(delegate, E7AFakeChatAdapter(), FakeEmbeddingModel())
         if factory is None:
             factory = LLMFactory(
                 delegate, DeterministicResearchFakeChatAdapter(), FakeEmbeddingModel()
@@ -497,14 +606,15 @@ async def run_generation(
             or manifest.document_mode
             != ("fake_embedding_db" if provider_mode == "fake" else "real_embedding_db")
             or manifest.model != LOCKED_CHAT_MODEL
-            or manifest.graph_version != CURRENT_GRAPH_VERSION
-            or manifest.prompt_digest != generation_prompt_digest()
+            or manifest.graph_version != graph_version
+            or manifest.prompt_digest != generation_prompt_digest(arm=arm)
             or manifest.embedding_profile != policy.retrieval.embedding_profile
             or manifest.retrieval_policy_digest
             != quality_identity_digest(policy.retrieval.model_dump(mode="json"))
-            or manifest.configuration_digest != generation_configuration_digest(policy, factory)
+            or manifest.configuration_digest
+            != generation_configuration_digest(policy, factory, arm=arm)
             or policy.retrieval.unknown_attempt_reserve_cny > manifest.cost_admission_budget_cny
-            or not confirm_disposable_database
+            or (owner is None and not confirm_disposable_database)
             or (provider_mode == "qwen" and not confirm_live)
             or (git_probe or probe_clean_git_head)() != manifest.execution_source_sha
         ):
@@ -548,6 +658,23 @@ async def run_generation(
             research_prompt_digest=versions.research_prompt_version,
             writer_prompt_digest=versions.writer_prompt_version,
         )
+        if owner is not None:
+            start = ExperimentGenerationStartV1(
+                **{
+                    **start.model_dump(),
+                    "writer_prompt_digest": load_e7a_writer_prompt().version
+                    if arm == "candidate"
+                    else versions.writer_prompt_version,
+                },
+                arm=arm,
+                fixture_version=FIXTURE_VERSION,
+                schema_digest=owner.identity["schema_digest"],
+                output_contract=OUTPUT_CONTRACT if arm == "candidate" else "research_output_v2",
+                assessment_policy_version=ASSESSMENT_POLICY_VERSION if arm == "candidate" else None,
+                assessment_prompt_digest=load_assessment_prompt().version
+                if arm == "candidate"
+                else None,
+            )
         guard.scan(artifact_bytes(start, private=False).decode())
         admission = QualityRetrievalAdmissionV1.model_validate_json(
             json.dumps(
@@ -567,18 +694,50 @@ async def run_generation(
     except Exception:
         raise QualityGenerationError("generation_preflight_failed") from None
 
-    results = []
-    representations = []
-    complete_representation = False
-    stop = None
-    cancellation = None
-    ingestion_started = monotonic()
-    ingestion_seconds = 0.0
-    tenant = None
-    active_index = None
+    state = GenerationSession(
+        sessions=sessions,
+        dataset=dataset,
+        prepared=prepared,
+        sources=sources,
+        webs=webs,
+        manifest=manifest,
+        policy=policy,
+        start=start,
+        recorder=recorder,
+        factory=factory,
+        artifacts=artifacts,
+        guard=guard,
+        repository=repository,
+        owner=owner,
+        arm=arm,
+    )
+    token = object()
+    if owner is not None:
+        owner.claim_slot(token)
     try:
-        artifacts.write("manifest.json", start)
-        artifacts.write("manifest.json", start, private=True)
+        await _ingest_generation(state)
+    finally:
+        if owner is not None:
+            owner.release_slot(token)
+    return state
+
+
+async def _ingest_generation(state):
+    sessions = state.sessions
+    dataset = state.dataset
+    prepared = state.prepared
+    sources = state.sources
+    manifest = state.manifest
+    recorder = state.recorder
+    factory = state.factory
+    artifacts = state.artifacts
+    guard = state.guard
+    repository = state.repository
+    representations = state.representations
+    ingestion_started = monotonic()
+    try:
+        artifacts.write("manifest.json", state.start)
+        artifacts.write("manifest.json", state.start, private=True)
         artifacts.write("sources.json", QualityPrivateSourcesV1(sources=sources), private=True)
         with tracing_context(enabled=False), bind_trace_scope(None):
             actor = await ProvisioningService(
@@ -609,302 +768,478 @@ async def run_generation(
                     CURRENT_LOGICAL_CALL.reset(token)
                 if _stop_category(recorder):
                     break
-            ingestion_seconds = monotonic() - ingestion_started
             stop = _global_failure(guard, recorder)
             complete_representation = len(representations) == len(prepared) and stop is None
             cases = {case.case_id: case for case in dataset.cases}
-            if complete_representation:
-                for index, slot in enumerate(manifest.execution_order):
-                    active_index = index
-                    case = cases[slot.case_id]
-                    case_guard = GenerationGuard(guard.markers)
-                    tools = None
-                    graph_input = None
-                    output = None
-                    output_digest = private_digest = None
-                    failure = None
-                    timed_out = False
-                    rejected = case.scope_expectation == "reject"
-                    started = monotonic()
-                    prefix = f"case.{index}."
-                    try:
-                        if rejected:
-                            failure = "business"
-                        else:
-                            payload = project_model_payload(case)
-                            document_id = documents.get(case.resume_alias)
-                            graph_input = await _prepare_test_run(
-                                sessions, tenant, payload, document_id, policy.case_timeout_seconds
-                            )
-                            context = LLMInvocationContext(
-                                tenant.workspace_id, tenant.actor_user_id, run_id=graph_input.run_id
-                            )
-                            retrieval = _CheckedRetrieval(
-                                DocumentRetrievalService(
-                                    actual_repository, factory.create_embedding_model(context)
-                                ),
-                                case_guard,
-                                documents,
-                                chunks,
-                                prepared,
-                            )
-                            registry = create_research_tool_registry(
-                                search_port=webs[case.web_scenario_alias]
-                                if case.web_scenario_alias
-                                else FrozenQualityWeb(None),
-                                retrieval_service=retrieval,
-                                tenant=tenant,
-                                allowed_document_ids=(document_id,) if document_id else (),
-                                recorder=_ObservedToolRecorder(
-                                    SqlAlchemyToolInvocationRecorder(sessions), case_guard
-                                ),
-                                event_recorder=_ObservedRetrievalEvents(
-                                    SqlAlchemyRetrievalEventRecorder(sessions), case_guard
-                                ),
-                            )
-                            control = AgentLoopControl(
-                                limits=AgentLoopLimitsV1(**dict(DEFAULT_RUN_LIMITS)),
-                                deadline=started + policy.case_timeout_seconds,
-                                cancellation=_Cancellation(asyncio.Event()),
-                            )
-                            tools = _ObservedTools(
-                                registry.bind(
-                                    policy_name=RESEARCH_TOOL_POLICY_NAME,
-                                    context=ToolRunContext(
-                                        workspace_id=tenant.workspace_id,
-                                        actor_user_id=tenant.actor_user_id,
-                                        run_id=graph_input.run_id,
-                                        action_intent_id=None,
-                                        approval_request_id=None,
-                                        trusted_target=None,
-                                        deadline=control.deadline,
-                                        cancellation=control.cancellation,
-                                    ),
-                                ),
-                                case_guard,
-                                prefix,
-                                recorder,
-                            )
-                            model = _ObservedChat(
-                                factory.create_chat_model(context), case_guard, prefix, recorder
-                            )
-                            graph = build_research_state_graph(
-                                ResearchGraphNodes(
-                                    plan=StructuredResearchPlanNode(model),
-                                    research_agent=CreateAgentResearchNode(
-                                        model, _CollectingObserver()
-                                    ),
-                                    validate_evidence=DeterministicEvidenceValidationNode(),
-                                    write_report=StructuredResearchWriterNode(model),
-                                )
-                            )
-                            async with asyncio.timeout(policy.case_timeout_seconds):
-                                raw = await graph.ainvoke(
-                                    graph_input.model_dump(mode="json", round_trip=True),
-                                    context=ResearchGraphRuntimeContext(
-                                        tool_runtime=tools, agent_loop_control=control
-                                    ),
-                                )
-                            # Check the persisted stop before interpreting returned state.
-                            if _stop_category(recorder) == "cancelled":
-                                raise asyncio.CancelledError
-                            output = ResearchGraphOutputStateV1.model_validate_json(
-                                json.dumps(raw)
-                            ).output
-                            case_guard.scan(output.model_dump_json())
-                    except asyncio.CancelledError as error:
-                        cancellation, failure = error, "cancelled"
-                        recorder.stop("external_cancelled")
-                    except GenerationSafetyError:
-                        failure = "safety"
-                    except LLMProviderError:
-                        failure = "provider"
-                    except LLMAccountingError:
-                        failure = _stop_category(recorder) or "integrity"
-                    except ResearchGraphProtocolError as error:
-                        failure = "business"
-                        if error.cause_category == "configuration_error":
-                            case_guard.configuration_failed = True
-                        elif error.cause_category in {"cancelled", "external_cancelled"}:
-                            failure = "cancelled"
-                            recorder.stop("external_cancelled")
-                        elif error.cause_category in {
-                            "provider_timeout",
-                            "provider_unavailable",
-                            "model_invocation_failed",
-                        }:
-                            failure = "provider"
-                    except TimeoutError:
-                        timed_out = True
-                        failure = "budget"
-                    except Exception:
-                        # LangGraph can wrap a cancelled child in NodeCancelledError.
-                        # Use Factory's recorded fact, never exception text, to recognize it.
-                        if _stop_category(recorder) == "cancelled":
-                            cancellation, failure = asyncio.CancelledError(), "cancelled"
-                        else:
-                            failure = "integrity"
-                            case_guard.integrity_failed = True
-                    failure = _global_failure(case_guard, recorder) or failure
-                    if timed_out and failure == "cancelled":
-                        failure = "budget"
-                    if case_guard.tool_failed and failure is None:
-                        failure = "tool"
-                    if graph_input is not None:
-                        try:
-                            async with sessions() as session:
-                                states = (
-                                    await session.scalars(
-                                        select(ToolInvocation.status).where(
-                                            ToolInvocation.workspace_id == tenant.workspace_id,
-                                            ToolInvocation.run_id == graph_input.run_id,
-                                        )
-                                    )
-                                ).all()
-                            if any(state not in {"succeeded", "failed"} for state in states):
-                                case_guard.tool_accounting_complete = False
-                            if not case_guard.tool_accounting_complete:
-                                failure = "integrity" if failure != "safety" else failure
-                        except Exception:
-                            case_guard.tool_accounting_complete = False
-                            failure = "integrity" if failure != "safety" else failure
-                    try:
-                        # Never persist a secret-bearing result, including to the disposable DB.
-                        if output is not None and failure != "safety":
-                            output_digest = artifacts.write(
-                                f"output-{index:04d}.json",
-                                QualityPrivateOutputV1(
-                                    case_id=slot.case_id,
-                                    repeat_index=slot.repeat_index,
-                                    output=output.model_dump(mode="json"),
-                                ),
-                                private=True,
-                            )
-                        private_case = QualityPrivateCaseV1(
-                            case_id=slot.case_id,
-                            repeat_index=slot.repeat_index,
-                            input=QualityModelPayloadV1(mode=case.mode, query=case.query),
-                            resume_alias=case.resume_alias,
-                            web_scenario_alias=case.web_scenario_alias,
-                            tools=tuple(tools.records) if tools else (),
-                            output_digest=output_digest,
-                            failure_type=failure,
-                        )
-                        private_digest = artifacts.write(
-                            f"case-{index:04d}.json", private_case, private=True
-                        )
-                    except GenerationSafetyError:
-                        case_guard.secret_leak += 1
-                        failure = "safety"
-                    except QualityGenerationError:
-                        failure = "integrity"
-                        case_guard.integrity_failed = True
-                    if graph_input is not None:
-                        try:
-                            await _finish_test_run(
-                                sessions,
-                                tenant,
-                                graph_input.run_id,
-                                output if failure != "safety" else None,
-                                failure,
-                            )
-                        except Exception:
-                            case_guard.integrity_failed = True
-                            failure = "integrity" if failure != "safety" else failure
-                    result = _case_observation(
-                        manifest,
-                        index,
-                        recorder,
-                        executed=True,
-                        failure=failure,
-                        guard=case_guard,
-                        tools=tools,
-                        elapsed=monotonic() - started,
-                        digest=output_digest,
-                        private_digest=private_digest,
-                        rejected=rejected,
-                    )
-                    results.append(result)
-                    active_index = None
-                    artifacts.write(f"case-{index:04d}.json", result)
-                    stop = _global_failure(case_guard, recorder)
-                    if failure in {"configuration", "integrity", "safety", "cancelled", "budget"}:
-                        stop = failure
-                    if stop:
-                        break
+        state.tenant, state.actual_repository = tenant, actual_repository
+        state.documents, state.chunks, state.cases = documents, chunks, cases
+        state.complete_representation, state.stop = complete_representation, stop
     except asyncio.CancelledError as error:
-        cancellation, stop = error, "cancelled"
+        state.cancellation, state.stop = error, "cancelled"
     except GenerationSafetyError:
-        stop = "safety"
+        state.stop = "safety"
     except LLMProviderError:
-        stop = "provider"
+        state.stop = "provider"
     except Exception:
-        stop = _global_failure(guard, recorder) or "integrity"
+        state.stop = _global_failure(guard, recorder) or "integrity"
     finally:
-        if not ingestion_seconds:
-            ingestion_seconds = monotonic() - ingestion_started
-        if active_index is not None:
-            failure = _global_failure(case_guard, recorder) or stop or "integrity"
-            results.append(
-                _case_observation(
-                    manifest,
-                    active_index,
-                    recorder,
-                    executed=True,
-                    failure=failure,
-                    guard=case_guard,
-                    tools=tools,
-                    elapsed=monotonic() - started,
-                    digest=output_digest,
-                    private_digest=private_digest,
-                    rejected=False,
+        state.ingestion_seconds = monotonic() - ingestion_started
+
+
+async def _execute_generation_slot(state, index):
+    sessions = state.sessions
+    tenant = state.tenant
+    documents = state.documents
+    chunks = state.chunks
+    prepared = state.prepared
+    actual_repository = state.actual_repository
+    webs = state.webs
+    manifest = state.manifest
+    policy = state.policy
+    recorder = state.recorder
+    factory = state.factory
+    artifacts = state.artifacts
+    guard = state.guard
+    cancellation = None
+    slot = manifest.execution_order[index]
+    case = state.cases[slot.case_id]
+    case_guard = GenerationGuard(guard.markers)
+    tools = None
+    graph_input = None
+    output = None
+    evidence = None
+    output_digest = private_digest = None
+    failure = None
+    timed_out = False
+    rejected = case.scope_expectation == "reject"
+    started = monotonic()
+    prefix = f"case.{index}."
+    try:
+        if rejected:
+            failure = "business"
+        else:
+            payload = project_model_payload(case)
+            document_id = documents.get(case.resume_alias)
+            if state.owner is None:
+                graph_input = await _prepare_test_run(
+                    sessions, tenant, payload, document_id, policy.case_timeout_seconds
                 )
-            )
-            if graph_input is not None:
-                try:
-                    await _finish_test_run(sessions, tenant, graph_input.run_id, None, failure)
-                except Exception:
-                    stop = "integrity"
-        while len(results) < len(manifest.execution_order):
-            results.append(
-                _case_observation(
-                    manifest,
-                    len(results),
-                    recorder,
-                    executed=False,
-                    failure=None,
-                    guard=GenerationGuard(),
-                    tools=None,
-                    elapsed=0.0,
+            else:
+                graph_input = await state.owner.create_run(
+                    tenant, payload, document_id, policy.case_timeout_seconds, arm=state.arm
                 )
+            context = LLMInvocationContext(
+                tenant.workspace_id, tenant.actor_user_id, run_id=graph_input.run_id
             )
-        usage = _usage(recorder)
-        not_run = sum(c.observation.status == "not_run" for c in results)
-        report = QualityGenerationReportV1(
-            start=start,
-            representations=tuple(representations),
-            representation_complete=complete_representation,
-            ingestion_usage=_usage(recorder, "ingestion."),
-            total_usage=usage,
-            ingestion_seconds=ingestion_seconds,
-            cases=tuple(results),
-            private_files=tuple(artifacts.files),
-            executed=len(results) - not_run,
-            failed=sum(c.observation.status == "failed" for c in results),
-            not_run=not_run,
-            evidence_valid=stop not in {"configuration", "integrity", "safety"}
-            and usage.accounting_complete
-            and all(c.tool_accounting_complete for c in results),
-            measurement_complete=complete_representation and not not_run and stop is None,
-            stop_reason=stop,
+            retrieval = _CheckedRetrieval(
+                DocumentRetrievalService(
+                    actual_repository, factory.create_embedding_model(context)
+                ),
+                case_guard,
+                documents,
+                chunks,
+                prepared,
+            )
+            registry = create_research_tool_registry(
+                search_port=webs[case.web_scenario_alias]
+                if case.web_scenario_alias
+                else FrozenQualityWeb(None),
+                retrieval_service=retrieval,
+                tenant=tenant,
+                allowed_document_ids=(document_id,) if document_id else (),
+                recorder=_ObservedToolRecorder(
+                    SqlAlchemyToolInvocationRecorder(sessions), case_guard
+                ),
+                event_recorder=_ObservedRetrievalEvents(
+                    SqlAlchemyRetrievalEventRecorder(sessions), case_guard
+                ),
+            )
+            control = AgentLoopControl(
+                limits=AgentLoopLimitsV1(**dict(DEFAULT_RUN_LIMITS)),
+                deadline=started + policy.case_timeout_seconds,
+                cancellation=_Cancellation(asyncio.Event()),
+            )
+            tools = _ObservedTools(
+                registry.bind(
+                    policy_name=RESEARCH_TOOL_POLICY_NAME,
+                    context=ToolRunContext(
+                        workspace_id=tenant.workspace_id,
+                        actor_user_id=tenant.actor_user_id,
+                        run_id=graph_input.run_id,
+                        action_intent_id=None,
+                        approval_request_id=None,
+                        trusted_target=None,
+                        deadline=control.deadline,
+                        cancellation=control.cancellation,
+                    ),
+                ),
+                case_guard,
+                prefix,
+                recorder,
+            )
+            authorize = None
+            if state.owner is not None:
+
+                async def authorize():
+                    try:
+                        await state.owner.authorize(tenant)
+                    except ExperimentDatabaseError as error:
+                        if error.category == "access_denied":
+                            recorder.stop("external_cancelled")
+                            raise asyncio.CancelledError from None
+                        case_guard.integrity_failed = True
+                        raise
+
+                tools.authorize = authorize
+            model = _ObservedChat(
+                factory.create_chat_model(context),
+                case_guard,
+                prefix,
+                recorder,
+                authorize=authorize,
+            )
+            async with asyncio.timeout(policy.case_timeout_seconds):
+                if state.arm == "candidate":
+                    observed_factory = _GenerationFactory(
+                        **{f.name: getattr(factory, f.name) for f in fields(LLMFactory)},
+                        observed_chat=model,
+                    )
+                    scope = E7ASourceScope(
+                        allowed_document_ids=(document_id,) if document_id else (),
+                        resume_document_id=document_id,
+                        web_available=case.web_scenario_alias is not None,
+                        job_tools=("search_web",) if case.web_scenario_alias else (),
+                        task_tools=tuple(
+                            name
+                            for name, available in (
+                                ("search_web", bool(case.web_scenario_alias)),
+                                ("retrieve_documents", document_id is not None),
+                            )
+                            if available
+                        ),
+                    )
+                    owner = E7AUsageOwner(on_admitted=lambda usage: None)
+                    state.usage_owners[index] = owner
+                    runtime = E7AGraphRuntime(
+                        observed_factory,
+                        context,
+                        tools,
+                        scope,
+                        control,
+                        _CollectingObserver(),
+                        owner,
+                    )
+                    raw = await build_e7a_generation_graph().ainvoke(
+                        {"payload": {"request": graph_input.request.model_dump(mode="json")}},
+                        context=runtime,
+                    )
+                    generated = E7AGenerationResultV1.model_validate_json(
+                        json.dumps(raw["payload"], allow_nan=False), strict=True
+                    )
+                    output = generated.output
+                    evidence = evidence_context(generated.research_state, scope)
+                else:
+                    graph = build_research_state_graph(
+                        ResearchGraphNodes(
+                            plan=StructuredResearchPlanNode(model),
+                            research_agent=CreateAgentResearchNode(model, _CollectingObserver()),
+                            validate_evidence=DeterministicEvidenceValidationNode(),
+                            write_report=StructuredResearchWriterNode(model),
+                        )
+                    )
+                    input_json = (
+                        graph_input.model_dump(mode="json", round_trip=True)
+                        if state.owner is None
+                        else ResearchGraphInputV1(
+                            schema_version=2,
+                            run_id=graph_input.run_id,
+                            workspace_id=tenant.workspace_id,
+                            actor_user_id=tenant.actor_user_id,
+                            conversation_id=graph_input.conversation_id,
+                            graph_version=CURRENT_GRAPH_VERSION,
+                            mode=case.mode,
+                            resume_document_id=document_id,
+                            request=graph_input.request,
+                        ).model_dump(mode="json")
+                    )
+                    raw = await graph.ainvoke(
+                        input_json,
+                        context=ResearchGraphRuntimeContext(
+                            tool_runtime=tools, agent_loop_control=control
+                        ),
+                    )
+                    output = ResearchGraphOutputStateV1.model_validate_json(json.dumps(raw)).output
+            if _stop_category(recorder) == "cancelled":
+                raise asyncio.CancelledError
+            case_guard.scan(output.model_dump_json())
+    except asyncio.CancelledError as error:
+        cancellation, failure = error, "cancelled"
+        recorder.stop("external_cancelled")
+    except GenerationSafetyError:
+        failure = "safety"
+    except LLMProviderError:
+        failure = "provider"
+    except LLMAccountingError:
+        failure = _stop_category(recorder) or "integrity"
+    except ResearchGraphProtocolError as error:
+        failure = "business"
+        if error.cause_category == "configuration_error":
+            case_guard.configuration_failed = True
+        elif error.cause_category in {"cancelled", "external_cancelled"}:
+            failure = "cancelled"
+            recorder.stop("external_cancelled")
+        elif error.cause_category in {
+            "provider_timeout",
+            "provider_unavailable",
+            "model_invocation_failed",
+        }:
+            failure = "provider"
+    except E7AGraphError as error:
+        failure = "business"
+        if error.category in {"configuration_error", "invalid_source_scope"}:
+            failure = "configuration"
+            case_guard.configuration_failed = True
+        elif error.category in {"budget_exhausted", "deadline_exceeded"}:
+            failure = "budget"
+        elif error.category in {
+            "provider_timeout",
+            "provider_unavailable",
+            "model_invocation_failed",
+        }:
+            failure = "provider"
+        elif error.category == "cancelled":
+            failure = "cancelled"
+            recorder.stop("external_cancelled")
+    except ExperimentDatabaseError as error:
+        failure = (
+            "configuration" if error.category in {"schema_drift", "invalid_handle"} else "integrity"
         )
+        case_guard.integrity_failed = failure == "integrity"
+        case_guard.configuration_failed = failure == "configuration"
+    except TimeoutError:
+        timed_out = True
+        failure = "budget"
+    except Exception:
+        # LangGraph can wrap a cancelled child in NodeCancelledError.
+        # Use Factory's recorded fact, never exception text, to recognize it.
+        if _stop_category(recorder) == "cancelled":
+            cancellation, failure = asyncio.CancelledError(), "cancelled"
+        else:
+            failure = "integrity"
+            case_guard.integrity_failed = True
+    failure = _global_failure(case_guard, recorder) or failure
+    if timed_out and failure == "cancelled":
+        failure = "budget"
+    if case_guard.tool_failed and failure is None:
+        failure = "tool"
+    if graph_input is not None:
         try:
-            artifacts.write("report.json", report)
-            artifacts.write("report.json", report, private=True)
+            async with sessions() as session:
+                states = (
+                    await session.scalars(
+                        select(ToolInvocation.status).where(
+                            ToolInvocation.workspace_id == tenant.workspace_id,
+                            ToolInvocation.run_id == graph_input.run_id,
+                        )
+                    )
+                ).all()
+            if any(state not in {"succeeded", "failed"} for state in states):
+                case_guard.tool_accounting_complete = False
+            if not case_guard.tool_accounting_complete:
+                failure = "integrity" if failure != "safety" else failure
         except Exception:
-            if cancellation is not None:
-                raise cancellation from None
-            raise QualityGenerationError("generation_report_publication_failed") from None
+            case_guard.tool_accounting_complete = False
+            failure = "integrity" if failure != "safety" else failure
+    if graph_input is not None and state.owner is not None:
+        try:
+            await state.owner.finish_run(
+                tenant,
+                graph_input,
+                output if failure != "safety" else None,
+                failure,
+                context=evidence,
+            )
+            if output is not None and failure != "safety":
+                output = await state.owner.read_result(tenant, graph_input, context=evidence)
+                case_guard.scan(output.model_dump_json())
+        except GenerationSafetyError:
+            failure = "safety"
+            output = None
+        except Exception:
+            case_guard.integrity_failed = True
+            failure = "integrity" if failure != "safety" else failure
+            output = None
+    try:
+        # Never persist a secret-bearing result, including to the disposable DB.
+        if output is not None and failure != "safety":
+            output_digest = artifacts.write(
+                f"output-{index:04d}.json",
+                QualityPrivateOutputV1(
+                    case_id=slot.case_id,
+                    repeat_index=slot.repeat_index,
+                    output=output.model_dump(mode="json"),
+                ),
+                private=True,
+            )
+        private_case = QualityPrivateCaseV1(
+            case_id=slot.case_id,
+            repeat_index=slot.repeat_index,
+            input=QualityModelPayloadV1(mode=case.mode, query=case.query),
+            resume_alias=case.resume_alias,
+            web_scenario_alias=case.web_scenario_alias,
+            tools=tuple(tools.records) if tools else (),
+            output_digest=output_digest,
+            failure_type=failure,
+        )
+        private_digest = artifacts.write(f"case-{index:04d}.json", private_case, private=True)
+    except GenerationSafetyError:
+        case_guard.secret_leak += 1
+        failure = "safety"
+    except QualityGenerationError:
+        failure = "integrity"
+        case_guard.integrity_failed = True
+    if graph_input is not None and state.owner is None:
+        try:
+            await _finish_test_run(
+                sessions,
+                tenant,
+                graph_input.run_id,
+                output if failure != "safety" else None,
+                failure,
+            )
+        except Exception:
+            case_guard.integrity_failed = True
+            failure = "integrity" if failure != "safety" else failure
+    result = _case_observation(
+        manifest,
+        index,
+        recorder,
+        executed=True,
+        failure=failure,
+        guard=case_guard,
+        tools=tools,
+        elapsed=monotonic() - started,
+        digest=output_digest,
+        private_digest=private_digest,
+        rejected=rejected,
+    )
+    state.results.append(result)
+    artifacts.write(f"case-{index:04d}.json", result)
+    stop = _global_failure(case_guard, recorder)
+    if failure in {"configuration", "integrity", "safety", "cancelled", "budget"}:
+        stop = failure
+    state.stop = stop
+    state.cancellation = cancellation
+    if graph_input is not None:
+        state.runs[index] = graph_input
+    return result
+
+
+async def finish_generation_session(state):
+    if state.active or state.closed:
+        raise QualityGenerationError("generation_session_unavailable")
+    state.closed = True
+    manifest = state.manifest
+    recorder = state.recorder
+    results = state.results
+    artifacts = state.artifacts
+    start = state.start
+    representations = state.representations
+    ingestion_seconds = state.ingestion_seconds
+    stop = state.stop
+    cancellation = state.cancellation
+    complete_representation = state.complete_representation
+    while len(results) < len(manifest.execution_order):
+        results.append(
+            _case_observation(
+                manifest,
+                len(results),
+                recorder,
+                executed=False,
+                failure=None,
+                guard=GenerationGuard(),
+                tools=None,
+                elapsed=0.0,
+            )
+        )
+    usage = _usage(recorder)
+    not_run = sum(c.observation.status == "not_run" for c in results)
+    report_type = (
+        ExperimentGenerationReportV1 if state.owner is not None else QualityGenerationReportV1
+    )
+    report = report_type(
+        start=start,
+        representations=tuple(representations),
+        representation_complete=complete_representation,
+        ingestion_usage=_usage(recorder, "ingestion."),
+        total_usage=usage,
+        ingestion_seconds=ingestion_seconds,
+        cases=tuple(results),
+        private_files=tuple(artifacts.files),
+        executed=len(results) - not_run,
+        failed=sum(c.observation.status == "failed" for c in results),
+        not_run=not_run,
+        evidence_valid=stop not in {"configuration", "integrity", "safety"}
+        and usage.accounting_complete
+        and all(c.tool_accounting_complete for c in results),
+        measurement_complete=complete_representation and not not_run and stop is None,
+        stop_reason=stop,
+    )
+    try:
+        artifacts.write("report.json", report)
+        artifacts.write("report.json", report, private=True)
+    except Exception:
+        if cancellation is not None:
+            raise cancellation from None
+        raise QualityGenerationError("generation_report_publication_failed") from None
     if cancellation is not None or stop == "cancelled":
         raise (cancellation or asyncio.CancelledError()) from None
     return report
+
+
+async def execute_generation_slot(state, index):
+    if (
+        state.closed
+        or state.active
+        or not state.complete_representation
+        or state.stop
+        or type(index) is not int
+        or index != len(state.results)
+        or index >= len(state.manifest.execution_order)
+    ):
+        raise QualityGenerationError("generation_slot_unavailable")
+    token = object()
+    if state.owner is not None:
+        state.owner.claim_slot(token)
+    state.active = True
+    try:
+        if state.owner is not None:
+            await state.owner.verify()
+        with tracing_context(enabled=False), bind_trace_scope(None):
+            return await _execute_generation_slot(state, index)
+    except asyncio.CancelledError as error:
+        state.cancellation, state.stop = error, "cancelled"
+        raise
+    except Exception:
+        state.stop = "integrity"
+        raise
+    finally:
+        state.active = False
+        if state.owner is not None:
+            state.owner.release_slot(token)
+
+
+async def run_generation(sessions: AsyncSessionFactory | None = None, **kwargs):
+    """Legacy batch default and explicit owned experiment arms use the same slot seam."""
+    state = await prepare_generation_session(sessions, **kwargs)
+    try:
+        if state.complete_representation:
+            for index in range(len(state.manifest.execution_order)):
+                if state.stop:
+                    break
+                await execute_generation_slot(state, index)
+    except asyncio.CancelledError as error:
+        state.cancellation, state.stop = error, "cancelled"
+    except Exception:
+        state.stop = state.stop or "integrity"
+    return await finish_generation_session(state)
