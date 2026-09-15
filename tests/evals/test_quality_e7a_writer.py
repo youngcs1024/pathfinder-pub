@@ -55,10 +55,11 @@ from tests.unit.llm.test_factory import _RecordingRecorder, _RecordingTraceSink
 
 CANARY = "e7a5-private-body-canary"
 ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONTEXT = context_for()
 
 
 def writer_json(context=None, outcome="sufficient", *, draft=None):
-    context = context or context_for()
+    context = context or DEFAULT_CONTEXT
     if draft is None:
         draft = outcome == "sufficient" and context.request.include_application_draft
     output = report_for(context, outcome, draft).model_dump(mode="json")
@@ -98,7 +99,7 @@ def setup(*steps, recorder=None, trace=None, retries=1):
 
 
 async def call(node, context=None, outcome="sufficient", *, published=None, **kwargs):
-    context = context or context_for()
+    context = context or DEFAULT_CONTEXT
     return await node(
         context,
         kwargs.pop("assessment", assessment_for(context, outcome)),
@@ -334,7 +335,8 @@ async def test_valid_reference_does_not_establish_entailment():
     assert result.output.application_draft.paragraphs[0].text == "An invented achievement."
     # This known limit must be measured by semantic review, not keyword special cases.
     assert (
-        not {"authorized", "target", "action_id", "approval_id"} & result.output.model_fields.keys()
+        not {"authorized", "target", "action_id", "approval_id"}
+        & type(result.output).model_fields.keys()
     )
 
 
@@ -662,7 +664,10 @@ async def test_generation_outcomes_finish_without_action_or_approval(outcome):
     assert result.research_state.usage.writer_calls == 1
     assert len(adapter.calls) == 5
     assert all(x["tool_name"] == "search_web" for x in tools.events)
-    assert not {"action_proposal_id", "approval_request_id", "target"} & result.model_fields.keys()
+    assert (
+        not {"action_proposal_id", "approval_request_id", "target"}
+        & type(result).model_fields.keys()
+    )
 
 
 async def test_generation_two_passes_then_writer_share_runtime_and_budget():
@@ -779,15 +784,29 @@ async def test_generation_assessor_failure_never_reaches_writer():
 
 
 async def test_generation_cancellation_during_writer_propagates():
+    started = asyncio.Event()
+    stopped = asyncio.Event()
+
+    async def blocking(*_args):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+
     runtime, adapter, _, _, _, _, _, _ = graph_setup(
         plan(),
         calls("initial"),
         DONE,
         assess(),
-        asyncio.CancelledError(),
+        blocking,
     )
+    task = asyncio.create_task(generate(runtime))
+    await asyncio.wait_for(started.wait(), 5)
+    task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await generate(runtime)
+        await task
+    assert stopped.is_set()
     assert runtime.usage_owner.usage.writer_calls == 1 and len(adapter.calls) == 5
 
 
