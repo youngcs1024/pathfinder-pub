@@ -10,6 +10,7 @@ from pydantic import Field
 
 from app.domain.research import ResearchOutputV2
 from tests.evals.contracts import EvalContractModel, EvalDigest, EvalIdentifier
+from tests.evals.harness import _StrictMemoryInvocationRecorder
 from tests.evals.quality_compare import compare_quality
 from tests.evals.quality_contracts import (
     HumanAnnotationV1,
@@ -202,9 +203,12 @@ def load_execution(binding, root):
         )
         if (
             manifest
-            != arm_manifest(binding, arm, live_identity_factory(), root=Path(binding.harness_root))[
-                0
-            ]
+            != arm_manifest(
+                binding,
+                arm,
+                live_identity_factory(_StrictMemoryInvocationRecorder()),
+                root=Path(binding.harness_root),
+            )[0]
             or digest(report) != execution.arm_report_digests.get(arm)
             or report.start.arm != arm
             or manifest.execution_source_sha != getattr(binding, f"{arm}_source_sha")

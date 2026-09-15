@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.evals.harness import _StrictMemoryInvocationRecorder
 from tests.evals.quality_experiment_binding import (
     ExperimentError,
     ci_proof,
@@ -212,7 +213,7 @@ def test_binding_rechecks_git_and_rejects_changed_digest(tmp_path, monkeypatch):
             "baseline_src_tree": git("rev-parse", "HEAD:src"),
             "baseline_prompt_digest": generation_prompt_digest(),
             "baseline_configuration_digest": generation_configuration_digest(
-                policy, live_identity_factory()
+                policy, live_identity_factory(_StrictMemoryInvocationRecorder())
             ),
         }
     )
