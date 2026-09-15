@@ -267,3 +267,76 @@ def test_review_export_and_import_reject_rebound_output_and_changed_input(tmp_pa
     export_path.write_bytes(encoded(export))
     with pytest.raises(ExperimentError, match="review_output_mismatch"):
         decision.collect_review(binding, tmp_path, review)
+
+
+@pytest.mark.parametrize(
+    "condition,expected",
+    [
+        ("complete", "recommend_adopt"),
+        ("refusal", "recommend_reject"),
+        ("diagnostics", "insufficient_evidence"),
+        ("unresolved", "insufficient_evidence"),
+        ("unknown_cost", "insufficient_evidence"),
+        ("unknown_tokens", "insufficient_evidence"),
+        ("safety", "recommend_reject"),
+        ("budget", "recommend_reject"),
+        ("memory_missing", "insufficient_evidence"),
+    ],
+)
+def test_final_recommendation_keeps_missing_evidence_distinct_from_rejection(
+    monkeypatch, condition, expected
+):
+    from tests.evals import quality_experiment_decision as module
+
+    # Pure decision routing fixture. Provenance/scored-model validation has separate tests.
+    plan, scores, resources = comparison_fixture()
+    monkeypatch.setattr(module, "validate_scored_report", lambda _: None)
+    monkeypatch.setattr(module, "compare_quality", lambda *a: {"contract_fixture": True})
+    monkeypatch.setattr(module, "digest", lambda _: "sha256:" + "a" * 64)
+    reports = {}
+    for arm, score in scores.items():
+        score.measurement_complete = True
+        for case in score.cases:
+            case.observation.safety = NS(model_dump=lambda: {})
+        reports[arm] = NS(
+            measurement_complete=True,
+            evidence_valid=True,
+            cases=score.cases,
+            total_usage=NS(
+                input_tokens=100,
+                output_tokens=10,
+                provider_attempts=50,
+                unknown_usage_attempts=0,
+                cost=NS(known_cost_cny=Decimal("10"), unknown_cost_attempts=0),
+            ),
+        )
+    receipt = NS(complete=True, unresolved=False, safety="clear")
+    execution = NS(execution_complete=True)
+    binding = NS(candidate_source_sha="a" * 40, ci=NS(source_sha="a" * 40))
+    if condition == "refusal":
+        scores["candidate"].cases[0].insufficiency = "unnecessary_refusal"
+    elif condition == "unresolved":
+        receipt.unresolved = True
+    elif condition == "unknown_cost":
+        scores["candidate"].total_cost.total_cost_cny = None
+        reports["candidate"].total_usage.cost.unknown_cost_attempts = 1
+    elif condition == "unknown_tokens":
+        reports["candidate"].total_usage.unknown_usage_attempts = 1
+    elif condition == "safety":
+        receipt.safety = "blocked"
+    elif condition == "budget":
+        reports["candidate"].total_usage.provider_attempts = 1201
+    elif condition == "memory_missing":
+        resources.pop("candidate")
+    decision, _ = module.decide(
+        binding,
+        plan,
+        execution,
+        reports,
+        resources,
+        receipt,
+        scores,
+        diagnostics_complete=condition != "diagnostics",
+    )
+    assert decision.recommendation == expected
+    assert decision.evidence_complete == (expected != "insufficient_evidence")

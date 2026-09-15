@@ -170,6 +170,14 @@ def load_execution(binding, root):
         s.model_dump(mode="json") for s in planned_slots(plan)
     ]:
         fail("execution_plan_mismatch")
+    claim = read_json(Path(saved_plan["execution_claim"]))
+    if (
+        digest(claim) != saved_plan["execution_claim_digest"]
+        or claim.get("binding_digest") != digest(binding)
+        or claim.get("run_root") != str(no_links(root))
+        or claim.get("slots") != saved_plan["slots"]
+    ):
+        fail("execution_claim_mismatch")
     reports, private, resources, diagnostics = {}, {}, {}, {}
     for arm in ARMS:
         path = root / "outputs" / arm / "report.json"
@@ -194,7 +202,9 @@ def load_execution(binding, root):
         )
         if (
             manifest
-            != arm_manifest(binding, arm, live_identity_factory(), root=Path(binding.harness_root))
+            != arm_manifest(binding, arm, live_identity_factory(), root=Path(binding.harness_root))[
+                0
+            ]
             or digest(report) != execution.arm_report_digests.get(arm)
             or report.start.arm != arm
             or manifest.execution_source_sha != getattr(binding, f"{arm}_source_sha")
@@ -722,7 +732,7 @@ def frozen_rules(plan, scores, resources):
 
 
 def decide(
-    binding, plan, execution, reports, resources, receipt, scores, *, diagnostics_complete=True
+    binding, plan, execution, reports, resources, receipt, scores, *, diagnostics_complete=False
 ):
     if set(scores) != set(ARMS) or set(reports) != set(ARMS):
         return DecisionV1(
@@ -789,7 +799,7 @@ def decide(
         and all(r.measurement_complete and r.evidence_valid for r in reports.values())
         and all(r.complete for r in resources.values())
         and set(resources) == set(ARMS)
-        and receipt.safety == "clear"
+        and receipt.safety != "unknown"
         and all(s.measurement_complete for s in scores.values())
     )
     safe = receipt.safety == "clear" and not any(

@@ -230,3 +230,19 @@ async def test_coordinator_fixed_order_and_failure_preservation(tmp_path, monkey
     assert read_json(root / "execution.json")["execution_complete"] == report.execution_complete
     with pytest.raises(FileExistsError):
         await execute(binding_path, root, tmp_path / "unused-credentials", auth_path)
+    with pytest.raises(ExperimentError, match="artifact_publication_failed"):
+        await execute(binding_path, tmp_path / "reroll", tmp_path / "unused-credentials", auth_path)
+    assert not (tmp_path / "reroll").exists()
+
+
+async def test_unknown_tokens_stop_before_next_attempt_even_with_cost_reserve(tmp_path):
+    hooks = ExperimentHooks(tmp_path)
+
+    async def usage(attempt):
+        return NS(started=0, unknown_usage_attempts=1)
+
+    hooks.usage = usage
+    with pytest.raises(ExperimentError, match="unknown_provider_usage"):
+        await hooks.before_attempt(NS())
+    assert hooks.failure == "unknown_provider_usage"
+    assert not list(tmp_path.iterdir())

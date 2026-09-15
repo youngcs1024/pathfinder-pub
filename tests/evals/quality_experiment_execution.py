@@ -257,6 +257,8 @@ class ExperimentHooks:
             usage = await self.usage(attempt)
             if usage.started:
                 fail("unfinished_provider_attempt")
+            if usage.unknown_usage_attempts:
+                fail("unknown_provider_usage")
             if not can_admit_attempt(
                 self.admission,
                 known_cost_cny=usage.known_cost_cny,
@@ -278,6 +280,8 @@ class ExperimentHooks:
         try:
             usage = await self.usage(attempt)
             write_new(self.directory / f"accounted-{self.ordinal:05d}.json", usage)
+            if usage.unknown_usage_attempts:
+                fail("unknown_provider_usage")
             if (
                 usage.started
                 or usage.known_cost_cny
@@ -661,19 +665,31 @@ async def execute(binding_path, run_root, credentials_path, authorization_path):
     checked_directory(root.parent)
     if any(root.is_relative_to(Path(p)) for p in (binding.baseline_root, binding.candidate_root)):
         fail("private_root_required")
+    if root.exists():
+        raise FileExistsError("execution_directory_exists")
+    plan = load_experiment_plan(Path(binding.harness_root) / PLAN, root=Path(binding.harness_root))
+    slots = list(planned_slots(plan))
+    claim_path = no_links(binding_path).parent / f"{binding.experiment_id}.execution-claim.json"
+    claim = {
+        "artifact_kind": "e7a7_execution_claim_v1",
+        "binding_digest": binding_digest,
+        "run_root": str(root),
+        "slots": [s.model_dump(mode="json") for s in slots],
+    }
+    write_new(claim_path, claim)
     root.mkdir(mode=0o700, exist_ok=False)
     for name in ("outputs", "private", "slots", *ARMS):
         (root / name).mkdir(mode=0o700)
     for arm in ARMS:
         for name in ("resources", "accounting"):
             (root / arm / name).mkdir(mode=0o700)
-    plan = load_experiment_plan(Path(binding.harness_root) / PLAN, root=Path(binding.harness_root))
-    slots = list(planned_slots(plan))
     write_new(
         root / "plan.json",
         {
             "binding_digest": binding_digest,
             "authorization_digest": quality_identity_digest(authorization.model_dump(mode="json")),
+            "execution_claim": str(claim_path),
+            "execution_claim_digest": quality_identity_digest(claim),
             "slots": [s.model_dump(mode="json") for s in slots],
         },
     )

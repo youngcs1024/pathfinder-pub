@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -197,7 +198,18 @@ async def test_two_real_source_roots_use_isolated_processes_and_owned_pg(tmp_pat
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+        communication = asyncio.create_task(process.communicate())
+        try:
+            stdout, _stderr = await asyncio.wait_for(asyncio.shield(communication), timeout=120)
+        except TimeoutError:
+            process.send_signal(signal.SIGINT)  # asyncio.run cancels and closes owned PG.
+            try:
+                await asyncio.wait_for(asyncio.shield(communication), timeout=30)
+            except TimeoutError:
+                process.kill()
+                await communication
+                pytest.fail("child_timeout_cleanup_unconfirmed")
+            pytest.fail("child_contract_timeout")
         assert process.returncode == 0, (
             f"child contract failed: arm={arm}, exit={process.returncode}"
         )

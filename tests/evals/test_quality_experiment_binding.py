@@ -177,3 +177,64 @@ def test_source_errors_do_not_disclose_stderr_or_payload(tmp_path):
     with pytest.raises(ExperimentError) as error:
         source_identity(tmp_path / "private-body-canary", "a" * 40)
     assert "private-body-canary" not in str(error.value)
+
+
+def test_binding_rechecks_git_and_rejects_changed_digest(tmp_path, monkeypatch):
+    from tests.evals import quality_experiment_binding as binding
+    from tests.evals.quality_experiment_execution import configured_policy, live_identity_factory
+    from tests.evals.quality_generation import (
+        generation_configuration_digest,
+        generation_prompt_digest,
+    )
+    from tests.evals.test_quality_experiment_execution import binding_fixture
+
+    baseline, sha, git = local_git(tmp_path)
+    for name in ("uv.lock", "pyproject.toml"):
+        (baseline / name).write_text("# local provenance fixture\n")
+    git("add", "uv.lock", "pyproject.toml")
+    git(
+        "-c",
+        "user.name=fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "-m",
+        "lock",
+    )
+    sha = git("rev-parse", "HEAD")
+    candidate = tmp_path / "candidate"
+    subprocess.run(["git", "clone", "--quiet", str(baseline), str(candidate)], check=True)
+    original = binding.load_experiment_plan(binding.ROOT / binding.PLAN)
+    policy = configured_policy()
+    identity = original.identity.model_copy(
+        update={
+            "baseline_source_sha": sha,
+            "baseline_src_tree": git("rev-parse", "HEAD:src"),
+            "baseline_prompt_digest": generation_prompt_digest(),
+            "baseline_configuration_digest": generation_configuration_digest(
+                policy, live_identity_factory()
+            ),
+        }
+    )
+    plan = original.model_copy(update={"identity": identity})
+    environment = binding_fixture(tmp_path).environment
+    monkeypatch.setattr(
+        "tests.evals.quality_experiment_execution.configured_policy", lambda *a: policy
+    )
+    monkeypatch.setattr(binding, "load_experiment_plan", lambda *a, **kw: plan)
+    monkeypatch.setattr(binding, "validate_experiment_plan", lambda *a, **kw: "sha256:" + "3" * 64)
+    monkeypatch.setattr(binding, "allowed_diff", lambda *a: "sha256:" + "4" * 64)
+    ci = ci_proof(ci_summary()).model_copy(update={"source_sha": sha})
+    value = binding.build_binding(
+        baseline_root=baseline,
+        candidate_root=candidate,
+        experiment_id="binding_contract",
+        environment=environment,
+        ci=ci,
+    )
+    assert binding.verify_binding(value) == value
+    with pytest.raises(ExperimentError, match="binding_drift"):
+        binding.verify_binding(value.model_copy(update={"harness_digest": "sha256:" + "5" * 64}))
+    (candidate / "src/app/__init__.py").write_text("VALUE = 99\n")
+    with pytest.raises(ExperimentError, match="dirty_source"):
+        binding.verify_binding(value)
