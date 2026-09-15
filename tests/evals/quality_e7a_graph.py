@@ -1,4 +1,4 @@
-"""E7-A research slice. No Writer, action, DB root, or durable budget guarantee.
+"""E7-A research and generation slices, without actions or durable recovery.
 
 The caller supplies an already bound Registry runtime and authorized source scope.
 Usage notifications precede calls, including failures. Factory/Registry retain their
@@ -17,7 +17,7 @@ from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.agents.contracts import AgentLoopControl, AgentLoopLimitsV1, AgentLoopObserver
 from app.agents.create_agent_loop import (
@@ -70,6 +70,7 @@ from tests.evals.quality_e7a_assessment import EvidenceAssessmentNode
 from tests.evals.quality_e7a_contracts import (
     GAP_CODES,
     E7ABudgetUsageV1,
+    E7AResearchOutputV1,
     EvidenceAssessmentV1,
     EvidenceContext,
     GapCode,
@@ -79,6 +80,7 @@ from tests.evals.quality_e7a_contracts import (
     validate_assessment,
     validate_usage_progress,
 )
+from tests.evals.quality_e7a_writer import E7AWriterNode, WriterSummaryV1, draft_eligible
 
 GRAPH_VERSION = "pathfinder-research-e7a-exp-v1"
 TOOLS = frozenset({"search_web", "retrieve_documents"})
@@ -788,3 +790,87 @@ def _research_message(node_input, state, number):
             + "\n</untrusted_gap_queries>"
         )
     return ChatMessage(role="user", content=content)
+
+
+class E7AGenerationResultV1(ResearchContractModel):
+    """Completed generation only, not a persisted Run or application submission."""
+
+    research_state: E7AResearchStateV1
+    output: E7AResearchOutputV1
+    writer_summary: WriterSummaryV1
+    draft_eligible: bool
+    status: Literal["completed"] = "completed"
+
+    @model_validator(mode="after")
+    def consistent(self):
+        if (
+            self.research_state.assessment != self.output.assessment
+            or self.research_state.stop_reason is None
+            or self.writer_summary.outcome != self.output.assessment.outcome
+            or self.writer_summary.draft_eligible != self.draft_eligible
+            or self.research_state.usage.writer_calls != self.writer_summary.model_call_count
+            or self.draft_eligible
+            != (
+                self.output.assessment.outcome == "sufficient"
+                and self.research_state.request.include_application_draft
+                and self.output.application_draft is not None
+            )
+        ):
+            raise ValueError("inconsistent generation result")
+        return self
+
+
+def build_e7a_generation_graph():
+    """Compose the unchanged A.4 research slice with Writer and strict finalization.
+
+    This fresh-run seam accepts the same request envelope and trusted runtime.
+    It has no action store, approval interrupt, DB root or persistent checkpointer.
+    """
+    research_graph = build_e7a_research_graph()
+
+    async def research(envelope, runtime):
+        return await research_graph.ainvoke(envelope, context=runtime)
+
+    async def write(envelope, runtime):
+        state = _checked(E7AResearchStateV1, envelope["payload"])
+        if (
+            not runtime.usage_owner.started
+            or state.usage != runtime.usage_owner.usage
+            or state.stop_reason is None
+            or state.usage.writer_calls
+        ):
+            raise E7AGraphError("configuration_error")
+        result = await E7AWriterNode(runtime.factory, runtime.invocation_context)(
+            evidence_context(state, runtime.scope),
+            state.assessment,
+            usage=runtime.usage_owner.usage,
+            control=runtime.control,
+            on_admitted=runtime.usage_owner.publish,
+        )
+        return _envelope(
+            E7AGenerationResultV1(
+                research_state=state.model_copy(update={"usage": result.usage}),
+                output=result.output,
+                writer_summary=result.summary,
+                draft_eligible=result.summary.draft_eligible,
+            )
+        )
+
+    async def finalize(envelope, runtime):
+        result = _checked(E7AGenerationResultV1, envelope["payload"])
+        context = evidence_context(result.research_state, runtime.scope)
+        if (
+            result.research_state.usage != runtime.usage_owner.usage
+            or result.draft_eligible != draft_eligible(result.output, context)
+        ):
+            raise E7AGraphError("configuration_error")
+        return _envelope(result)
+
+    graph = StateGraph(GraphEnvelope, context_schema=E7AGraphRuntime)
+    for name, function in (("research", research), ("write_report", write), ("finalize", finalize)):
+        graph.add_node(name, _guarded(function))
+    graph.add_edge(START, "research")
+    graph.add_edge("research", "write_report")
+    graph.add_edge("write_report", "finalize")
+    graph.add_edge("finalize", END)
+    return graph.compile(name=GRAPH_VERSION, checkpointer=False)
