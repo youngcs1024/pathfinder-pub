@@ -585,9 +585,7 @@ async def test_no_available_tools_skip_loop_and_empty_assessment_calls():
 
 @pytest.mark.parametrize("stage", ["plan", "research", "assessment"])
 async def test_provider_failure_preserves_admitted_usage_and_safe_errors(stage, capsys):
-    error = ProviderAdapterError(
-        category="provider_timeout", retryable=False, provider="fake", model=LOCKED_CHAT_MODEL
-    )
+    error = ProviderAdapterError(category="provider_timeout", retryable=True)
     steps = {
         "plan": [error],
         "research": [plan(), error],
@@ -605,9 +603,7 @@ async def test_provider_failure_preserves_admitted_usage_and_safe_errors(stage, 
 
 
 async def test_factory_retry_is_two_attempts_but_one_logical_plan_call():
-    transient = ProviderAdapterError(
-        category="provider_timeout", retryable=True, provider="fake", model=LOCKED_CHAT_MODEL
-    )
+    transient = ProviderAdapterError(category="provider_timeout", retryable=True)
     runtime, adapter, _, _, _, recorder, *_ = setup(
         transient, plan(), calls("initial"), DONE, assess(), retries=2
     )
