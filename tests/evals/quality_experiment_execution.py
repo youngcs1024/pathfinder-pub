@@ -1253,6 +1253,7 @@ def main(argv=None):
         command_.add_argument("--binding", type=Path, required=True)
         command_.add_argument("--run-root", type=Path, required=True)
         command_.add_argument("--review-root", type=Path, required=True)
+        command_.add_argument("--evaluator-ci-evidence", type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "experiment-bind":

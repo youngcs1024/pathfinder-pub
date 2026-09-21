@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from decimal import Decimal
+from math import isfinite
 from pathlib import Path
 from typing import Literal
 
@@ -29,12 +32,20 @@ from tests.evals.quality_e7a_contracts import E7AResearchOutputV1
 from tests.evals.quality_experiment import DATASET, load_experiment_plan
 from tests.evals.quality_experiment_binding import (
     PLAN,
+    ROOT,
+    CIProofV1,
+    ci_proof,
+    command,
     encoded,
     fail,
+    git,
+    harness_inventory,
     no_links,
     read_binding,
     read_json,
+    source_identity,
     verify_binding,
+    verify_imports,
     write_new,
 )
 from tests.evals.quality_experiment_execution import (
@@ -419,7 +430,7 @@ def export_review(binding, root, destination):
     return export
 
 
-def collect_review(binding, root, directory):
+def collect_review(binding, root, directory, *, evaluator_sha=None):
     plan, execution, reports, private, _, _ = load_execution(binding, root)
     dataset = load_quality_dataset(Path(binding.harness_root) / DATASET)
     export = read_json(directory / "export.json")
@@ -524,7 +535,7 @@ def collect_review(binding, root, directory):
             dataset,
             projected,
             tuple(annotations[arm]),
-            scorer_source_sha=binding.candidate_source_sha,
+            scorer_source_sha=evaluator_sha or binding.candidate_source_sha,
             scorer_change_reason="e7a7_scoring_projection",
         )
     receipt = ReviewReceiptV1(
@@ -574,6 +585,21 @@ def macro_support(cases, field):
             return None
         values.append(Decimal(counts.supported) / Decimal(denom))
     return sum(values, Decimal(0)) / len(values) if values else None
+
+
+def generation_elapsed(observation):
+    times = [t.seconds for t in observation.stage_times if t.stage == "generation"]
+    if len(times) != 1:
+        return None
+    value = times[0]
+    return (
+        value
+        if isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and isfinite(value)
+        and value >= 0
+        else None
+    )
 
 
 def frozen_rules(plan, scores, resources):
@@ -706,10 +732,7 @@ def frozen_rules(plan, scores, resources):
     )
     latencies = []
     for arm in ARMS:
-        times = [
-            next((t.seconds for t in c.observation.stage_times if t.stage == "total"), None)
-            for c in grouped["semantic"][arm]
-        ]
+        times = [generation_elapsed(c.observation) for c in grouped["semantic"][arm]]
         latencies.append(
             samples(times).p95
             if len(times) == plan.samples.semantic_slots_per_arm and None not in times
@@ -836,13 +859,108 @@ def decide(
     ), comparison
 
 
+class EvaluationProvenanceV1(EvalContractModel):
+    artifact_kind: Literal["e7a7_evaluation_provenance_v1"] = "e7a7_evaluation_provenance_v1"
+    binding_digest: EvalDigest
+    execution_digest: EvalDigest
+    evaluator_source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    evaluator_root: str
+    evaluator_source_digest: EvalDigest
+    evaluator_diff_digest: EvalDigest
+    ci: CIProofV1
+    algorithm_version: Literal["e7a7-generation-latency-v2"] = "e7a7-generation-latency-v2"
+
+
+def evaluator_provenance(binding, run_root, ci_path):
+    supplied = ci_proof(read_json(ci_path))
+    source_identity(ROOT, supplied.source_sha)
+    verify_imports(ROOT, ROOT)
+    fresh = ci_proof(
+        json.loads(
+            command(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/ci_inspect_run.py"),
+                    "--repo",
+                    "youngcs1024/pathfinder-pub",
+                    "--run-id",
+                    str(supplied.run_id),
+                    "--expected-sha",
+                    supplied.source_sha,
+                    "--attempt",
+                    str(supplied.attempt),
+                ]
+            )
+        )
+    )
+    if fresh != supplied:
+        fail("evaluator_ci_drift")
+    allowed = {
+        "tests/evals/quality_experiment_decision.py",
+        "tests/evals/test_quality_experiment_decision.py",
+        "tests/evals/quality_experiment_execution.py",
+    }
+    delta = git(
+        ROOT,
+        "diff",
+        "--name-status",
+        "--no-renames",
+        binding.candidate_source_sha,
+        supplied.source_sha,
+    ).decode()
+    for line in delta.splitlines():
+        status, name = line.split("\t")
+        if status != "M" or name not in allowed:
+            fail("unapproved_evaluator_diff")
+    execution = read_json(run_root / "execution.json", ExecutionV1)
+    if execution.binding_digest != digest(binding):
+        fail("execution_binding_mismatch")
+    return EvaluationProvenanceV1(
+        binding_digest=digest(binding),
+        execution_digest=digest(execution),
+        evaluator_source_sha=supplied.source_sha,
+        evaluator_root=str(ROOT),
+        evaluator_source_digest=digest(harness_inventory(ROOT)),
+        evaluator_diff_digest=quality_digest(
+            git(
+                ROOT,
+                "diff",
+                "--binary",
+                "--no-ext-diff",
+                binding.candidate_source_sha,
+                supplied.source_sha,
+            )
+        ),
+        ci=supplied,
+    )
+
+
 def decision_command(args):
     binding = read_binding(args.binding)
     verify_binding(binding)
+    ci_path = getattr(args, "evaluator_ci_evidence", None)
+    provenance = evaluator_provenance(binding, args.run_root, ci_path) if ci_path else None
+    if (
+        provenance is None
+        and git(ROOT, "rev-parse", "HEAD").decode().strip() != binding.candidate_source_sha
+    ):
+        fail("evaluator_evidence_required")
     if args.command == "experiment-review-export":
         export_review(binding, args.run_root, args.review_root)
+        if provenance is not None:
+            write_new(args.review_root / "evaluator.json", provenance)
         return 0
-    receipt, scores = collect_review(binding, args.run_root, args.review_root)
+    if provenance is not None:
+        if read_json(args.review_root / "evaluator.json", EvaluationProvenanceV1) != provenance:
+            fail("evaluator_provenance_drift")
+    elif (args.review_root / "evaluator.json").exists():
+        fail("evaluator_evidence_required")
+    receipt, scores = collect_review(
+        binding,
+        args.run_root,
+        args.review_root,
+        evaluator_sha=provenance.evaluator_source_sha if provenance else None,
+    )
     if args.command == "experiment-review-import":
         for arm, score in scores.items():
             write_new(args.review_root / f"score-{arm}.json", score)

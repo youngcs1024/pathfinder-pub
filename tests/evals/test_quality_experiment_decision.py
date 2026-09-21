@@ -27,7 +27,7 @@ def comparison_fixture():
                             case_id=case_id,
                             repeat_index=repeat,
                             status="succeeded",
-                            stage_times=[NS(stage="total", seconds=10.0)],
+                            stage_times=[NS(stage="generation", seconds=10.0)],
                         ),
                         assessment_complete=True,
                         insufficiency="overclaim" if overclaim else "appropriate",
@@ -340,3 +340,124 @@ def test_final_recommendation_keeps_missing_evidence_distinct_from_rejection(
     )
     assert decision.recommendation == expected
     assert decision.evidence_complete == (expected != "insufficient_evidence")
+
+
+@pytest.mark.parametrize(
+    "times",
+    [
+        [],
+        [NS(stage="total", seconds=1)],
+        [NS(stage="generation", seconds=1)] * 2,
+        [NS(stage="generation", seconds=-1)],
+        [NS(stage="generation", seconds=float("nan"))],
+        [NS(stage="generation", seconds=True)],
+    ],
+)
+def test_invalid_generation_elapsed_remains_unknown(times):
+    plan, scores, resources = comparison_fixture()
+    case = next(
+        c
+        for c in scores["candidate"].cases
+        if c.observation.case_id not in plan.samples.scope_case_ids
+    )
+    case.observation.stage_times = times
+    rules = by_name(plan, scores, resources)
+    assert rules["latency_relative"].passed is None
+    assert rules["latency_absolute"].passed is None
+
+
+def test_failed_generation_elapsed_is_included_in_63_slot_p95():
+    plan, scores, resources = comparison_fixture()
+    rows = [
+        c
+        for c in scores["candidate"].cases
+        if c.observation.case_id not in plan.samples.scope_case_ids
+    ]
+    assert len(rows) == 63
+    for row in rows[:4]:
+        row.observation.status = "failed"
+        row.observation.stage_times[0].seconds = 100.0
+    rules = by_name(plan, scores, resources)
+    assert rules["latency_absolute"].candidate == 100.0
+    assert rules["latency_absolute"].passed is False
+    scores["candidate"].cases.remove(rows[-1])
+    assert by_name(plan, scores, resources)["latency_absolute"].passed is None
+
+
+def test_evaluator_provenance_binds_real_source_ci_and_execution(tmp_path, monkeypatch):
+    from tests.evals import quality_experiment_decision as module
+    from tests.evals.quality_experiment_binding import ExperimentError, write_new
+    from tests.evals.test_quality_experiment_binding import ci_summary
+    from tests.evals.test_quality_experiment_execution import binding_fixture
+
+    tmp_path.chmod(0o700)
+    binding = binding_fixture(tmp_path)
+    summary = ci_summary()
+    write_new(tmp_path / "ci.json", summary)
+    execution = NS(binding_digest=module.digest(binding))
+    reads = module.read_json
+    monkeypatch.setattr(
+        module, "read_json", lambda p, *a: execution if p.name == "execution.json" else reads(p, *a)
+    )
+    original_digest = module.digest
+    monkeypatch.setattr(
+        module, "digest", lambda v: "sha256:" + "1" * 64 if v is execution else original_digest(v)
+    )
+    checked = []
+    monkeypatch.setattr(module, "source_identity", lambda root, sha: checked.append(sha))
+    monkeypatch.setattr(module, "verify_imports", lambda *a: 95)
+    monkeypatch.setattr(module, "command", lambda *a: module.encoded(summary))
+    monkeypatch.setattr(module, "harness_inventory", lambda *a: {"source": "digest"})
+    monkeypatch.setattr(
+        module,
+        "git",
+        lambda *a: (
+            b"M\ttests/evals/quality_experiment_decision.py\n"
+            if "--name-status" in a
+            else b"reviewed-diff"
+        ),
+    )
+    result = module.evaluator_provenance(binding, tmp_path, tmp_path / "ci.json")
+    assert result.evaluator_source_sha == summary["sha"] and checked == [summary["sha"]]
+    assert result.binding_digest == module.digest(binding)
+    monkeypatch.setattr(module, "git", lambda *a: b"M\tsrc/app/llm/factory.py\n")
+    with pytest.raises(ExperimentError, match="unapproved_evaluator_diff"):
+        module.evaluator_provenance(binding, tmp_path, tmp_path / "ci.json")
+    monkeypatch.setattr(
+        module, "command", lambda *a: module.encoded({**summary, "run_id": summary["run_id"] + 1})
+    )
+    with pytest.raises(ExperimentError, match="evaluator_ci_drift"):
+        module.evaluator_provenance(binding, tmp_path, tmp_path / "ci.json")
+
+
+@pytest.mark.parametrize("kind", ["missing", "changed", "legacy_with_receipt"])
+def test_decision_entrypoint_rejects_missing_or_tampered_evaluator_before_scoring(
+    tmp_path, monkeypatch, kind
+):
+    from tests.evals import quality_experiment_decision as module
+    from tests.evals.quality_experiment_binding import ExperimentError
+    from tests.evals.test_quality_experiment_execution import binding_fixture
+
+    binding = binding_fixture(tmp_path)
+    monkeypatch.setattr(module, "read_binding", lambda p: binding)
+    monkeypatch.setattr(module, "verify_binding", lambda b: b)
+    monkeypatch.setattr(
+        module,
+        "git",
+        lambda *a: ("b" * 40 if kind == "missing" else binding.candidate_source_sha).encode(),
+    )
+    monkeypatch.setattr(
+        module, "evaluator_provenance", lambda *a: NS(evaluator_source_sha="b" * 40)
+    )
+    monkeypatch.setattr(module, "read_json", lambda *a: NS(evaluator_source_sha="c" * 40))
+    if kind == "legacy_with_receipt":
+        (tmp_path / "evaluator.json").write_text("{}")
+    args = NS(
+        binding=tmp_path / "binding.json",
+        run_root=tmp_path,
+        review_root=tmp_path,
+        evaluator_ci_evidence=tmp_path / "ci.json" if kind == "changed" else None,
+        command="experiment-review-import",
+    )
+    with pytest.raises(ExperimentError, match=r"evaluator_(evidence_required|provenance_drift)"):
+        module.decision_command(args)
