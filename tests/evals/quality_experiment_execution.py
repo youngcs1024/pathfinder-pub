@@ -820,6 +820,8 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
             fail("image_drift")
         _reply("ready")
         message = await _input()
+        if message.get("command") == "abort":
+            fail("cancelled")
         if message.get("command") != "prepare" or type(message.get("deadline")) is not float:
             fail("child_protocol_failed")
         observer = ResourceObserver(

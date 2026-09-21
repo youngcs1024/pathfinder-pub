@@ -219,7 +219,7 @@ async def test_two_real_source_roots_use_isolated_processes_and_owned_pg(tmp_pat
 
 @pytest.mark.parametrize(
     "entrypoint,invalid_response",
-    [("diagnostic", False), ("diagnostic", True), ("child", True)],
+    [("diagnostic", False), ("diagnostic", True), ("child", True), ("child-abort", False)],
 )
 async def test_bounded_embedding_diagnostic_uses_real_pg_and_preserves_failure(
     tmp_path, entrypoint, invalid_response
@@ -356,7 +356,7 @@ async def _diagnostic_contract(tmp_path, monkeypatch, invalid_response, entrypoi
 
     monkeypatch.setattr(module, "OwnedExperimentDatabase", CheckedOwner)
     root = tmp_path / "diagnostic"
-    if entrypoint == "child":
+    if entrypoint.startswith("child"):
         root.mkdir(mode=0o700)
         for name in ("baseline", "outputs", "private"):
             (root / name).mkdir(mode=0o700)
@@ -366,6 +366,8 @@ async def _diagnostic_contract(tmp_path, monkeypatch, invalid_response, entrypoi
         async def prepare(*args):
             from time import monotonic
 
+            if entrypoint == "child-abort":
+                return {"command": "abort"}
             return {"command": "prepare", "deadline": monotonic() + 300}
 
         replies = []
@@ -374,6 +376,11 @@ async def _diagnostic_contract(tmp_path, monkeypatch, invalid_response, entrypoi
             if category == "failed":
                 assert closed == [True]
                 assert (root / "baseline/cleanup.json").is_file()
+                if entrypoint == "child-abort":
+                    assert (
+                        module.read_json(root / "baseline/failure.json")["category"] == "cancelled"
+                    )
+                    return replies.append(category)
                 assert (root / "baseline/resources/report.json").is_file()
                 assert (root / "baseline/failure-usage.json").is_file(), module.read_json(
                     root / "baseline/cleanup.json"
@@ -393,7 +400,7 @@ async def _diagnostic_contract(tmp_path, monkeypatch, invalid_response, entrypoi
         finally:
             asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
         assert result == 1 and replies == ["ready", "failed"]
-        assert len(calls) == 1
+        assert len(calls) == (0 if entrypoint == "child-abort" else 1)
         assert module.read_json(root / "baseline/cleanup.json")["cleanup_complete"]
         return
     report = await module.diagnose_embedding(
