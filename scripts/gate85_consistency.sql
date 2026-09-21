@@ -229,6 +229,10 @@ snapshot AS (
                     'resume_document_id', run.resume_document_id,
                     'status', run.status,
                     'graph_version', run.graph_version,
+                    'client_request_id', run.client_request_id,
+                    'create_request_digest', run.create_request_digest,
+                    'create_request_version', run.create_request_version,
+                    'result_sha256', encode(sha256(convert_to(run.result_json::text, 'UTF8')), 'hex'),
                     'next_event_seq', run.next_event_seq
                 )
                 FROM fixture_run AS run

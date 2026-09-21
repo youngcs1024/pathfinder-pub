@@ -7,9 +7,12 @@ from scripts.ci_reports import (
     LIMIT,
     OUTCOMES,
     PHASES,
+    RESTORE_CHECKS,
+    RESTORE_TABLES,
     main,
     pytest_projection,
     read_json,
+    restore_projection,
     scanner_projection,
     smoke_projection,
     write_json,
@@ -18,6 +21,91 @@ from scripts.ci_reports import (
     test_path as checked_path,
 )
 from tests.ci_reports import Reports
+
+
+def restore_packet():
+    return {
+        "status": "PASS",
+        "stage": "complete",
+        "elapsed_ms": 1234,
+        "old_revision": "0014_gate6_action_recovery",
+        "revision": "0015_e3_run_request_identity",
+        "graph": "pathfinder-research-v6",
+        "postgres_image": "pgvector/pgvector:0.8.5-pg16",
+        "postgres_image_id": "sha256:" + "a" * 64,
+        "checks": dict.fromkeys(RESTORE_CHECKS, True),
+        "resources_stopped": True,
+        "tables": {name: {"rows": 1, "sha256": "b" * 64} for name in RESTORE_TABLES},
+        "dump_bytes": 1024,
+        "dump_sha256": "c" * 64,
+        "snapshot_sha256": "d" * 64,
+        "business_digest": "e" * 64,
+    }
+
+
+def test_successful_restore_evidence_survives_both_projections():
+    value = restore_packet()
+    value["raw_dump"] = "PRIVATE-CANARY"
+    value["tables"]["public.runs"]["body"] = "PRIVATE-CANARY"
+    reporter = Reports()
+    reporter.record(
+        SimpleNamespace(
+            nodeid="tests/integration/db/test_release_restore.py::test_real_upgrade_dump_restore_and_resume",
+            outcome="passed",
+            passed=True,
+            user_properties=[("restore", value)],
+        ),
+        "call",
+    )
+    result = pytest_projection(
+        {**packet(), "records": reporter.records, "counts": dict(reporter.counts)}
+    )
+    assert result["records"][0]["restore"] == restore_packet()
+    assert "PRIVATE-CANARY" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("change", ["stage", "digest", "table", "check", "missing", "stopped"])
+def test_restore_projection_rejects_malformed_or_incomplete_pass(change):
+    value = restore_packet()
+    if change == "stage":
+        value["stage"] = "PRIVATE-CANARY"
+    elif change == "digest":
+        value["dump_sha256"] = "PRIVATE-CANARY"
+    elif change == "table":
+        value["tables"]["PRIVATE-CANARY"] = {"rows": 1, "sha256": "a" * 64}
+    elif change == "check":
+        value["checks"]["exact_restore"] = False
+    elif change == "missing":
+        value["checks"].pop("exact_restore")
+    else:
+        value["resources_stopped"] = False
+    with pytest.raises(ValueError, match="invalid_diagnostic"):
+        restore_projection(value)
+
+
+def test_partial_restore_keeps_completed_checks_without_fabricating_pass():
+    value = restore_packet()
+    value.update(status="IN_PROGRESS", stage="restore", checks={"legacy_upgrade": True})
+    value.pop("business_digest")
+    assert restore_projection(value) == value
+
+
+@pytest.mark.parametrize("primary", [0, 1])
+def test_invalid_restore_evidence_cannot_silently_turn_green(tmp_path, monkeypatch, primary):
+    monkeypatch.setenv("PF_CI_PYTEST_REPORTS", str(tmp_path / "reports"))
+    reporter = Reports()
+    reporter.record(
+        SimpleNamespace(
+            nodeid="tests/integration/db/test_release_restore.py::test_real_upgrade_dump_restore_and_resume",
+            outcome="passed",
+            passed=True,
+            user_properties=[("restore", {"status": "PASS"})],
+        ),
+        "call",
+    )
+    session = SimpleNamespace(exitstatus=primary)
+    reporter.pytest_sessionfinish(session, primary)
+    assert session.exitstatus == (primary or 3)
 
 
 def packet():

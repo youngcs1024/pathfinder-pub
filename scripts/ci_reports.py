@@ -46,6 +46,92 @@ CATEGORIES = {
     "report_failed",
     "environment_failed",
 }
+RESTORE_CHECKS = {
+    "legacy_upgrade",
+    "current_fixtures",
+    "keyed_downgrade_refused",
+    "stable_backup",
+    "exact_restore",
+    "operational_probe",
+    "historical_output",
+    "request_replay",
+    "approval_checkpoint_resume",
+    "terminal_no_resubmit",
+    "replay_authorization",
+    "invalid_backup_refused",
+    "occupied_target_refused",
+}
+RESTORE_ERRORS = {
+    "unexpected_error",
+    "deadline",
+    "command_unavailable",
+    "command_failed",
+    "invalid_role",
+    "unsafe_container",
+    "unsafe_binding",
+    "database_not_ready",
+    "schema_mismatch",
+    "invalid_dump",
+    "checksum_mismatch",
+    "target_not_empty",
+    "snapshot_mismatch",
+    "cleanup_failed",
+    "probe_failed",
+    "legacy_changed",
+    "missing_approval",
+    "decision_failed",
+    "fixture_failed",
+    "unknown_fixture_failed",
+    "downgrade_not_safe",
+    "history_unreadable",
+    "history_changed",
+    "replay_failed",
+    "conflict_not_rejected",
+    "foreign_replay_allowed",
+    "revoked_replay_allowed",
+    "readiness_failed",
+    "replay_wrote_facts",
+    "resume_failed",
+    "checkpoint_repeated_models",
+    "terminal_job_requeued",
+    "terminal_changed",
+    "denied_replay_wrote_facts",
+    "image_mismatch",
+    "identity_missing",
+    "source_changed",
+    "occupied_target_changed",
+    "probe_changed",
+}
+RESTORE_TABLES = {
+    "public." + name
+    for name in (
+        "action_intents",
+        "alembic_version",
+        "approval_decisions",
+        "approval_requests",
+        "conversations",
+        "document_chunks",
+        "documents",
+        "llm_invocations",
+        "messages",
+        "mock_submissions",
+        "run_events",
+        "run_jobs",
+        "runs",
+        "tool_invocations",
+        "users",
+        "workspace_memberships",
+        "workspaces",
+    )
+} | {
+    "pathfinder_checkpoint." + name
+    for name in (
+        "checkpoint_blobs",
+        "checkpoint_migrations",
+        "checkpoint_writes",
+        "checkpoints",
+    )
+}
 
 
 def check(condition):
@@ -98,6 +184,68 @@ def smoke_projection(value):
     return result
 
 
+def restore_projection(value):
+    """Publish only bounded evidence, never database content, identifiers, paths or errors."""
+    check(isinstance(value, dict))
+    result = {}
+    if "failure_category" in value:
+        check(value["failure_category"] in RESTORE_ERRORS | {None})
+        result["failure_category"] = value["failure_category"]
+    for key, allowed in {
+        "status": {"PASS", "IN_PROGRESS"},
+        "stage": {
+            "environment",
+            "upgrade",
+            "fixtures",
+            "downgrade_guard",
+            "backup",
+            "restore",
+            "resume",
+            "complete",
+            "cleanup",
+        },
+        "old_revision": {"0014_gate6_action_recovery"},
+        "revision": {"0015_e3_run_request_identity"},
+        "graph": {"pathfinder-research-v6"},
+        "postgres_image": {"pgvector/pgvector:0.8.5-pg16"},
+    }.items():
+        check(value.get(key) in allowed)
+        result[key] = value[key]
+    result["elapsed_ms"] = number(value.get("elapsed_ms"), 900_000)
+    check(type(value.get("resources_stopped")) is bool)
+    result["resources_stopped"] = value["resources_stopped"]
+    checks = value.get("checks")
+    check(isinstance(checks, dict) and checks.keys() <= RESTORE_CHECKS)
+    check(all(type(v) is bool for v in checks.values()))
+    result["checks"] = dict(checks)
+    tables = value.get("tables")
+    check(isinstance(tables, dict) and tables.keys() <= RESTORE_TABLES)
+    result["tables"] = {}
+    for name, entry in tables.items():
+        check(isinstance(entry, dict))
+        checksum = entry.get("sha256")
+        check(isinstance(checksum, str) and re.fullmatch(r"[0-9a-f]{64}", checksum) is not None)
+        result["tables"][name] = {"rows": number(entry.get("rows")), "sha256": checksum}
+    for key in ("dump_sha256", "snapshot_sha256", "business_digest", "postgres_image_id"):
+        if key in value:
+            pattern = r"sha256:[0-9a-f]{64}" if key == "postgres_image_id" else r"[0-9a-f]{64}"
+            check(isinstance(value[key], str) and re.fullmatch(pattern, value[key]) is not None)
+            result[key] = value[key]
+    if "dump_bytes" in value:
+        result["dump_bytes"] = number(value["dump_bytes"], 64 * 1024 * 1024)
+        check(result["dump_bytes"] > 0)
+    if result["status"] == "PASS":
+        check(result.get("failure_category") is None)
+        check(result["stage"] == "complete" and result["resources_stopped"])
+        check(checks.keys() == RESTORE_CHECKS and all(checks.values()))
+        check(tables.keys() == RESTORE_TABLES)
+        check(
+            {"dump_sha256", "snapshot_sha256", "business_digest", "postgres_image_id", "dump_bytes"}
+            <= result.keys()
+        )
+    return result
+
+
 def pytest_projection(value):
     check(isinstance(value, dict) and value.get("schema_version") == 1)
     check(value.get("step", "local") in TEST_STEPS)
@@ -115,6 +263,8 @@ def pytest_projection(value):
         }
         if "smoke" in record:
             item["smoke"] = smoke_projection(record["smoke"])
+        if "restore" in record:
+            item["restore"] = restore_projection(record["restore"])
         safe.append(item)
     counts = value.get("counts")
     check(

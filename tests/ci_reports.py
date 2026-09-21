@@ -5,7 +5,14 @@ from collections import Counter
 from pathlib import Path
 from uuid import uuid4
 
-from scripts.ci_reports import OUTCOMES, PHASES, smoke_projection, test_path, write_json
+from scripts.ci_reports import (
+    OUTCOMES,
+    PHASES,
+    restore_projection,
+    smoke_projection,
+    test_path,
+    write_json,
+)
 
 
 class Reports:
@@ -13,25 +20,42 @@ class Reports:
         self.records = []
         self.counts = Counter({p + ":" + o: 0 for p in PHASES for o in OUTCOMES})
         self.dropped = 0
+        self.invalid_restore = False
 
     def record(self, report, phase):
         self.counts[phase + ":" + report.outcome] += 1
         smoke = next(
             (value for key, value in getattr(report, "user_properties", ()) if key == "smoke"), None
         )
-        if report.passed and smoke is None:
+        restore = (
+            next(
+                (
+                    value
+                    for key, value in getattr(report, "user_properties", ())
+                    if key == "restore"
+                ),
+                None,
+            )
+            if phase == "call"
+            else None
+        )
+        if report.passed and smoke is None and restore is None:
             return
         if len(self.records) >= 256:
             self.dropped += 1
+            self.invalid_restore |= restore is not None
             return
         try:
             path = test_path(report.nodeid.split("::", 1)[0])
             item = {"path": path, "phase": phase, "outcome": report.outcome}
             if smoke is not None:
                 item["smoke"] = smoke_projection(smoke)
+            if restore is not None:
+                item["restore"] = restore_projection(restore)
             self.records.append(item)
         except (ValueError, TypeError, KeyError):
             self.dropped += 1
+            self.invalid_restore |= restore is not None
 
     def pytest_collectreport(self, report):
         self.record(report, "collect")
@@ -40,6 +64,9 @@ class Reports:
         self.record(report, report.when)
 
     def pytest_sessionfinish(self, session, exitstatus):
+        if self.invalid_restore and not session.exitstatus:
+            session.exitstatus = 3
+            exitstatus = 3
         try:
             directory = Path(os.environ["PF_CI_PYTEST_REPORTS"])
             directory.mkdir(mode=0o700, exist_ok=True)
