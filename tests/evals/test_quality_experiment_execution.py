@@ -22,6 +22,7 @@ from tests.evals.quality_experiment_binding import (
 )
 from tests.evals.quality_experiment_execution import (
     AuthorizationV1,
+    AuthorizationV2,
     ExperimentHooks,
     SlotV1,
     arm_manifest,
@@ -30,6 +31,7 @@ from tests.evals.quality_experiment_execution import (
     execute,
     live_identity_factory,
     planned_slots,
+    read_authorization,
     summarize_rows,
 )
 from tests.evals.test_quality_experiment_binding import ci_summary
@@ -137,23 +139,28 @@ async def test_budget_source_failure_happens_before_pg_or_provider(tmp_path):
     assert not tuple(tmp_path.iterdir())
 
 
+@pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.parametrize("fault", [None, "stopped", "wrong_index", "cancelled"])
-async def test_coordinator_fixed_order_and_failure_preservation(tmp_path, monkeypatch, fault):
+async def test_coordinator_fixed_order_and_failure_preservation(
+    tmp_path, monkeypatch, fault, version
+):
     import tests.evals.quality_experiment_execution as module
 
     tmp_path.chmod(0o700)
     binding = binding_fixture(tmp_path)
     binding_path = tmp_path / "binding.json"
     write_new(binding_path, binding)
-    auth = AuthorizationV1(
+    auth = (AuthorizationV1 if version == 1 else AuthorizationV2)(
         binding_digest=quality_identity_digest(binding.model_dump(mode="json")),
-        source="user_explicit_e7a7_live_and_agent_review",
+        source="user_explicit_e7a7_live_and_agent_review"
+        if version == 1
+        else "user_explicit_e7a7_live_only",
         synthetic_materials=True,
         frozen_144_slots=True,
         per_arm_cny=30,
         total_cny=60,
         own_wsl_resources=True,
-        agent_initial_and_recheck=True,
+        agent_initial_and_recheck=version == 1,
     )
     auth_path = tmp_path / "auth.json"
     write_new(auth_path, auth)
@@ -227,6 +234,8 @@ async def test_coordinator_fixed_order_and_failure_preservation(tmp_path, monkey
         assert (root / "slots/start-0005.json").exists()
         assert sum(s.status == "not_run" for s in report.slots) == 138
         assert report.slots[5].status == ("succeeded" if fault == "stopped" else "missing")
+    assert read_authorization(auth_path) == auth
+    assert not (root / "review").exists()
     assert read_json(root / "execution.json")["execution_complete"] == report.execution_complete
     with pytest.raises(FileExistsError):
         await execute(binding_path, root, tmp_path / "unused-credentials", auth_path)
@@ -246,3 +255,66 @@ async def test_unknown_tokens_stop_before_next_attempt_even_with_cost_reserve(tm
         await hooks.before_attempt(NS())
     assert hooks.failure == "unknown_provider_usage"
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"artifact_kind": "future_authorization"},
+        {"artifact_kind": "e7a7_run_authorization_v1"},
+        {"source": "user_explicit_e7a7_live_and_agent_review"},
+        {"agent_initial_and_recheck": True},
+        {"agent_initial_and_recheck": "false"},
+        {"binding_digest": "sha256:" + "9" * 64},
+        {"per_arm_cny": 31},
+        {"total_cny": 61},
+        {"synthetic_materials": False},
+        {"frozen_144_slots": False},
+        {"own_wsl_resources": False},
+        {"production_adoption": True},
+        {"deployment": True},
+        {"unexpected_permission": True},
+    ],
+)
+async def test_live_only_authorization_rejected_before_any_execution(tmp_path, monkeypatch, change):
+    import tests.evals.quality_experiment_execution as module
+
+    tmp_path.chmod(0o700)
+    binding = binding_fixture(tmp_path)
+    binding_path = tmp_path / "binding.json"
+    write_new(binding_path, binding)
+    value = AuthorizationV2(
+        binding_digest=quality_identity_digest(binding.model_dump(mode="json")),
+        source="user_explicit_e7a7_live_only",
+        synthetic_materials=True,
+        frozen_144_slots=True,
+        per_arm_cny=30,
+        total_cny=60,
+        own_wsl_resources=True,
+        agent_initial_and_recheck=False,
+    ).model_dump(mode="json")
+    value.update(change)
+    auth_path = tmp_path / "authorization.json"
+    write_new(auth_path, value)
+    monkeypatch.setattr(module, "verify_binding", lambda *a, **kw: binding)
+    monkeypatch.setattr(module, "probe_environment", lambda: binding.environment)
+
+    async def unexpected_child(*args):
+        pytest.fail("authorization_rejection_started_child")
+
+    monkeypatch.setattr(module, "launch_child", unexpected_child)
+    with pytest.raises(ExperimentError):
+        await execute(binding_path, tmp_path / "run", tmp_path / "unread-credentials", auth_path)
+    assert not (tmp_path / "run").exists()
+    assert not list(tmp_path.glob("*.execution-claim.json"))
+
+
+@pytest.mark.parametrize(
+    "value", [None, [], "authorization", {}, {"artifact_kind": "unknown"}, {"artifact_kind": []}]
+)
+def test_authorization_requires_known_object_version(tmp_path, value):
+    path = tmp_path / "authorization.json"
+    tmp_path.chmod(0o700)
+    write_new(path, value)
+    with pytest.raises(ExperimentError):
+        read_authorization(path)

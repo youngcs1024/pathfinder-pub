@@ -324,6 +324,41 @@ class AuthorizationV1(EvalContractModel):
     deployment: Literal[False] = False
 
 
+class AuthorizationV2(EvalContractModel):
+    """Authorize generation only; review remains a separately requested operation."""
+
+    artifact_kind: Literal["e7a7_run_authorization_v2"] = "e7a7_run_authorization_v2"
+    binding_digest: EvalDigest
+    source: Literal["user_explicit_e7a7_live_only"]
+    synthetic_materials: Literal[True]
+    frozen_144_slots: Literal[True]
+    per_arm_cny: Literal[30]
+    total_cny: Literal[60]
+    own_wsl_resources: Literal[True]
+    agent_initial_and_recheck: Literal[False]
+    production_adoption: Literal[False] = False
+    deployment: Literal[False] = False
+
+
+def read_authorization(path):
+    value = read_json(path)
+    if not isinstance(value, dict):
+        fail("invalid_authorization")
+    kind = value.get("artifact_kind")
+    if not isinstance(kind, str):
+        fail("invalid_authorization_version")
+    model = {
+        "e7a7_run_authorization_v1": AuthorizationV1,
+        "e7a7_run_authorization_v2": AuthorizationV2,
+    }.get(kind)
+    if model is None:
+        fail("invalid_authorization_version")
+    try:
+        return model.model_validate_json(encoded(value))
+    except ValueError:
+        raise ExperimentError("invalid_authorization") from None
+
+
 class SlotV1(EvalContractModel):
     ordinal: int = Field(ge=0, lt=144)
     arm: Literal["baseline", "candidate"]
@@ -657,7 +692,7 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
 async def execute(binding_path, run_root, credentials_path, authorization_path):
     binding = read_json(binding_path, BindingV1)
     verify_binding(binding, environment=probe_environment())
-    authorization = read_json(authorization_path, AuthorizationV1)
+    authorization = read_authorization(authorization_path)
     binding_digest = quality_identity_digest(binding.model_dump(mode="json"))
     if authorization.binding_digest != binding_digest:
         fail("run_not_authorized")
