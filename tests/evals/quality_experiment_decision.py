@@ -29,10 +29,10 @@ from tests.evals.quality_e7a_contracts import E7AResearchOutputV1
 from tests.evals.quality_experiment import DATASET, load_experiment_plan
 from tests.evals.quality_experiment_binding import (
     PLAN,
-    BindingV1,
     encoded,
     fail,
     no_links,
+    read_binding,
     read_json,
     verify_binding,
     write_new,
@@ -837,7 +837,7 @@ def decide(
 
 
 def decision_command(args):
-    binding = read_json(args.binding, BindingV1)
+    binding = read_binding(args.binding)
     verify_binding(binding)
     if args.command == "experiment-review-export":
         export_review(binding, args.run_root, args.review_root)

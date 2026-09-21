@@ -239,3 +239,82 @@ def test_binding_rechecks_git_and_rejects_changed_digest(tmp_path, monkeypatch):
     (candidate / "src/app/__init__.py").write_text("VALUE = 99\n")
     with pytest.raises(ExperimentError, match="dirty_source"):
         binding.verify_binding(value)
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_binding_version_roundtrip_and_tampering(tmp_path, version):
+    from tests.evals.quality_experiment_binding import SHARED_CORRECTION, BindingV2, read_binding
+    from tests.evals.test_quality_experiment_execution import binding_fixture
+
+    value = binding_fixture(tmp_path)
+    payload = value.model_dump(mode="json")
+    if version == 2:
+        payload.update(
+            artifact_kind="e7a7_binding_v2",
+            original_baseline_source_sha=value.baseline_source_sha,
+            baseline_source_sha=SHARED_CORRECTION,
+            shared_correction_source_sha=SHARED_CORRECTION,
+            shared_correction_diff_digest="sha256:" + "9" * 64,
+        )
+        value = BindingV2.model_validate_json(__import__("json").dumps(payload))
+    write_new(tmp_path / "binding.json", value)
+    assert read_binding(tmp_path / "binding.json") == value
+    payload["artifact_kind"] = "e7a7_binding_v99"
+    write_new(tmp_path / "forged.json", payload)
+    with pytest.raises(ExperimentError, match="unsupported_binding_version"):
+        read_binding(tmp_path / "forged.json")
+    payload["artifact_kind"] = "e7a7_binding_v1"
+    payload["shared_correction_source_sha"] = "a" * 40
+    write_new(tmp_path / "mixed.json", payload)
+    with pytest.raises(ExperimentError, match="invalid_artifact"):
+        read_binding(tmp_path / "mixed.json")
+
+
+def test_shared_correction_cannot_accept_an_original_source_checkout(tmp_path, monkeypatch):
+    from tests.evals import quality_experiment_binding as binding
+    from tests.evals.test_quality_experiment_execution import binding_fixture
+
+    root, sha, _ = local_git(tmp_path)
+    original = binding.load_experiment_plan(binding.ROOT / binding.PLAN)
+    monkeypatch.setattr(binding, "load_experiment_plan", lambda *a, **kw: original)
+    with pytest.raises(ExperimentError, match="source_identity_mismatch"):
+        binding.build_binding(
+            baseline_root=root,
+            candidate_root=root,
+            experiment_id="wrong_shared_source",
+            environment=binding_fixture(tmp_path).environment,
+            ci=ci_proof(ci_summary()).model_copy(update={"source_sha": sha}),
+            shared_correction=True,
+        )
+
+
+def test_corrected_binding_rejects_unequal_real_production_trees(tmp_path, monkeypatch):
+    from tests.evals import quality_experiment_binding as binding
+    from tests.evals.test_quality_experiment_execution import binding_fixture
+
+    baseline, sha, run = local_git(tmp_path)
+    candidate = tmp_path / "candidate"
+    subprocess.run(["git", "clone", "--quiet", str(baseline), str(candidate)], check=True)
+    (baseline / "src/app/__init__.py").write_text("VALUE = 2\n")
+    run("add", "src/app/__init__.py")
+    run(
+        "-c",
+        "user.name=fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "-m",
+        "changed",
+    )
+    monkeypatch.setattr(binding, "SHARED_CORRECTION", run("rev-parse", "HEAD"))
+    original = binding.load_experiment_plan(binding.ROOT / binding.PLAN)
+    monkeypatch.setattr(binding, "load_experiment_plan", lambda *a, **kw: original)
+    with pytest.raises(ExperimentError, match="production_source_changed"):
+        binding.build_binding(
+            baseline_root=baseline,
+            candidate_root=candidate,
+            experiment_id="unequal_shared_sources",
+            environment=binding_fixture(tmp_path).environment,
+            ci=ci_proof(ci_summary()).model_copy(update={"source_sha": sha}),
+            shared_correction=True,
+        )

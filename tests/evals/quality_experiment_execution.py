@@ -41,7 +41,6 @@ from tests.evals.quality_experiment import DATASET, load_experiment_plan
 from tests.evals.quality_experiment_binding import (
     PLAN,
     ROOT,
-    BindingV1,
     ExperimentError,
     build_binding,
     ci_proof,
@@ -50,6 +49,7 @@ from tests.evals.quality_experiment_binding import (
     fail,
     no_links,
     probe_environment,
+    read_binding,
     read_json,
     source_identity,
     verify_binding,
@@ -792,7 +792,7 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
     loop = asyncio.get_running_loop()
     loop.add_signal_handler(signal.SIGTERM, me.cancel)
     try:
-        binding = read_json(Path(binding_path), BindingV1)
+        binding = read_binding(Path(binding_path))
         if arm not in ARMS:
             fail("invalid_arm")
         source = Path(binding.baseline_root if arm == "baseline" else binding.candidate_root)
@@ -932,7 +932,7 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
 
 
 async def execute(binding_path, run_root, credentials_path, authorization_path):
-    binding = read_json(binding_path, BindingV1)
+    binding = read_binding(binding_path)
     verify_binding(binding, environment=probe_environment())
     authorization = read_authorization(authorization_path)
     binding_digest = quality_identity_digest(binding.model_dump(mode="json"))
@@ -1077,7 +1077,7 @@ async def diagnose_embedding(binding_path, run_root, credentials_path, authoriza
     from tests.evals.quality_pilot import credentials
     from tests.evals.quality_run import _QualityAttemptRecorder
 
-    binding = read_json(binding_path, BindingV1)
+    binding = read_binding(binding_path)
     verify_binding(binding, environment=probe_environment())
     verify_imports(Path(binding.candidate_root), Path(binding.harness_root))
     auth = read_json(authorization_path, DiagnosticAuthorizationV1)
@@ -1232,6 +1232,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Manual, frozen E7-A.7 experiment")
     commands = parser.add_subparsers(dest="command", required=True)
     bind = commands.add_parser("experiment-bind")
+    bind.add_argument("--shared-embedding-correction", action="store_true")
     bind.add_argument("--baseline", type=Path, required=True)
     bind.add_argument("--candidate", type=Path, required=True)
     bind.add_argument("--experiment-id", required=True)
@@ -1282,6 +1283,7 @@ def main(argv=None):
                 experiment_id=args.experiment_id,
                 environment=probe_environment(),
                 ci=proof,
+                shared_correction=args.shared_embedding_correction,
             )
             write_new(args.output, binding)
             print(

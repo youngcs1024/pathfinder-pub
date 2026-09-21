@@ -27,6 +27,7 @@ PACKAGE = "evals/experiments/e65-evidence-sufficiency-implementation-v1.json"
 IMAGE = "pgvector/pgvector:0.8.5-pg16"
 MAX_BYTES = 20_000_000
 SHA_PATTERN = r"^[0-9a-f]{40}$"
+SHARED_CORRECTION = "d49d33a2959c31ccad73b2daa5a5d4ed1825f46c"
 
 
 class ExperimentError(ValueError):
@@ -303,7 +304,29 @@ class BindingV1(EvalContractModel):
     experiment_only: Literal[True] = True
 
 
-def allowed_diff(root, baseline, candidate):
+class BindingV2(BindingV1):
+    artifact_kind: Literal["e7a7_binding_v2"] = "e7a7_binding_v2"
+    original_baseline_source_sha: Literal["6ee09703fd19dd3f68813bb40f2b314fba512995"]
+    shared_correction_source_sha: Literal["d49d33a2959c31ccad73b2daa5a5d4ed1825f46c"]
+    shared_correction_diff_digest: EvalDigest
+
+
+def read_binding(path):
+    value = read_json(path)
+    if not isinstance(value, dict):
+        fail("invalid_artifact")
+    model = {"e7a7_binding_v1": BindingV1, "e7a7_binding_v2": BindingV2}.get(
+        value.get("artifact_kind")
+    )
+    if model is None:
+        fail("unsupported_binding_version")
+    try:
+        return model.model_validate_json(encoded(value))
+    except ValueError:
+        fail("invalid_artifact")
+
+
+def allowed_diff(root, baseline, candidate, *, shared_correction=False):
     package = load_implementation_package(root / PACKAGE, root=root)
     allowed = {".github/public-files.json", "tests/evals/test_quality_generation.py"}
     for step in package.steps:
@@ -316,6 +339,8 @@ def allowed_diff(root, baseline, candidate):
     ):
         allowed.update({f"tests/evals/{prefix}.py", f"tests/evals/test_{prefix}.py"})
     allowed.update({PLAN, PACKAGE, "evals/experiments/e64-evidence-sufficiency-impact-v1.json"})
+    if shared_correction:
+        allowed.update({"src/app/llm/qwen_adapters.py", "tests/unit/llm/test_openai_adapters.py"})
     delta = git(root, "diff", "--name-status", "--no-renames", baseline, candidate).decode()
     for line in delta.splitlines():
         status_, name = line.split("\t")
@@ -325,16 +350,52 @@ def allowed_diff(root, baseline, candidate):
     return quality_digest(git(root, "diff", "--binary", "--no-ext-diff", baseline, candidate))
 
 
-def build_binding(*, baseline_root, candidate_root, experiment_id, environment, ci):
+def build_binding(
+    *, baseline_root, candidate_root, experiment_id, environment, ci, shared_correction=False
+):
     baseline_root, candidate_root = no_links(baseline_root), no_links(candidate_root)
     plan = load_experiment_plan(candidate_root / PLAN, root=candidate_root)
     sha = git(candidate_root, "rev-parse", "HEAD").decode().strip()
     if ci.source_sha != sha:
         fail("ci_source_mismatch")
-    left = source_identity(baseline_root, plan.identity.baseline_source_sha)
+    baseline_sha = SHARED_CORRECTION if shared_correction else plan.identity.baseline_source_sha
+    left = source_identity(baseline_root, baseline_sha)
     right = source_identity(candidate_root, sha)
-    if left != plan.identity.baseline_src_tree or right != left or baseline_root == candidate_root:
+    if (
+        (not shared_correction and left != plan.identity.baseline_src_tree)
+        or right != left
+        or baseline_root == candidate_root
+    ):
         fail("production_source_changed")
+    extra = {}
+    if shared_correction:
+        # Both arms must contain the exact reviewed correctness fix. The old plan stays immutable.
+        changed = (
+            git(
+                candidate_root,
+                "diff",
+                "--name-only",
+                plan.identity.baseline_source_sha,
+                SHARED_CORRECTION,
+                "--",
+                "src",
+            )
+            .decode()
+            .splitlines()
+        )
+        if changed != ["src/app/llm/qwen_adapters.py"]:
+            fail("unapproved_shared_correction")
+        original_delta = allowed_diff(
+            candidate_root,
+            plan.identity.baseline_source_sha,
+            SHARED_CORRECTION,
+            shared_correction=True,
+        )
+        extra = dict(
+            original_baseline_source_sha=plan.identity.baseline_source_sha,
+            shared_correction_source_sha=SHARED_CORRECTION,
+            shared_correction_diff_digest=original_delta,
+        )
     for name in ("uv.lock", "pyproject.toml"):
         if (baseline_root / name).read_bytes() != (candidate_root / name).read_bytes():
             fail("dependency_drift")
@@ -354,11 +415,13 @@ def build_binding(*, baseline_root, candidate_root, experiment_id, environment, 
         != plan.identity.baseline_configuration_digest
     ):
         fail("baseline_configuration_drift")
-    return BindingV1(
+    model = BindingV2 if shared_correction else BindingV1
+    return model(
+        **extra,
         experiment_id=experiment_id,
         ci=ci,
         plan_digest=validate_experiment_plan(plan, root=candidate_root),
-        baseline_source_sha=plan.identity.baseline_source_sha,
+        baseline_source_sha=baseline_sha,
         candidate_source_sha=sha,
         baseline_src_tree=left,
         candidate_src_tree=right,
@@ -366,9 +429,7 @@ def build_binding(*, baseline_root, candidate_root, experiment_id, environment, 
         candidate_root=str(candidate_root),
         harness_root=str(candidate_root),
         harness_digest=quality_identity_digest(harness_inventory(candidate_root)),
-        reviewed_allowed_diff_digest=allowed_diff(
-            candidate_root, plan.identity.baseline_source_sha, sha
-        ),
+        reviewed_allowed_diff_digest=allowed_diff(candidate_root, baseline_sha, sha),
         candidate_prompt_digest=generation_prompt_digest(arm="candidate"),
         candidate_configuration_digest=generation_configuration_digest(
             policy, factory, arm="candidate"
@@ -380,13 +441,15 @@ def build_binding(*, baseline_root, candidate_root, experiment_id, environment, 
 
 
 def verify_binding(binding, *, environment=None):
-    binding = BindingV1.model_validate_json(binding.model_dump_json())
+    model = BindingV2 if isinstance(binding, BindingV2) else BindingV1
+    binding = model.model_validate_json(binding.model_dump_json())
     fresh = build_binding(
         baseline_root=Path(binding.baseline_root),
         candidate_root=Path(binding.candidate_root),
         experiment_id=binding.experiment_id,
         environment=environment or binding.environment,
         ci=binding.ci,
+        shared_correction=isinstance(binding, BindingV2),
     )
     if fresh != binding:
         fail("binding_drift")
