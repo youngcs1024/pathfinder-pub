@@ -197,10 +197,14 @@ class QwenEmbeddingAdapter:
         try:
             if response.model != LOCKED_EMBEDDING_MODEL:
                 raise ValueError("provider returned an unexpected embedding model")
+            # Embeddings have no output tokens: the provider's total is the input count.
+            # Some successful responses omit the redundant prompt_tokens field.
+            prompt_tokens = getattr(response.usage, "prompt_tokens", None)
+            total_tokens = response.usage.total_tokens
             usage = _model_usage(
-                input_tokens=response.usage.prompt_tokens,
+                input_tokens=total_tokens if prompt_tokens is None else prompt_tokens,
                 output_tokens=0,
-                total_tokens=response.usage.total_tokens,
+                total_tokens=total_tokens,
             )
             if len(response.data) != len(texts):
                 raise ValueError("provider returned the wrong number of embeddings")

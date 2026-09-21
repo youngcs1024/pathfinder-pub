@@ -317,8 +317,8 @@ async def _diagnostic_contract(tmp_path, monkeypatch, invalid_response, entrypoi
         payload = json.loads(request.content)
         calls.append(payload["input"])
         usage = {"total_tokens": 10}
-        if not invalid_response:
-            usage["prompt_tokens"] = 10
+        if invalid_response:
+            usage = {}
         return httpx.Response(
             200,
             json={

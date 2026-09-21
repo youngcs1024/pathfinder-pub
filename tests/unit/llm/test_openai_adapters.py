@@ -223,6 +223,53 @@ async def test_chat_normalizes_reasoning_only_completed_response_without_visible
     assert result.finish_status == "completed"
 
 
+@pytest.mark.parametrize(
+    "usage",
+    [{"total_tokens": 17}, {"prompt_tokens": None, "total_tokens": 17}, {"total_tokens": 0}],
+)
+async def test_embedding_total_only_usage_is_exact_input_accounting(usage) -> None:
+    payload = _embedding_payload()
+    payload["usage"] = usage
+    bundle, client = await _bundle_with_handler(lambda request: httpx.Response(200, json=payload))
+    try:
+        result = await bundle.embedding.embed(
+            ("alpha", "beta"), {"graph_node": "ingest_documents"}, attempt=ATTEMPT
+        )
+        assert result.usage == ModelUsage(
+            input_tokens=usage["total_tokens"], output_tokens=0, total_tokens=usage["total_tokens"]
+        )
+    finally:
+        await bundle.aclose()
+        await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {},
+        {"total_tokens": None},
+        {"total_tokens": True},
+        {"total_tokens": -1},
+        {"total_tokens": "17"},
+        {"prompt_tokens": 16, "total_tokens": 17},
+        {"prompt_tokens": False, "total_tokens": 17},
+    ],
+)
+async def test_embedding_total_only_fallback_rejects_unknown_or_invalid_usage(usage) -> None:
+    payload = _embedding_payload()
+    payload["usage"] = usage
+    bundle, client = await _bundle_with_handler(lambda request: httpx.Response(200, json=payload))
+    try:
+        with pytest.raises(ProviderAdapterError) as caught:
+            await bundle.embedding.embed(
+                ("alpha", "beta"), {"graph_node": "ingest_documents"}, attempt=ATTEMPT
+            )
+        assert caught.value.category == "invalid_provider_response"
+    finally:
+        await bundle.aclose()
+        await client.aclose()
+
+
 async def test_embedding_uses_locked_endpoint_profile_usage_and_dimension() -> None:
     requests: list[httpx.Request] = []
 
