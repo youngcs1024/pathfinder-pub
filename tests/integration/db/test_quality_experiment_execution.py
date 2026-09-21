@@ -218,11 +218,62 @@ async def test_two_real_source_roots_use_isolated_processes_and_owned_pg(tmp_pat
 
 
 @pytest.mark.parametrize(
-    "entrypoint,invalid_response", [("diagnostic", False), ("diagnostic", True), ("child", True)]
+    "entrypoint,invalid_response",
+    [("diagnostic", False), ("diagnostic", True), ("child", True)],
 )
 async def test_bounded_embedding_diagnostic_uses_real_pg_and_preserves_failure(
-    tmp_path, monkeypatch, invalid_response, entrypoint
+    tmp_path, entrypoint, invalid_response
 ):
+    # Use the actual isolated-runner boundary: the complete pytest suite is not an arm.
+    script = """import asyncio, sys
+from pathlib import Path
+sys.path[:0] = [sys.argv[1] + '/src', sys.argv[1]]
+import pytest
+from tests.integration.db.test_quality_experiment_execution import _diagnostic_contract
+async def run():
+    with pytest.MonkeyPatch.context() as patch:
+        await _diagnostic_contract(Path(sys.argv[2]), patch, sys.argv[4] == 'true', sys.argv[3])
+    print('diagnostic_contract_passed')
+asyncio.run(run())
+"""
+    env = {k: v for k, v in os.environ.items() if k in {"PATH", "HOME", "TMPDIR", "LANG"}}
+    env.update(
+        PF_LLM_MODE="fake",
+        PF_SEARCH_MODE="fake",
+        PF_AUTH_MODE="fake",
+        PF_TRACE_MODE="off",
+        TESTCONTAINERS_RYUK_DISABLED="true",
+    )
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-I",
+        "-B",
+        "-c",
+        script,
+        str(ROOT),
+        str(tmp_path),
+        entrypoint,
+        str(invalid_response).lower(),
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    communication = asyncio.create_task(process.communicate())
+    try:
+        stdout, stderr = await asyncio.wait_for(asyncio.shield(communication), 120)
+    except TimeoutError:
+        process.send_signal(signal.SIGINT)
+        try:
+            await asyncio.wait_for(asyncio.shield(communication), 60)
+        except TimeoutError:
+            process.kill()
+            await communication
+        pytest.fail("diagnostic_subprocess_timeout_cleanup_unconfirmed")
+    assert process.returncode == 0, stderr.decode()[-2500:]
+    assert b"diagnostic_contract_passed" in stdout
+
+
+async def _diagnostic_contract(tmp_path, monkeypatch, invalid_response, entrypoint):
     import docker
     import httpx
     from pydantic import SecretStr
@@ -324,7 +375,9 @@ async def test_bounded_embedding_diagnostic_uses_real_pg_and_preserves_failure(
                 assert closed == [True]
                 assert (root / "baseline/cleanup.json").is_file()
                 assert (root / "baseline/resources/report.json").is_file()
-                assert (root / "baseline/failure-usage.json").is_file()
+                assert (root / "baseline/failure-usage.json").is_file(), module.read_json(
+                    root / "baseline/cleanup.json"
+                )
             replies.append(category)
 
         monkeypatch.setattr(module, "_input", prepare)
@@ -347,8 +400,8 @@ async def test_bounded_embedding_diagnostic_uses_real_pg_and_preserves_failure(
         tmp_path / "binding.json", root, tmp_path / "unused", tmp_path / "auth.json"
     )
     assert closed == [True] and report["cleanup"]["cleanup_complete"]
-    assert report["complete"] is (not invalid_response)
-    assert len(calls) == (1 if invalid_response else 3)
+    assert report["complete"] is (not invalid_response), report
+    assert len(calls) == (1 if invalid_response else 3), report
     facts = module.read_json(root / "baseline/accounting/invocations.json")["invocations"]
     assert len(facts) == len(calls)
     if invalid_response:
@@ -362,11 +415,11 @@ async def test_bounded_embedding_diagnostic_uses_real_pg_and_preserves_failure(
         await module.diagnose_embedding(
             tmp_path / "binding.json", root, tmp_path / "unused", tmp_path / "auth.json"
         )
-    with pytest.raises(FileExistsError):
+    with pytest.raises(ExperimentError, match="artifact_publication_failed"):
         await module.diagnose_embedding(
             tmp_path / "binding.json",
             tmp_path / "reroll",
             tmp_path / "unused",
             tmp_path / "auth.json",
         )
-    assert len(calls) == (1 if invalid_response else 3)
+    assert len(calls) == (1 if invalid_response else 3), report
