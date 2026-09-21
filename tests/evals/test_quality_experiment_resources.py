@@ -128,3 +128,46 @@ def test_database_identity_and_missing_usage_cannot_be_zero():
     observer = ResourceObserver(owner, None, "baseline")
     with pytest.raises(ExperimentError, match="identity_drift"):
         observer._probe()
+
+
+@pytest.mark.parametrize(
+    "mode", ["omitted", "matching", "foreign", "null", "changed_owner", "missing_usage"]
+)
+def test_one_shot_stats_identity_is_bound_to_owned_request(tmp_path, monkeypatch, mode):
+    import tests.evals.quality_experiment_resources as module
+    from tests.evals.quality_experiment_binding import ExperimentError
+
+    identity = "a" * 64
+    checks = []
+    owner = SimpleNamespace(
+        _container_id=identity, _verify_container=lambda: checks.append("inspect")
+    )
+
+    def stats(**kwargs):
+        assert kwargs == {"stream": False, "one_shot": True}
+        value = {"memory_stats": {"usage": 200}}
+        if mode == "matching":
+            value["id"] = identity
+        if mode == "foreign":
+            value["id"] = "b" * 64
+        if mode == "null":
+            value["id"] = None
+        if mode == "changed_owner":
+            owner._container_id = "c" * 64
+        if mode == "missing_usage":
+            value["memory_stats"] = {}
+        return value
+
+    container = SimpleNamespace(id=identity, stats=stats)
+    owner._container = SimpleNamespace(get_wrapped_container=lambda: container)
+    monkeypatch.setattr(module, "process_memory", lambda *a, **kw: (100, 50))
+    observer = ResourceObserver(owner, tmp_path, "baseline")
+    if mode in {"omitted", "matching"}:
+        assert observer._probe() == (100, 200)
+    else:
+        with pytest.raises(
+            ExperimentError,
+            match="resource_measurement_missing" if mode == "missing_usage" else "identity_drift",
+        ):
+            observer._probe()
+    assert checks == ["inspect", "inspect"]

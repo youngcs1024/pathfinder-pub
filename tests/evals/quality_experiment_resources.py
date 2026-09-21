@@ -120,8 +120,14 @@ class ResourceObserver:
             fail("identity_drift")
         self.process_start = start
         container = self.owner._container.get_wrapped_container()
+        identity = self.owner._container_id
+        if container.id != identity:
+            fail("identity_drift")
         stats = container.stats(stream=False, one_shot=True)
-        if stats.get("id") != self.owner._container_id:
+        # Moby 28.x one-shot stats omit ID (daemon/stats.go). The SDK request
+        # targets the full owned ID; verify inspect identity on both sides.
+        self.owner._verify_container()
+        if self.owner._container_id != identity or ("id" in stats and stats["id"] != identity):
             fail("identity_drift")
         db = stats.get("memory_stats", {}).get("usage")
         if type(db) is not int or db < 0:
