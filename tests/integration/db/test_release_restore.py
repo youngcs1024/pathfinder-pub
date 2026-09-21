@@ -65,7 +65,10 @@ async def test_real_upgrade_dump_restore_and_resume(tmp_path, monkeypatch, reque
             reject_downgrade(source)
             report["checks"]["keyed_downgrade_refused"] = True
             report["stage"] = "backup"
-            probe = consistency_snapshot(source, original.runs["success"], original.document_id)
+            pending = (original.runs["approve"], original.runs["reject"])
+            probe = consistency_snapshot(
+                source, original.runs["success"], original.document_id, pending
+            )
             require(probe["fixture"]["run"]["client_request_id"] is not None, "identity_missing")
             before = source.snapshot()
             dump, checksum = source.dump()
@@ -91,7 +94,9 @@ async def test_real_upgrade_dump_restore_and_resume(tmp_path, monkeypatch, reque
             require(target.snapshot() == restored, "occupied_target_changed")
             report["checks"]["occupied_target_refused"] = True
             require(
-                consistency_snapshot(target, original.runs["success"], original.document_id)
+                consistency_snapshot(
+                    target, original.runs["success"], original.document_id, pending
+                )
                 == probe,
                 "probe_changed",
             )

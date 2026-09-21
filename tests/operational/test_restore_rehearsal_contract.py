@@ -733,7 +733,7 @@ def test_consistency_sql_is_read_only_and_omits_sensitive_bodies() -> None:
     assert "invocation.input" not in source
     assert "invocation.output" not in source
     for field in ("client_request_id", "create_request_digest", "create_request_version"):
-        assert f"'{field}', run.{field}" in source
+        assert f"'{field}', to_jsonb(run)->'{field}'" in source
     assert (
         "'result_sha256', encode(sha256(convert_to(run.result_json::text, 'UTF8')), 'hex')"
         in source

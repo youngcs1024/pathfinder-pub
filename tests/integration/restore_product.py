@@ -44,7 +44,7 @@ LEGACY_RESULT = {
 
 def seed_legacy(database):
     database.upgrade(OLD_HEAD)
-    engine = sa.create_engine(database.url)
+    engine = sa.create_engine(database.maintenance_url)
     try:
         with engine.begin() as connection:
             actor, workspace, run, _ = _seed_gate6_migration_parent(
@@ -179,7 +179,7 @@ def reject_downgrade(database):
     before = database.snapshot()
     rejected = False
     try:
-        command.downgrade(alembic_config(database.url), OLD_HEAD)
+        command.downgrade(alembic_config(database.maintenance_url), OLD_HEAD)
     except RuntimeError as error:
         rejected = str(error) == "E3 request identity data cannot be safely downgraded"
     require(rejected and database.snapshot() == before, "downgrade_not_safe")

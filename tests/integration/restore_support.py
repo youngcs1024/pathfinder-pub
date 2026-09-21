@@ -183,10 +183,12 @@ class OwnedDatabase:
     @property
     def url(self):
         require(self.port is not None, "database_not_ready")
-        return (
-            f"postgresql+psycopg://pf_e84:{self.password}@127.0.0.1:{self.port}/pathfinder"
-            "?connect_timeout=5&options=-c%20statement_timeout%3D30000"
-        )
+        return f"postgresql+psycopg://pf_e84:{self.password}@127.0.0.1:{self.port}/pathfinder"
+
+    @property
+    def maintenance_url(self):
+        # Application pools reject DSN options and own their E2 policy. DDL is independent.
+        return self.url + "?connect_timeout=5&options=-c%20statement_timeout%3D30000"
 
     def connect(self):
         return psycopg.connect(
@@ -201,7 +203,7 @@ class OwnedDatabase:
 
     def upgrade(self, revision=HEAD):
         self.rehearsal.remaining()
-        command.upgrade(alembic_config(self.url), revision)
+        command.upgrade(alembic_config(self.maintenance_url), revision)
         with self.connect() as connection:
             actual = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
         require(actual == revision, "schema_mismatch")
@@ -294,7 +296,7 @@ class OwnedDatabase:
                 self.rehearsal.deadline = previous
 
 
-def consistency_snapshot(database, run_id, document_id):
+def consistency_snapshot(database, run_id, document_id, pending_run_ids):
     query = "\n".join(
         line
         for line in (ROOT / "scripts/gate85_consistency.sql").read_text().splitlines()
@@ -313,5 +315,23 @@ def consistency_snapshot(database, run_id, document_id):
                 break
     require(row is not None, "probe_failed")
     result = json.loads(row[0])
-    require(all(value is True for value in result["checks"].values()), "probe_failed")
+    # Gate 8.5's remote script still requires source_is_quiescent=true. This isolated fixture
+    # intentionally retains exactly two waiting approvals, with all execution connections closed.
+    # Check that exact alternative here; do not relax or change the original remote gate.
+    expected = dict.fromkeys(result["checks"], True)
+    expected["source_is_quiescent"] = False
+    require(result["checks"] == expected, "probe_failed")
+    require(len(set(pending_run_ids)) == 2, "probe_failed")
+    with database.connect() as connection:
+        active = connection.execute(
+            "SELECT id, status FROM runs WHERE status IN ('queued','running','waiting_approval')"
+        ).fetchall()
+        executable = connection.execute(
+            "SELECT count(*) FROM run_jobs WHERE status IN ('queued','leased')"
+        ).fetchone()[0]
+    require(
+        set(active) == {(identifier, "waiting_approval") for identifier in pending_run_ids}
+        and executable == 0,
+        "probe_failed",
+    )
     return result

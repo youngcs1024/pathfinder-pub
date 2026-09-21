@@ -24,6 +24,13 @@ def rehearsal(tmp_path):
     return Rehearsal(tmp_path / "owned")
 
 
+def test_maintenance_options_do_not_cross_into_application_policy(rehearsal):
+    database = OwnedDatabase(rehearsal, "source")
+    database.port = 54321
+    assert "?" not in database.url
+    assert database.maintenance_url.startswith(database.url + "?connect_timeout=5&options=")
+
+
 def test_command_has_bounded_timeout_and_excludes_credentials(rehearsal, monkeypatch):
     captured = {}
 
