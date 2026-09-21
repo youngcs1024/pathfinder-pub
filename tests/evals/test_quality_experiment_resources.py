@@ -119,7 +119,9 @@ async def test_sampler_failure_cancels_inflight_work_and_preserves_failure(tmp_p
 
 
 def test_database_identity_and_missing_usage_cannot_be_zero():
-    wrapped = SimpleNamespace(stats=lambda **_: {"id": "wrong", "memory_stats": {"usage": 0}})
+    wrapped = SimpleNamespace(
+        id="expected", stats=lambda **_: {"id": "wrong", "memory_stats": {"usage": 0}}
+    )
     owner = SimpleNamespace(
         _verify_container=lambda: None,
         _container_id="expected",
