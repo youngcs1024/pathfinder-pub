@@ -113,6 +113,16 @@ class ResponseDiagnostics:
     def __init__(self, directory):
         self.directory = directory
         self.failed = False
+        self.responses = {}
+
+    def client(self):
+        # Match the locked SDK's DefaultAsyncHttpxClient transport defaults.
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(600, connect=5),
+            limits=httpx.Limits(max_connections=1000, max_keepalive_connections=100),
+            follow_redirects=True,
+            event_hooks={"response": [self.response]},
+        )
 
     async def response(self, response):
         attempt = HTTP_ATTEMPT.get()
@@ -139,7 +149,10 @@ class ResponseDiagnostics:
             except (ValueError, UnicodeError):
                 record["json_category"] = "invalid_json"
         try:
-            write_new(self.directory / f"http-{attempt.invocation_id}.json", record)
+            index = self.responses.get(attempt.invocation_id, 0)
+            suffix = "" if index == 0 else f"-{index:03d}"
+            write_new(self.directory / f"http-{attempt.invocation_id}{suffix}.json", record)
+            self.responses[attempt.invocation_id] = index + 1
         except Exception:
             self.failed = True
             raise
@@ -807,7 +820,7 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
         bundle = create_qwen_adapters(
             api_key=values["DASHSCOPE_API_KEY"],
             workspace_id=values["PF_QWEN_WORKSPACE_ID"],
-            http_async_client=httpx.AsyncClient(event_hooks={"response": [diagnostics.response]}),
+            http_async_client=diagnostics.client(),
         )
         factory = LLMFactory(
             _StrictMemoryInvocationRecorder(), bundle.chat, bundle.embedding, provider="qwen"
@@ -1119,7 +1132,7 @@ async def diagnose_embedding(binding_path, run_root, credentials_path, authoriza
         bundle = create_qwen_adapters(
             api_key=values["DASHSCOPE_API_KEY"],
             workspace_id=values["PF_QWEN_WORKSPACE_ID"],
-            http_async_client=httpx.AsyncClient(event_hooks={"response": [diagnostics.response]}),
+            http_async_client=diagnostics.client(),
         )
         manifest, policy = arm_manifest(
             binding,

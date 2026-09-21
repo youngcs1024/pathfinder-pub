@@ -527,3 +527,27 @@ async def test_closing_prevents_provider_admission(tmp_path):
     hooks.closing = True
     with pytest.raises(ExperimentError, match="execution_closing"):
         await hooks.before_attempt(NS())
+
+
+async def test_diagnostic_client_preserves_locked_transport_defaults(tmp_path):
+    import httpx
+
+    from tests.evals.quality_experiment_execution import HTTP_ATTEMPT, ResponseDiagnostics
+
+    tmp_path.chmod(0o700)
+    diagnostic = ResponseDiagnostics(tmp_path)
+    async with diagnostic.client() as client:
+        assert client.follow_redirects
+        assert client.timeout == httpx.Timeout(600, connect=5)
+        assert client._transport._pool._max_connections == 1000
+        assert client._transport._pool._max_keepalive_connections == 100
+    attempt = NS(
+        invocation_id=uuid4(), request_hash="sha256:" + "c" * 64, invocation_kind="embedding"
+    )
+    token = HTTP_ATTEMPT.set(attempt)
+    try:
+        await diagnostic.response(httpx.Response(307, content=b""))
+        await diagnostic.response(httpx.Response(200, json={}))
+    finally:
+        HTTP_ATTEMPT.reset(token)
+    assert len(list(tmp_path.glob("http-*.json"))) == 2
