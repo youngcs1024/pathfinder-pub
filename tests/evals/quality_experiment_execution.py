@@ -8,12 +8,15 @@ import json
 import os
 import signal
 import sys
+from contextvars import ContextVar
 from dataclasses import dataclass
 from decimal import Decimal
+from math import isfinite
 from pathlib import Path
 from time import monotonic
 from typing import Literal
 
+import httpx
 from pydantic import Field
 from sqlalchemy import select
 
@@ -58,6 +61,88 @@ from tests.evals.quality_experiment_resources import ResourceObserver
 from tests.evals.quality_generation_support import checked_directory
 
 ARMS = ("baseline", "candidate")
+HTTP_ATTEMPT = ContextVar("e7a7_http_attempt", default=None)
+DIAGNOSTIC_ALIASES = ("resume_csv_reconcile", "resume_cache_ttl", "resume_accessibility")
+
+
+def embedding_response_shape(value):
+    """Only fixed categories, booleans and bounded counts leave the response boundary."""
+
+    def kind(item):
+        if item is None:
+            return "missing_or_null"
+        if type(item) is int:
+            return "integer" if item >= 0 else "negative_integer"
+        return "invalid_type"
+
+    obj = value if isinstance(value, dict) else {}
+    usage = obj.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    rows = obj.get("data")
+    rows = rows if isinstance(rows, list) else []
+    bounded = len(rows) <= 10
+    vectors = [r.get("embedding") if isinstance(r, dict) else None for r in rows[:10]]
+    indexes = [r.get("index") if isinstance(r, dict) else None for r in rows[:10]]
+    return {
+        "object_valid": isinstance(value, dict),
+        "model_matches": obj.get("model") == LOCKED_EMBEDDING_MODEL,
+        "usage_object": isinstance(obj.get("usage"), dict),
+        "prompt_tokens_type": kind(usage.get("prompt_tokens")),
+        "total_tokens_type": kind(usage.get("total_tokens")),
+        "usage_totals_match": type(usage.get("prompt_tokens")) is int
+        and type(usage.get("total_tokens")) is int
+        and usage["prompt_tokens"] == usage["total_tokens"],
+        "data_array": isinstance(obj.get("data"), list),
+        "data_count": min(len(rows), 11),
+        "indexes_valid": bounded
+        and all(type(i) is int for i in indexes)
+        and sorted(indexes) == list(range(len(rows))),
+        "vector_lengths": [min(len(v), 4097) if isinstance(v, list) else None for v in vectors],
+        "vectors_finite": bounded
+        and bool(vectors)
+        and all(
+            isinstance(v, list)
+            and len(v) <= 4096
+            and all(type(x) in (int, float) and abs(x) <= 1e308 and isfinite(x) for x in v)
+            for v in vectors
+        ),
+    }
+
+
+class ResponseDiagnostics:
+    def __init__(self, directory):
+        self.directory = directory
+        self.failed = False
+
+    async def response(self, response):
+        attempt = HTTP_ATTEMPT.get()
+        if attempt is None:
+            self.failed = True
+            fail("diagnostic_attempt_missing")
+        record = {
+            "artifact_kind": "e7a7_http_diagnostic_v1",
+            "invocation_id": str(attempt.invocation_id),
+            "request_digest": attempt.request_hash,
+            "kind": attempt.invocation_kind,
+            "http_status": response.status_code,
+        }
+        # Chat may stream: never consume it. Embedding is already a buffered SDK request.
+        if attempt.invocation_kind == "embedding":
+            try:
+                await response.aread()
+                if len(response.content) > 2_097_152:
+                    record["json_category"] = "oversized"
+                else:
+                    value = response.json()
+                    record["json_category"] = "parsed"
+                    record["shape"] = embedding_response_shape(value)
+            except (ValueError, UnicodeError):
+                record["json_category"] = "invalid_json"
+        try:
+            write_new(self.directory / f"http-{attempt.invocation_id}.json", record)
+        except Exception:
+            self.failed = True
+            raise
 
 
 class _IdentityAdapter:
@@ -195,13 +280,17 @@ def summarize_rows(rows):
 class ExperimentHooks:
     """Narrow trusted test context. PG remains the only invocation/cost ledger."""
 
-    def __init__(self, directory, *, observer=None, source_check=None, deadline=None):
+    def __init__(
+        self, directory, *, observer=None, source_check=None, deadline=None, diagnostics=None
+    ):
         self.directory, self.observer, self.source_check = directory, observer, source_check
         self.deadline = deadline
         self.owner = self.manifest = self.admission = self.tenant = None
         self.ordinal = 0
         self.failure = None
         self.last_usage = None
+        self.diagnostics = diagnostics
+        self.closing = False
 
     def bind(self, handle, manifest, policy):
         if self.owner is not None:
@@ -246,8 +335,46 @@ class ExperimentHooks:
         self.last_usage = usage
         return usage
 
+    async def export_invocations(self):
+        if self.owner is None or self.owner._closed:
+            fail("invalid_budget_owner")
+        facts = []
+        if self.tenant is not None:
+            async with self.owner._sessions() as session:
+                rows = await session.scalars(
+                    select(LLMInvocation)
+                    .where(
+                        LLMInvocation.workspace_id == self.tenant[0],
+                        LLMInvocation.actor_user_id == self.tenant[1],
+                    )
+                    .order_by(LLMInvocation.created_at, LLMInvocation.id)
+                )
+                for row in rows:
+                    facts.append(
+                        {
+                            "invocation_id": str(row.id),
+                            "kind": row.invocation_kind,
+                            "status": row.status,
+                            "error_category": row.error_category,
+                            "token_usage": row.token_usage,
+                            "estimated_cost": str(row.estimated_cost)
+                            if row.estimated_cost is not None
+                            else None,
+                            "latency_ms": row.latency_ms,
+                        }
+                    )
+        write_new(
+            self.directory / "invocations.json",
+            {
+                "artifact_kind": "e7a7_invocation_facts_v1",
+                "invocations": facts,
+            },
+        )
+
     async def before_attempt(self, attempt):
         try:
+            if self.closing or (self.diagnostics and self.diagnostics.failed):
+                fail("execution_closing")
             if self.observer:
                 self.observer.check()
             if self.deadline is not None and monotonic() >= self.deadline:
@@ -270,6 +397,7 @@ class ExperimentHooks:
                 fail("budget_exhausted")
             write_new(self.directory / f"admission-{self.ordinal:05d}.json", usage)
             self.ordinal += 1
+            HTTP_ATTEMPT.set(attempt)
         except Exception as error:
             self.failure = (
                 error.category if isinstance(error, ExperimentError) else "accounting_failed"
@@ -297,6 +425,8 @@ class ExperimentHooks:
                 error.category if isinstance(error, ExperimentError) else "accounting_failed"
             )
             raise
+        finally:
+            HTTP_ATTEMPT.set(None)
 
     def record_slot(self, index, result, statistics):
         write_new(
@@ -338,6 +468,25 @@ class AuthorizationV2(EvalContractModel):
     agent_initial_and_recheck: Literal[False]
     production_adoption: Literal[False] = False
     deployment: Literal[False] = False
+
+
+class DiagnosticAuthorizationV1(EvalContractModel):
+    artifact_kind: Literal["e7a7_embedding_diagnostic_authorization_v1"]
+    binding_digest: EvalDigest
+    source: Literal["user_explicit_e7a7_embedding_diagnostic"]
+    synthetic_materials: Literal[True]
+    aliases: tuple[
+        Literal["resume_csv_reconcile"],
+        Literal["resume_cache_ttl"],
+        Literal["resume_accessibility"],
+    ]
+    provider_attempt_cap: Literal[3]
+    cost_admission_budget_cny: Literal["0.30"]
+    input_token_cap: Literal[10000]
+    execution_window_seconds: Literal[300]
+    agent_initial_and_recheck: Literal[False]
+    production_adoption: Literal[False]
+    deployment: Literal[False]
 
 
 def read_authorization(path):
@@ -526,8 +675,104 @@ def _reply(category, **fields):
     sys.stdout.buffer.flush()
 
 
+async def await_finalization(awaitable):
+    """Repeated cancellation stops work, but cannot cancel evidence/owned cleanup."""
+    task = asyncio.create_task(awaitable)
+    while True:
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.done():
+                return task.result()
+
+
+async def finalize_child(root, arm, *, state, hooks, observer, bundle, manager, stop):
+    from tests.evals.quality_run import finish_quality_generation
+
+    if hooks is not None:
+        hooks.closing = True
+    failures = []
+    report = None
+
+    async def stage(name, work):
+        try:
+            return await asyncio.wait_for(work(), timeout=15)
+        except (Exception, asyncio.CancelledError):
+            failures.append(name)
+            return None
+
+    if state is not None and not state.closed and not state.active:
+        state.stop = state.stop or ("integrity" if stop else None)
+        state.cancellation = None
+        report = await stage("report", lambda: finish_quality_generation(state))
+    if hooks is not None:
+        usage = await stage("usage", hooks.usage)
+        if usage is not None:
+            try:
+                write_new(root / arm / ("failure-usage.json" if stop else "usage.json"), usage)
+            except Exception:
+                failures.append("usage_persistence")
+        await stage("invocation_export", hooks.export_invocations)
+    if stop:
+        try:
+            write_new(
+                root / arm / "failure.json",
+                {
+                    "category": stop,
+                    "budget_category": hooks.failure if hooks else None,
+                },
+            )
+        except Exception:
+            failures.append("failure_persistence")
+    resource = None
+    if observer is not None and not observer.closed:
+        resource = await stage("resource", observer.finish)
+    if bundle is not None:
+        await stage("client", bundle.aclose)
+    if manager is not None:
+        await stage("database", manager.aclose)
+        if manager.cleanup_failed and "database" not in failures:
+            failures.append("database")
+    cleanup = {
+        "cleanup_complete": not any(x in failures for x in ("client", "database")),
+        "resource_complete": resource is not None and resource.complete,
+        "stop_category": stop or ("finalization_failed" if failures else None),
+        "failed_stages": failures,
+    }
+    write_new(root / arm / "cleanup.json", cleanup)
+    return report, cleanup
+
+
+async def stop_child(child, *, abort, grace=20, terminate_grace=60):
+    escalated = False
+    if child.process.returncode is None:
+        if abort:
+            try:
+                await asyncio.wait_for(child.send({"command": "abort"}), timeout=2)
+            except (Exception, asyncio.CancelledError):
+                pass  # A closed pipe does not establish process termination.
+        try:
+            await asyncio.wait_for(child.process.wait(), grace)
+        except TimeoutError:
+            escalated = True
+            try:
+                child.process.send_signal(signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                await asyncio.wait_for(child.process.wait(), terminate_grace)
+            except TimeoutError:
+                try:
+                    child.process.kill()
+                except ProcessLookupError:
+                    pass
+                await child.process.wait()
+    return {"escalated": escalated, "returncode": child.process.returncode}
+
+
 async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
     manager = observer = state = bundle = hooks = None
+    diagnostics = ResponseDiagnostics(Path(run_root) / arm / "accounting")
     exit_code, stop = 0, None
     root = Path(run_root)
     me = asyncio.current_task()
@@ -552,7 +797,6 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
         from tests.evals.harness import _StrictMemoryInvocationRecorder
         from tests.evals.quality_pilot import credentials
         from tests.evals.quality_run import (
-            finish_quality_generation,
             prepare_quality_generation,
             run_quality_generation_slot,
         )
@@ -561,7 +805,9 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
         values = credentials(Path(credentials_path))
         markers = tuple(v.get_secret_value() for v in values.values())
         bundle = create_qwen_adapters(
-            api_key=values["DASHSCOPE_API_KEY"], workspace_id=values["PF_QWEN_WORKSPACE_ID"]
+            api_key=values["DASHSCOPE_API_KEY"],
+            workspace_id=values["PF_QWEN_WORKSPACE_ID"],
+            http_async_client=httpx.AsyncClient(event_hooks={"response": [diagnostics.response]}),
         )
         factory = LLMFactory(
             _StrictMemoryInvocationRecorder(), bundle.chat, bundle.embedding, provider="qwen"
@@ -585,6 +831,7 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
             observer=observer,
             source_check=source_check,
             deadline=message["deadline"],
+            diagnostics=diagnostics,
         )
         dataset_root = harness / DATASET
         state = await observer.protect(
@@ -631,9 +878,6 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
                 case_digest=quality_identity_digest(result.model_dump(mode="json")),
                 stop=hooks.failure or state.stop,
             )
-        report = await finish_quality_generation(state)
-        write_new(root / arm / "usage.json", await hooks.usage())
-        _reply("finished", report_digest=quality_identity_digest(report.model_dump(mode="json")))
     except BaseException as error:
         stop = (
             "cancelled"
@@ -643,49 +887,32 @@ async def child_main(binding_path, arm, run_root, credentials_path, parent_pid):
             else "execution_failed"
         )
         exit_code = 1
-        if state is not None and not state.closed and not state.active:
-            try:
-                from tests.evals.quality_run import finish_quality_generation
-
-                state.stop = state.stop or "integrity"
-                state.cancellation = None
-                await finish_quality_generation(state)
-            except Exception:
-                pass  # Original failure and missing report remain explicit below.
-        if hooks is not None:
-            try:
-                write_new(root / arm / "failure-usage.json", await hooks.usage())
-            except Exception:
-                pass
-        write_new(
-            root / arm / "failure.json",
-            {"category": stop, "budget_category": hooks.failure if hooks else None},
-        )
-        _reply("failed")
     finally:
-        resource_ok = False
-        if observer is not None and not observer.closed:
-            try:
-                resource_ok = (await observer.finish()).complete
-            except Exception:
-                resource_ok = False
-        close_failed = False
-        if bundle is not None:
-            try:
-                await bundle.aclose()
-            except Exception:
-                close_failed = True
-        if manager is not None:
-            await manager.aclose()
-            close_failed |= manager.cleanup_failed
-        write_new(
-            root / arm / "cleanup.json",
-            {
-                "cleanup_complete": not close_failed,
-                "resource_complete": resource_ok,
-                "stop_category": stop,
-            },
+        report, cleanup = await await_finalization(
+            finalize_child(
+                root,
+                arm,
+                state=state,
+                hooks=hooks,
+                observer=observer,
+                bundle=bundle,
+                manager=manager,
+                stop=stop,
+            )
         )
+        if (
+            stop
+            or cleanup["failed_stages"]
+            or not cleanup["cleanup_complete"]
+            or not cleanup["resource_complete"]
+            or report is None
+        ):
+            exit_code = 1
+            _reply("failed")
+        else:
+            _reply(
+                "finished", report_digest=quality_identity_digest(report.model_dump(mode="json"))
+            )
     return exit_code
 
 
@@ -782,15 +1009,10 @@ async def execute(binding_path, run_root, credentials_path, authorization_path):
         )
     finally:
         for child in children:
-            if child.process.returncode is None:
-                try:
-                    if stop:
-                        child.process.send_signal(signal.SIGTERM)
-                    await asyncio.wait_for(child.process.wait(), 30)
-                except (TimeoutError, ProcessLookupError):
-                    if child.process.returncode is None:
-                        child.process.kill()
-                        await child.process.wait()
+            shutdown = await await_finalization(stop_child(child, abort=stop is not None))
+            write_new(root / child.arm / "shutdown.json", shutdown)
+            if shutdown["escalated"] or shutdown["returncode"] != 0:
+                stop = stop or "child_shutdown_failed"
         cleanup, reports, resources = True, {}, {}
         for arm in ARMS:
             try:
@@ -828,6 +1050,169 @@ async def execute(binding_path, run_root, credentials_path, authorization_path):
     return report
 
 
+async def diagnose_embedding(binding_path, run_root, credentials_path, authorization_path):
+    from app.db.llm_invocations import SqlAlchemyInvocationRecorder
+    from app.db.provisioning import SqlAlchemyProvisioningStore
+    from app.domain.provisioning import ProvisioningService
+    from app.llm.factory import LLMRetryPolicy
+    from app.llm.invocations import LLMInvocationContext
+    from app.llm.qwen_adapters import create_qwen_adapters
+    from tests.evals.live_chat import CURRENT_LOGICAL_CALL
+    from tests.evals.quality_dataset import prepare_quality_mapping_sources
+    from tests.evals.quality_pilot import credentials
+    from tests.evals.quality_run import _QualityAttemptRecorder
+
+    binding = read_json(binding_path, BindingV1)
+    verify_binding(binding, environment=probe_environment())
+    verify_imports(Path(binding.candidate_root), Path(binding.harness_root))
+    auth = read_json(authorization_path, DiagnosticAuthorizationV1)
+    digest = quality_identity_digest(binding.model_dump(mode="json"))
+    if auth.binding_digest != digest:
+        fail("run_not_authorized")
+    root = no_links(run_root)
+    checked_directory(root.parent)
+    if any(root.is_relative_to(Path(p)) for p in (binding.baseline_root, binding.candidate_root)):
+        fail("private_root_required")
+    if root.exists():
+        raise FileExistsError("execution_directory_exists")
+    values = credentials(credentials_path)
+    prepared = prepare_quality_mapping_sources(Path(binding.harness_root) / DATASET)
+    inputs = [tuple(c.text for c in prepared[alias].chunks) for alias in DIAGNOSTIC_ALIASES]
+    if any(not texts or len(texts) > 10 for texts in inputs):
+        fail("diagnostic_input_invalid")
+    # Conservative bound for this fixed synthetic batch, before any provider request.
+    if sum(len(t.encode()) for texts in inputs for t in texts) > 10000:
+        fail("diagnostic_input_invalid")
+    claim = {
+        "artifact_kind": "e7a7_diagnostic_claim_v1",
+        "binding_digest": digest,
+        "authorization_digest": quality_identity_digest(auth.model_dump(mode="json")),
+        "run_root": str(root),
+        "aliases": DIAGNOSTIC_ALIASES,
+        "provider": "qwen",
+        "model": LOCKED_EMBEDDING_MODEL,
+        "max_attempts_per_material": 1,
+        "input_digests": [quality_identity_digest(texts) for texts in inputs],
+    }
+    write_new(binding_path.parent / f"{binding.experiment_id}.diagnostic-claim.json", claim)
+    root.mkdir(mode=0o700)
+    arm = "baseline"
+    (root / arm).mkdir(mode=0o700)
+    for name in ("accounting", "resources"):
+        (root / arm / name).mkdir(mode=0o700)
+    write_new(root / "plan.json", claim)
+    manager = bundle = observer = hooks = None
+    start = monotonic()
+    stop = None
+    slots = [{"alias": alias, "status": "not_run"} for alias in DIAGNOSTIC_ALIASES]
+    try:
+        manager = OwnedExperimentDatabase()
+        handle = await manager.__aenter__()
+        owner = require_owned_database(handle)
+        if owner._container.get_wrapped_container().image.id != binding.environment.image_id:
+            fail("image_drift")
+        observer = ResourceObserver(owner, root / arm / "resources", arm)
+        await observer.start()
+        diagnostics = ResponseDiagnostics(root / arm / "accounting")
+        bundle = create_qwen_adapters(
+            api_key=values["DASHSCOPE_API_KEY"],
+            workspace_id=values["PF_QWEN_WORKSPACE_ID"],
+            http_async_client=httpx.AsyncClient(event_hooks={"response": [diagnostics.response]}),
+        )
+        manifest, policy = arm_manifest(
+            binding,
+            arm,
+            live_identity_factory(SqlAlchemyInvocationRecorder(owner._sessions)),
+            root=Path(binding.harness_root),
+        )
+        # Identity factory needs a valid recorder but can never execute provider requests.
+        hooks = ExperimentHooks(
+            root / arm / "accounting",
+            observer=observer,
+            source_check=lambda: verify_binding(binding),
+            deadline=start + 300,
+            diagnostics=diagnostics,
+        )
+        hooks.bind(handle, manifest, policy)
+        hooks.admission = QualityRetrievalAdmissionV1.model_validate_json(
+            encoded(
+                {
+                    **hooks.admission.model_dump(mode="json"),
+                    "cost_admission_budget_cny": "0.30",
+                    "provider_attempt_cap": 3,
+                    "input_token_cap": 10000,
+                }
+            )
+        )
+        actor = await ProvisioningService(
+            SqlAlchemyProvisioningStore(owner._sessions)
+        ).provision_personal_workspace(f"quality-{manifest.experiment_id}")
+        recorder = _QualityAttemptRecorder(
+            SqlAlchemyInvocationRecorder(owner._sessions), hooks.admission, experiment_hooks=hooks
+        )
+        factory = LLMFactory(
+            recorder,
+            bundle.chat,
+            bundle.embedding,
+            provider="qwen",
+            retry_policy=LLMRetryPolicy(max_attempts=1),
+        )
+        model = factory.create_embedding_model(
+            LLMInvocationContext(actor.workspace_id, actor.user_id)
+        )
+        for index, texts in enumerate(inputs):
+            slots[index]["status"] = "failed"
+            write_new(root / f"start-{index}.json", slots[index])
+            remaining = start + 300 - monotonic()
+            if remaining <= 0:
+                fail("execution_deadline")
+            token = CURRENT_LOGICAL_CALL.set(f"ingestion.{DIAGNOSTIC_ALIASES[index]}.")
+            try:
+                await asyncio.wait_for(
+                    observer.protect(model.embed(texts, {"graph_node": "document_ingestion"})),
+                    remaining,
+                )
+            finally:
+                CURRENT_LOGICAL_CALL.reset(token)
+            slots[index]["status"] = "succeeded"
+            write_new(root / f"result-{index}.json", slots[index])
+    except (Exception, asyncio.CancelledError) as error:
+        stop = (
+            hooks.failure
+            if hooks is not None and hooks.failure
+            else (error.category if isinstance(error, ExperimentError) else "diagnostic_failed")
+        )
+    finally:
+        _, cleanup = await await_finalization(
+            finalize_child(
+                root,
+                arm,
+                state=None,
+                hooks=hooks,
+                observer=observer,
+                bundle=bundle,
+                manager=manager,
+                stop=stop,
+            )
+        )
+    report = {
+        "artifact_kind": "e7a7_embedding_diagnostic_result_v1",
+        "binding_digest": digest,
+        "slots": slots,
+        "stop_category": stop,
+        "elapsed_seconds": monotonic() - start,
+        "cleanup": cleanup,
+        "complete": stop is None
+        and not cleanup["failed_stages"]
+        and cleanup["cleanup_complete"]
+        and cleanup["resource_complete"]
+        and all(s["status"] == "succeeded" for s in slots),
+        "semantic_review": "NOT_RUN",
+    }
+    write_new(root / "diagnostic-result.json", report)
+    return report
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Manual, frozen E7-A.7 experiment")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -842,6 +1227,11 @@ def main(argv=None):
     run.add_argument("--run-root", type=Path, required=True)
     run.add_argument("--credentials", type=Path, required=True)
     run.add_argument("--authorization", type=Path, required=True)
+    diagnostic = commands.add_parser("experiment-diagnose-embedding")
+    diagnostic.add_argument("--binding", type=Path, required=True)
+    diagnostic.add_argument("--run-root", type=Path, required=True)
+    diagnostic.add_argument("--credentials", type=Path, required=True)
+    diagnostic.add_argument("--authorization", type=Path, required=True)
     for name in ("experiment-review-export", "experiment-review-import", "experiment-decide"):
         command_ = commands.add_parser(name)
         command_.add_argument("--binding", type=Path, required=True)
@@ -887,6 +1277,22 @@ def main(argv=None):
                     }
                 )
             )
+        elif args.command == "experiment-diagnose-embedding":
+            report = asyncio.run(
+                diagnose_embedding(
+                    args.binding, args.run_root, args.credentials, args.authorization
+                )
+            )
+            print(
+                json.dumps(
+                    {
+                        "category": "diagnostic_complete"
+                        if report["complete"]
+                        else "diagnostic_incomplete"
+                    }
+                )
+            )
+            return 0 if report["complete"] else 1
         elif args.command == "experiment-run":
             report = asyncio.run(
                 execute(args.binding, args.run_root, args.credentials, args.authorization)

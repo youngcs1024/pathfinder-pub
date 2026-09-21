@@ -215,3 +215,158 @@ async def test_two_real_source_roots_use_isolated_processes_and_owned_pg(tmp_pat
         )
         result = json.loads(stdout)
         assert result["status"] == "contract_success" and result["imports"] > 0
+
+
+@pytest.mark.parametrize(
+    "entrypoint,invalid_response", [("diagnostic", False), ("diagnostic", True), ("child", True)]
+)
+async def test_bounded_embedding_diagnostic_uses_real_pg_and_preserves_failure(
+    tmp_path, monkeypatch, invalid_response, entrypoint
+):
+    import docker
+    import httpx
+    from pydantic import SecretStr
+
+    from app.llm import qwen_adapters
+    from tests.evals import quality_experiment_execution as module
+    from tests.evals import quality_pilot
+    from tests.evals.quality_experiment_database import POSTGRES_IMAGE
+    from tests.evals.test_quality_experiment_execution import (
+        binding_fixture,
+        diagnostic_authorization,
+    )
+
+    tmp_path.chmod(0o700)
+    client = docker.from_env()
+    try:
+        image = client.images.get(POSTGRES_IMAGE).id
+    finally:
+        client.close()
+    binding = binding_fixture(tmp_path)
+    binding = binding.model_copy(
+        update={"environment": binding.environment.model_copy(update={"image_id": image})}
+    )
+    module.write_new(tmp_path / "binding.json", binding)
+    module.write_new(tmp_path / "auth.json", diagnostic_authorization(binding))
+    monkeypatch.setattr(module, "verify_binding", lambda *a, **kw: None)
+    monkeypatch.setattr(module, "verify_imports", lambda *a, **kw: None)
+    monkeypatch.setattr(module, "source_identity", lambda *a, **kw: None)
+    monkeypatch.setattr(module, "probe_environment", lambda: binding.environment)
+    monkeypatch.setattr(
+        quality_pilot,
+        "credentials",
+        lambda _: {
+            "DASHSCOPE_API_KEY": SecretStr("fixture-key"),
+            "PF_QWEN_WORKSPACE_ID": SecretStr("fixture-space"),
+        },
+    )
+    calls = []
+
+    def transport(request):
+        payload = json.loads(request.content)
+        calls.append(payload["input"])
+        usage = {"total_tokens": 10}
+        if not invalid_response:
+            usage["prompt_tokens"] = 10
+        return httpx.Response(
+            200,
+            json={
+                "model": "text-embedding-v4",
+                "object": "list",
+                "usage": usage,
+                "data": [
+                    {"object": "embedding", "index": i, "embedding": [0.1] * 1536}
+                    for i in range(len(payload["input"]))
+                ],
+            },
+        )
+
+    original = qwen_adapters.create_qwen_adapters
+
+    def adapters(**kwargs):
+        kwargs["http_async_client"]._transport = httpx.MockTransport(transport)
+        kwargs["http_async_client"]._mounts = {}
+        return original(**kwargs)
+
+    monkeypatch.setattr(qwen_adapters, "create_qwen_adapters", adapters)
+    original_owner = module.OwnedExperimentDatabase
+    closed = []
+
+    class CheckedOwner(original_owner):
+        async def aclose(self):
+            if self._sessions is not None:
+                async with self._sessions() as session:
+                    assert await session.scalar(select(func.count()).select_from(ActionIntent)) == 0
+                    assert (
+                        await session.scalar(select(func.count()).select_from(ApprovalRequest)) == 0
+                    )
+            await super().aclose()
+            closed.append(not self.cleanup_failed)
+
+    monkeypatch.setattr(module, "OwnedExperimentDatabase", CheckedOwner)
+    root = tmp_path / "diagnostic"
+    if entrypoint == "child":
+        root.mkdir(mode=0o700)
+        for name in ("baseline", "outputs", "private"):
+            (root / name).mkdir(mode=0o700)
+        for name in ("resources", "accounting"):
+            (root / "baseline" / name).mkdir(mode=0o700)
+
+        async def prepare(*args):
+            from time import monotonic
+
+            return {"command": "prepare", "deadline": monotonic() + 300}
+
+        replies = []
+
+        def reply(category, **fields):
+            if category == "failed":
+                assert closed == [True]
+                assert (root / "baseline/cleanup.json").is_file()
+                assert (root / "baseline/resources/report.json").is_file()
+                assert (root / "baseline/failure-usage.json").is_file()
+            replies.append(category)
+
+        monkeypatch.setattr(module, "_input", prepare)
+        monkeypatch.setattr(module, "_reply", reply)
+        try:
+            result = await module.child_main(
+                str(tmp_path / "binding.json"),
+                "baseline",
+                str(root),
+                str(tmp_path / "unused"),
+                str(os.getpid()),
+            )
+        finally:
+            asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
+        assert result == 1 and replies == ["ready", "failed"]
+        assert len(calls) == 1
+        assert module.read_json(root / "baseline/cleanup.json")["cleanup_complete"]
+        return
+    report = await module.diagnose_embedding(
+        tmp_path / "binding.json", root, tmp_path / "unused", tmp_path / "auth.json"
+    )
+    assert closed == [True] and report["cleanup"]["cleanup_complete"]
+    assert report["complete"] is (not invalid_response)
+    assert len(calls) == (1 if invalid_response else 3)
+    facts = module.read_json(root / "baseline/accounting/invocations.json")["invocations"]
+    assert len(facts) == len(calls)
+    if invalid_response:
+        assert report["stop_category"] == "unknown_provider_usage"
+        assert [s["status"] for s in report["slots"]] == ["failed", "not_run", "not_run"]
+        assert facts[0]["error_category"] == "invalid_provider_response"
+        assert facts[0]["token_usage"] is None and facts[0]["estimated_cost"] is None
+    else:
+        assert all(row["status"] == "succeeded" for row in facts)
+    with pytest.raises(FileExistsError):
+        await module.diagnose_embedding(
+            tmp_path / "binding.json", root, tmp_path / "unused", tmp_path / "auth.json"
+        )
+    with pytest.raises(FileExistsError):
+        await module.diagnose_embedding(
+            tmp_path / "binding.json",
+            tmp_path / "reroll",
+            tmp_path / "unused",
+            tmp_path / "auth.json",
+        )
+    assert len(calls) == (1 if invalid_response else 3)

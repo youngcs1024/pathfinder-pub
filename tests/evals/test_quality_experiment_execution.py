@@ -318,3 +318,212 @@ def test_authorization_requires_known_object_version(tmp_path, value):
     write_new(path, value)
     with pytest.raises(ExperimentError):
         read_authorization(path)
+
+
+def diagnostic_authorization(binding):
+    from tests.evals.quality_experiment_execution import DiagnosticAuthorizationV1
+
+    return DiagnosticAuthorizationV1.model_validate_json(
+        __import__("json").dumps(
+            {
+                "artifact_kind": "e7a7_embedding_diagnostic_authorization_v1",
+                "binding_digest": quality_identity_digest(binding.model_dump(mode="json")),
+                "source": "user_explicit_e7a7_embedding_diagnostic",
+                "synthetic_materials": True,
+                "aliases": ["resume_csv_reconcile", "resume_cache_ttl", "resume_accessibility"],
+                "provider_attempt_cap": 3,
+                "cost_admission_budget_cny": "0.30",
+                "input_token_cap": 10000,
+                "execution_window_seconds": 300,
+                "agent_initial_and_recheck": False,
+                "production_adoption": False,
+                "deployment": False,
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("artifact_kind", "e7a7_run_authorization_v2"),
+        ("binding_digest", "sha256:" + "f" * 64),
+        ("provider_attempt_cap", 4),
+        ("cost_admission_budget_cny", "30"),
+        ("agent_initial_and_recheck", True),
+        ("source", "forged"),
+        ("aliases", ["resume_accessibility", "resume_cache_ttl", "resume_csv_reconcile"]),
+    ],
+)
+async def test_diagnostic_rejects_authorization_before_claim(tmp_path, monkeypatch, field, value):
+    import tests.evals.quality_experiment_execution as module
+
+    tmp_path.chmod(0o700)
+    binding = binding_fixture(tmp_path)
+    write_new(tmp_path / "binding.json", binding)
+    auth = diagnostic_authorization(binding).model_dump(mode="json")
+    auth[field] = value
+    write_new(tmp_path / "auth.json", auth)
+    monkeypatch.setattr(module, "verify_binding", lambda *a, **kw: None)
+    monkeypatch.setattr(module, "verify_imports", lambda *a, **kw: None)
+    monkeypatch.setattr(module, "probe_environment", lambda: binding.environment)
+    with pytest.raises((ExperimentError, ValueError)):
+        await module.diagnose_embedding(
+            tmp_path / "binding.json", tmp_path / "run", tmp_path / "unused", tmp_path / "auth.json"
+        )
+    assert not (tmp_path / "run").exists()
+    assert not list(tmp_path.glob("*.diagnostic-claim.json"))
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"not json",
+        b"null",
+        b'{"model":"secret-canary","usage":{"prompt_tokens":"secret-canary"},"data":[{"embedding":"secret-canary","index":"secret-canary"}]}',
+    ],
+)
+async def test_response_diagnostic_is_allowlisted_and_preserves_bytes(tmp_path, body):
+    import httpx
+
+    from tests.evals.quality_experiment_execution import HTTP_ATTEMPT, ResponseDiagnostics
+
+    tmp_path.chmod(0o700)
+    attempt = NS(
+        invocation_id=uuid4(), request_hash="sha256:" + "b" * 64, invocation_kind="embedding"
+    )
+    token = HTTP_ATTEMPT.set(attempt)
+    response = httpx.Response(200, content=body)
+    try:
+        await ResponseDiagnostics(tmp_path).response(response)
+    finally:
+        HTTP_ATTEMPT.reset(token)
+    assert response.content == body
+    saved = (tmp_path / f"http-{attempt.invocation_id}.json").read_bytes()
+    assert b"secret-canary" not in saved and b"not json" not in saved
+    assert read_json(tmp_path / f"http-{attempt.invocation_id}.json")["http_status"] == 200
+
+
+@pytest.mark.parametrize("fault", ["model", "usage", "indexes", "dimension", "finite"])
+def test_embedding_diagnostics_identify_shape_faults(fault):
+    from tests.evals.quality_experiment_execution import embedding_response_shape
+
+    value = {
+        "model": "text-embedding-v4",
+        "usage": {"prompt_tokens": 10, "total_tokens": 10},
+        "data": [{"index": 0, "embedding": [0.0] * 1536}],
+    }
+    if fault == "model":
+        value["model"] = "untrusted"
+    if fault == "usage":
+        value["usage"].pop("prompt_tokens")
+    if fault == "indexes":
+        value["data"][0]["index"] = True
+    if fault == "dimension":
+        value["data"][0]["embedding"] = [0.0] * 1024
+    if fault == "finite":
+        value["data"][0]["embedding"][0] = float("nan")
+    result = embedding_response_shape(value)
+    assert {
+        "model": not result["model_matches"],
+        "usage": result["prompt_tokens_type"] == "missing_or_null",
+        "indexes": not result["indexes_valid"],
+        "dimension": result["vector_lengths"] != [1536],
+        "finite": not result["vectors_finite"],
+    }[fault]
+
+
+@pytest.mark.parametrize("failure", [None, "resource", "client", "database", "usage"])
+async def test_failure_finalization_survives_repeated_cancel(tmp_path, monkeypatch, failure):
+    import tests.evals.quality_experiment_execution as module
+
+    tmp_path.chmod(0o700)
+    (tmp_path / "baseline").mkdir(mode=0o700)
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def stage(name):
+        calls.append(name)
+        if name == "usage":
+            entered.set()
+            await release.wait()
+        if name == failure:
+            raise RuntimeError("secret-canary")
+        return NS(complete=True) if name == "resource" else summarize_rows([])
+
+    async def export():
+        calls.append("export")
+
+    hooks = NS(
+        closing=False,
+        failure="unknown_provider_usage",
+        usage=lambda: stage("usage"),
+        export_invocations=export,
+    )
+    observer = NS(closed=False, finish=lambda: stage("resource"))
+    bundle = NS(aclose=lambda: stage("client"))
+    manager = NS(aclose=lambda: stage("database"), cleanup_failed=False)
+
+    async def run():
+        return await module.await_finalization(
+            module.finalize_child(
+                tmp_path,
+                "baseline",
+                state=None,
+                hooks=hooks,
+                observer=observer,
+                bundle=bundle,
+                manager=manager,
+                stop="generation_preparation_failed",
+            )
+        )
+
+    task = asyncio.create_task(run())
+    await entered.wait()
+    task.cancel()
+    await asyncio.sleep(0)
+    task.cancel()
+    release.set()
+    _, cleanup = await task
+    assert calls == ["usage", "export", "resource", "client", "database"]
+    assert hooks.closing
+    assert cleanup["cleanup_complete"] == (failure not in {"client", "database"})
+    assert cleanup["failed_stages"] == ([failure] if failure else [])
+    assert b"secret-canary" not in (tmp_path / "baseline/cleanup.json").read_bytes()
+
+
+async def test_shutdown_escalation_is_reported():
+    from tests.evals.quality_experiment_execution import stop_child
+
+    calls = []
+
+    class Process:
+        returncode = None
+
+        async def wait(self):
+            if self.returncode is None:
+                await asyncio.Event().wait()
+            return self.returncode
+
+        def send_signal(self, sig):
+            calls.append("terminate")
+
+        def kill(self):
+            calls.append("kill")
+            self.returncode = -9
+
+    async def send(message):
+        calls.append(message["command"])
+
+    result = await stop_child(
+        NS(process=Process(), send=send), abort=True, grace=0.001, terminate_grace=0.001
+    )
+    assert calls == ["abort", "terminate", "kill"]
+    assert result == {"escalated": True, "returncode": -9}
+
+
+async def test_closing_prevents_provider_admission(tmp_path):
+    hooks = ExperimentHooks(tmp_path)
+    hooks.closing = True
+    with pytest.raises(ExperimentError, match="execution_closing"):
+        await hooks.before_attempt(NS())
