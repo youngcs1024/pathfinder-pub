@@ -80,5 +80,5 @@ async def test_production_has_no_mock_routes_or_unimplemented_v2_routes():
     paths = tuple(app.openapi()["paths"])
     assert not any("mock" in path or path.startswith("/api/v2") for path in paths)
     assert (
-        await runs._request(app, "POST", "/internal/mock/applications", json={})
+        await runs._request(app, "POST", "/internal/mock-portal/submissions", json={})
     ).status_code == 404

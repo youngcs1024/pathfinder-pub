@@ -110,3 +110,11 @@ def test_historical_outputs_keep_their_wire_format(version, schema_version):
 def test_new_modes_cannot_reuse_legacy_request_identity(mode):
     with pytest.raises(DomainValidationError):
         create_request_digest_v1(mode=mode, query="synthetic")
+
+
+def test_constructed_invalid_resume_result_is_rejected_before_publication():
+    output = ResumeRunOutputV1[SyntheticPayload](
+        mode=RunMode.MATERIAL_PREPARATION, payload=SyntheticPayload(receipt_id=uuid4())
+    ).model_copy(update={"schema_version": 2})
+    with pytest.raises(ValueError, match="schema is invalid"):
+        RunExecutionResult(status=RunStatus.COMPLETED, result=output)

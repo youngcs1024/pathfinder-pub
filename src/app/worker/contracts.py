@@ -40,6 +40,13 @@ class RunExecutionResult:
                 or self.approval_request_id is not None
             ):
                 raise ValueError("completed executor result fields are invalid")
+            if isinstance(self.result, ResumeRunOutputV1):
+                try:
+                    type(self.result).model_validate_json(
+                        self.result.model_dump_json(warnings="error"), strict=True
+                    )
+                except (TypeError, ValueError, AttributeError):
+                    raise ValueError("completed executor result schema is invalid") from None
             return
         if self.status is RunStatus.FAILED:
             if self.result is not None or self.approval_request_id is not None:

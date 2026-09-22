@@ -22,7 +22,6 @@ from pydantic import SecretStr
 from sqlalchemy import select, text
 
 from app.db.models import Conversation, Document, Message, Run, RunEvent, RunJob
-from app.db.readiness import REQUIRED_DATABASE_REVISION
 from app.db.runs import _require_current_tenant
 from app.db.session import create_database_engine, create_session_factory, transaction
 from app.domain.errors import DomainNotFoundError
@@ -275,9 +274,9 @@ class OwnedExperimentDatabase:
             url = f"postgresql+psycopg://pf_e7a:{password}@127.0.0.1:{port}/{self._database}"
             config = Config(str(ROOT / "alembic.ini"))
             config.attributes["database_url"] = url
-            if REQUIRED_DATABASE_REVISION != BASE_REVISION:
-                _fail("schema_drift")
-            command.upgrade(config, "head")
+            # Frozen E7 regression owns an isolated historical schema. It must not
+            # adopt the resume schema or claim compatibility with the current worker.
+            command.upgrade(config, BASE_REVISION)
             self._engine = create_database_engine(SecretStr(url))
             self._sessions = create_session_factory(self._engine)
             async with transaction(self._sessions) as session:

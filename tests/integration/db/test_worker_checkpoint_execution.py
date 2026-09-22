@@ -21,9 +21,9 @@ from app.domain.runs import RunService, RunStatus
 from app.domain.tenancy import TenantContext
 from app.domain.tool_effects import ToolEffect
 from app.domain.tool_invocations import ToolInvocationLimitError
-from app.worker.main import run_worker
 from tests.integration.support import connect_database
 from tests.legacy_runtime import SqlAlchemyRunStore
+from tests.legacy_worker import run_worker
 
 pytestmark = pytest.mark.integration
 _CHECKPOINT_TABLES = {

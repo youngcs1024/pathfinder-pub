@@ -584,7 +584,9 @@ class SqlAlchemyWorkerJobStore:
                 contract = find_run_contract(
                     self._execution_contracts, run.graph_version, RunMode(run.mode)
                 )
-                validated = contract.decode_output(result.model_dump(mode="json", round_trip=True))
+                validated = contract.decode_output(
+                    result.model_dump(mode="json", round_trip=True, warnings="error")
+                )
             except (TypeError, ValueError, AttributeError):
                 raise DomainInvariantError("completed job result contract is invalid") from None
             run.status = RunStatus.COMPLETED.value
