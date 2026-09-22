@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from time import monotonic
@@ -53,9 +53,11 @@ class WorkerRunner:
         approved_action_executor: ApprovedActionExecutor | None = None,
         trace_sink: TraceSinkPort | None = None,
         clock: Clock = utc_now,
+        unsupported_work_guard: Callable[[], Awaitable[bool]] | None = None,
     ) -> None:
         if not isinstance(worker_id, str) or not worker_id.strip():
             raise ValueError("worker_id must be non-blank")
+        self._unsupported_work_guard = unsupported_work_guard
         self._worker_id = worker_id
         self._store = store
         self._tenant_service = tenant_service
@@ -81,6 +83,8 @@ class WorkerRunner:
                 continue
 
     async def run_once(self, stop_requested: asyncio.Event) -> bool:
+        if self._unsupported_work_guard is not None and await self._unsupported_work_guard():
+            raise RuntimeError("unsupported pending work requires the previous executor")
         now = self._clock()
         reclaimed = await self._store.reclaim_stale_leases(
             now=now,

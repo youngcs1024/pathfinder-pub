@@ -4,9 +4,9 @@ import json
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
-from app.db.models import Document, Run, RunJob, WorkspaceMembership
+from app.db.models import ActionIntent, Document, Run, RunJob, ToolInvocation, WorkspaceMembership
 from app.db.session import AsyncSessionFactory, database_session
 from app.domain.provisioning import WorkspaceRole
 from app.domain.research import ResearchRequestV1
@@ -16,7 +16,8 @@ from app.domain.run_execution import (
     RunExecutionInvalidError,
     RunExecutionLimitsV1,
 )
-from app.domain.runs import EXECUTABLE_GRAPH_VERSIONS, RunMode, RunStatus
+from app.domain.run_payloads import EXECUTION_CONTRACTS, RunContractV1, find_run_contract
+from app.domain.runs import RunMode, RunStatus
 
 _NONTERMINAL_RUN_STATUSES = (
     RunStatus.QUEUED.value,
@@ -26,8 +27,15 @@ _NONTERMINAL_RUN_STATUSES = (
 
 
 class SqlAlchemyRunExecutionReader:
-    def __init__(self, session_factory: AsyncSessionFactory) -> None:
+    def __init__(
+        self,
+        session_factory: AsyncSessionFactory,
+        *,
+        execution_contracts: tuple[RunContractV1, ...] = EXECUTION_CONTRACTS,
+    ) -> None:
         self._session_factory = session_factory
+        self._execution_contracts = execution_contracts
+        self._executable_versions = frozenset(c.graph_version for c in execution_contracts)
 
     async def read_for_execution(
         self,
@@ -39,7 +47,7 @@ class SqlAlchemyRunExecutionReader:
     ) -> RunExecutionInput:
         if not all(isinstance(value, UUID) for value in (run_id, workspace_id, actor_user_id)):
             raise RunExecutionInvalidError("invalid_run_identity")
-        if graph_version not in EXECUTABLE_GRAPH_VERSIONS:
+        if graph_version not in self._executable_versions:
             raise RunExecutionInvalidError("unknown_graph_version")
         async with database_session(self._session_factory) as session:
             membership = (
@@ -86,7 +94,7 @@ class SqlAlchemyRunExecutionReader:
             raise RunExecutionInvalidError("run_not_found")
         if row.created_by_user_id != actor_user_id:
             raise RunExecutionInvalidError("run_actor_mismatch")
-        if row.graph_version not in EXECUTABLE_GRAPH_VERSIONS or row.graph_version != graph_version:
+        if row.graph_version not in self._executable_versions or row.graph_version != graph_version:
             raise RunExecutionInvalidError("unknown_graph_version")
         try:
             mode = RunMode(row.mode)
@@ -100,17 +108,17 @@ class SqlAlchemyRunExecutionReader:
             raise RunExecutionInvalidError("invalid_run_state")
 
         try:
-            request = ResearchRequestV1.model_validate_json(
-                json.dumps(row.input_json, allow_nan=False, separators=(",", ":")),
-                strict=True,
-            )
+            contract = find_run_contract(self._execution_contracts, row.graph_version, mode)
+            request = contract.decode_input(row.input_json)
             limits = RunExecutionLimitsV1.model_validate_json(
                 json.dumps(row.limits_json, allow_nan=False, separators=(",", ":")),
                 strict=True,
             )
         except (TypeError, ValidationError, ValueError):
             raise RunExecutionInvalidError("invalid_run_input") from None
-        if request.include_application_draft is not (mode is RunMode.APPLICATION):
+        if isinstance(request, ResearchRequestV1) and request.include_application_draft is not (
+            mode is RunMode.APPLICATION
+        ):
             raise RunExecutionInvalidError("invalid_run_input")
         if row.resume_document_id is not None:
             async with database_session(self._session_factory) as session:
@@ -146,7 +154,7 @@ class SqlAlchemyRunExecutionReader:
     ) -> None:
         if not all(isinstance(value, UUID) for value in (run_id, workspace_id, actor_user_id)):
             raise RunExecutionInvalidError("invalid_run_identity")
-        if graph_version not in EXECUTABLE_GRAPH_VERSIONS:
+        if graph_version not in self._executable_versions:
             raise RunExecutionInvalidError("unknown_graph_version")
         async with database_session(self._session_factory) as session:
             membership = (
@@ -182,7 +190,7 @@ class SqlAlchemyRunExecutionReader:
             raise RunExecutionInvalidError("run_not_found")
         if row.created_by_user_id != actor_user_id:
             raise RunExecutionInvalidError("run_actor_mismatch")
-        if row.graph_version not in EXECUTABLE_GRAPH_VERSIONS or row.graph_version != graph_version:
+        if row.graph_version not in self._executable_versions or row.graph_version != graph_version:
             raise RunExecutionInvalidError("unknown_graph_version")
         if row.cancel_requested_at is not None or row.status == RunStatus.CANCELLED.value:
             raise RunExecutionCancelledError
@@ -200,3 +208,26 @@ class SqlAlchemyRunExecutionReader:
                 .limit(1)
             )
         return run_id is not None
+
+    async def has_unsupported_pending_work(self) -> bool:
+        """Read-only release guard, including work attached to already terminal Runs.
+
+        An old executor must finish/reconcile this work before the new worker starts.
+        No cancellation, expiry or outcome rewriting is performed by this check.
+        """
+        async with database_session(self._session_factory) as session:
+            checks = (
+                select(Run.id).where(
+                    Run.status.in_(_NONTERMINAL_RUN_STATUSES),
+                    Run.graph_version.not_in(self._executable_versions),
+                ),
+                select(RunJob.id)
+                .join(Run, (Run.workspace_id == RunJob.workspace_id) & (Run.id == RunJob.run_id))
+                .where(
+                    RunJob.status.in_(("queued", "leased")),
+                    Run.graph_version.not_in(self._executable_versions),
+                ),
+                select(ActionIntent.id).where(ActionIntent.status == "executing"),
+                select(ToolInvocation.id).where(ToolInvocation.status == "executing"),
+            )
+            return bool(await session.scalar(select(or_(*(query.exists() for query in checks)))))

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -33,9 +32,14 @@ from app.domain.errors import (
 )
 from app.domain.jobs import JobStatus
 from app.domain.provisioning import WorkspaceRole
-from app.domain.research import ResearchOutputV1, ResearchOutputV2, ResearchRequestV1
+from app.domain.research import ResearchRequestV1
+from app.domain.run_payloads import (
+    EXECUTION_CONTRACTS,
+    READ_CONTRACTS,
+    RunContractV1,
+    find_run_contract,
+)
 from app.domain.runs import (
-    EXECUTABLE_GRAPH_VERSIONS,
     READABLE_GRAPH_VERSIONS,
     MessageRole,
     RunAccepted,
@@ -160,8 +164,14 @@ def _run_mode(value: str) -> RunMode:
 
 
 class SqlAlchemyRunStore:
-    def __init__(self, session_factory: AsyncSessionFactory) -> None:
+    def __init__(
+        self,
+        session_factory: AsyncSessionFactory,
+        *,
+        execution_contracts: tuple[RunContractV1, ...] = EXECUTION_CONTRACTS,
+    ) -> None:
         self._session_factory = session_factory
+        self._execution_contracts = execution_contracts
 
     async def create_run(
         self,
@@ -174,8 +184,11 @@ class SqlAlchemyRunStore:
         graph_version: str,
         request_identity: RunCreateIdentity | None = None,
     ) -> RunAccepted:
-        if graph_version not in EXECUTABLE_GRAPH_VERSIONS:
-            raise DomainInvariantError("unsupported graph version")
+        try:
+            contract = find_run_contract(self._execution_contracts, graph_version, mode)
+            contract.decode_input(request.model_dump(mode="json", round_trip=True))
+        except (TypeError, ValueError):
+            raise DomainInvariantError("unsupported graph version or input") from None
         if request_identity is not None:
             digest = create_request_digest_v1(
                 mode=mode, query=request.query, resume_document_id=resume_document_id
@@ -361,19 +374,8 @@ class SqlAlchemyRunStore:
         result = None
         if run.result_json is not None:
             try:
-                result_model = (
-                    ResearchOutputV2
-                    if run.result_json.get("schema_version") == 2
-                    else ResearchOutputV1
-                )
-                result = result_model.model_validate_json(
-                    json.dumps(
-                        run.result_json,
-                        allow_nan=False,
-                        separators=(",", ":"),
-                    ),
-                    strict=True,
-                )
+                contract = find_run_contract(READ_CONTRACTS, run.graph_version, _run_mode(run.mode))
+                result = contract.decode_output(run.result_json)
             except (TypeError, ValidationError, ValueError):
                 raise DomainInvariantError("persisted run result is invalid") from None
         if run.graph_version not in READABLE_GRAPH_VERSIONS:

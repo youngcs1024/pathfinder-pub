@@ -16,7 +16,6 @@ from app.db.actions import SqlAlchemyActionStore
 from app.db.approvals import SqlAlchemyApprovalStore
 from app.db.checkpoints import open_postgres_checkpointer
 from app.db.documents import SqlAlchemyDocumentRepository
-from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.llm_invocations import SqlAlchemyInvocationRecorder
 from app.db.models import (
     ActionIntent,
@@ -31,7 +30,6 @@ from app.db.models import (
 )
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.retrieval_events import SqlAlchemyRetrievalEventRecorder
-from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.db.tool_invocations import SqlAlchemyToolInvocationRecorder
 from app.domain.approvals import ApprovalDecisionCommand
@@ -40,7 +38,6 @@ from app.domain.tenancy import TenantContext, TenantService
 from app.llm.factory import LLMFactory
 from app.llm.fake import FakeEmbeddingModel
 from app.llm.invocations import LLMInvocationContext
-from app.main import create_app
 from app.retrieval.chunking import normalize_and_chunk_batch
 from app.retrieval.documents import DocumentIngestionService
 from app.retrieval.ingestion import ValidatedIngestionBatch, ValidatedIngestionSource
@@ -52,6 +49,8 @@ from app.worker.main import _create_langgraph_executor, _run_with_checkpoint_sup
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
 from tests.integration.support import connect_database
+from tests.legacy_app import create_app
+from tests.legacy_runtime import SqlAlchemyRunExecutionReader, SqlAlchemyWorkerJobStore
 
 pytestmark = pytest.mark.integration
 

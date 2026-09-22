@@ -10,7 +10,7 @@
   <body>
     <header>
       <div>
-        <p class="eyebrow">Research &amp; action</p>
+        <p class="eyebrow">Historical records</p>
         <h1>Pathfinder</h1>
       </div>
       <div id="session-actions"></div>
@@ -34,8 +34,9 @@
             <p id="workspace-meta" class="muted"></p>
           </section>
           <section class="panel">
-            <h2>Create run</h2>
-            <form id="run-form">
+            <h2>Historical workflow retired</h2>
+            <p>Historical runs are read-only. Resume creation is not available yet.</p>
+            <form id="run-form" hidden inert>
               <label>Mode
                 <select id="run-mode" name="mode">
                   <option value="research">Research</option>
@@ -45,8 +46,8 @@
               <label>Query <textarea id="run-query" name="query" required maxlength="2000"></textarea></label>
               <label>Resume document ID <input id="resume-document-id" name="resume_document_id" type="text" inputmode="text"></label>
               <p id="resume-guidance" class="muted">Optional for research.</p>
-              <button id="create-run" type="submit">Create new task</button>
-              <button id="retry-submission" type="button" hidden>Retry this submission</button>
+              <button id="create-run" type="submit" disabled>Create new task</button>
+              <button id="retry-submission" type="button" hidden disabled>Retry this submission</button>
               <button id="retry-run-read" type="button" hidden>Retry reading current state</button>
               <p id="submission-status" class="muted" aria-live="polite"></p>
               <p class="muted">Retry uses the original inputs, even after editing this form. Refreshing, leaving this page, logging out, or switching workspace loses the retry information. The original task may already exist; recovery after refresh is not automatic.</p>

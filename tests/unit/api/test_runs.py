@@ -22,7 +22,7 @@ from app.domain.runs import (
     RunUsageSummary,
 )
 from app.domain.tenancy import TenantContext, TenantService
-from app.main import create_app
+from tests.legacy_app import create_app
 
 
 def _empty_bucket() -> RunUsageBucket:

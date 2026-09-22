@@ -29,8 +29,14 @@ from app.domain.jobs import (
     RetryDelayPolicy,
 )
 from app.domain.provisioning import WorkspaceRole
-from app.domain.research import ResearchOutput
-from app.domain.runs import SUPPORTED_GRAPH_VERSIONS, RunStatus
+from app.domain.run_payloads import (
+    EXECUTION_CONTRACTS,
+    LEGACY_RUN_MODES,
+    RunContractV1,
+    RunOutput,
+    find_run_contract,
+)
+from app.domain.runs import RunMode, RunStatus
 from app.domain.tenancy import TenantContext
 from app.events.contracts import CURRENT_RUN_EVENT_VERSION, RunEventType
 
@@ -173,6 +179,8 @@ class SqlAlchemyWorkerJobStore:
         session_factory: AsyncSessionFactory,
         retry_delay: RetryDelayPolicy,
         action_recovery_max_attempts: int = 3,
+        *,
+        execution_contracts: tuple[RunContractV1, ...] = EXECUTION_CONTRACTS,
     ) -> None:
         if (
             isinstance(action_recovery_max_attempts, bool)
@@ -181,8 +189,21 @@ class SqlAlchemyWorkerJobStore:
         ):
             raise ValueError("action recovery max attempts must be positive")
         self._session_factory = session_factory
+        self._execution_contracts = execution_contracts
+        self._executable_versions = frozenset(c.graph_version for c in execution_contracts)
         self._retry_delay = retry_delay
         self._action_recovery_max_attempts = action_recovery_max_attempts
+
+    def _executable_run_predicate(self):
+        return (
+            select(Run.id)
+            .where(
+                Run.workspace_id == RunJob.workspace_id,
+                Run.id == RunJob.run_id,
+                Run.graph_version.in_(self._executable_versions),
+            )
+            .exists()
+        )
 
     async def _converge_terminal_action(
         self,
@@ -272,6 +293,7 @@ class SqlAlchemyWorkerJobStore:
                 .where(
                     RunJob.status == JobStatus.QUEUED.value,
                     RunJob.available_at <= now,
+                    self._executable_run_predicate(),
                     or_(
                         RunJob.attempt < RunJob.max_attempts,
                         select(ActionIntent.id)
@@ -437,7 +459,7 @@ class SqlAlchemyWorkerJobStore:
 
             if (
                 run.graph_version != job.graph_version
-                or run.graph_version not in SUPPORTED_GRAPH_VERSIONS
+                or run.graph_version not in self._executable_versions
             ):
                 error_category = "unsupported_graph_version"
                 _mark_job_dead(
@@ -534,7 +556,7 @@ class SqlAlchemyWorkerJobStore:
         self,
         *,
         job: ClaimedJob,
-        result: ResearchOutput,
+        result: RunOutput,
         now: datetime,
     ) -> bool:
         async with transaction(self._session_factory) as session:
@@ -558,8 +580,15 @@ class SqlAlchemyWorkerJobStore:
                 return True
             if run.status != RunStatus.RUNNING.value:
                 raise DomainInvariantError("completed job run is not running")
+            try:
+                contract = find_run_contract(
+                    self._execution_contracts, run.graph_version, RunMode(run.mode)
+                )
+                validated = contract.decode_output(result.model_dump(mode="json", round_trip=True))
+            except (TypeError, ValueError, AttributeError):
+                raise DomainInvariantError("completed job result contract is invalid") from None
             run.status = RunStatus.COMPLETED.value
-            run.result_json = result.model_dump(mode="json", round_trip=True)
+            run.result_json = validated.model_dump(mode="json", round_trip=True)
             run.error_category = None
             run.finished_at = _terminal_time(run, now)
             _append_event(
@@ -588,6 +617,8 @@ class SqlAlchemyWorkerJobStore:
                 workspace_id=job.workspace_id,
                 run_id=job.run_id,
             )
+            if RunMode(run.mode) not in LEGACY_RUN_MODES:
+                raise DomainInvariantError("resume execution cannot wait for legacy approval")
             request = await session.scalar(
                 select(ApprovalRequest)
                 .where(
@@ -933,6 +964,7 @@ class SqlAlchemyWorkerJobStore:
                     .where(
                         RunJob.status == JobStatus.LEASED.value,
                         RunJob.lease_expires_at <= now,
+                        self._executable_run_predicate(),
                     )
                     .order_by(RunJob.lease_expires_at, RunJob.created_at, RunJob.id)
                     .limit(limit)

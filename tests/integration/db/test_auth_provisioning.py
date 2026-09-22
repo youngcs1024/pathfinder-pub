@@ -25,8 +25,8 @@ from app.db.session import (
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.domain.provisioning import ProvisioningService, WorkspaceKind, WorkspaceRole
 from app.domain.tenancy import TenantService
-from app.main import create_app
 from tests.integration.support import connect_database
+from tests.legacy_app import create_app
 
 pytestmark = pytest.mark.integration
 

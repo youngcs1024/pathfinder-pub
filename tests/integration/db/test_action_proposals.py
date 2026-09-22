@@ -24,7 +24,6 @@ from app.db.models import (
     WorkspaceMembership,
 )
 from app.db.provisioning import SqlAlchemyProvisioningStore
-from app.db.runs import SqlAlchemyRunStore
 from app.db.session import AsyncSessionFactory, create_database_engine, create_session_factory
 from app.domain.actions import (
     ACTION_KEY,
@@ -41,6 +40,7 @@ from app.domain.provisioning import ProvisioningService, WorkspaceRole
 from app.domain.runs import RunMode, RunService
 from app.domain.tenancy import TenantContext
 from app.events.contracts import RunEventType
+from tests.legacy_runtime import SqlAlchemyRunStore
 
 pytestmark = pytest.mark.integration
 

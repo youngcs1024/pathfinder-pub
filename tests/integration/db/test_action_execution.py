@@ -14,7 +14,6 @@ from sqlalchemy.exc import IntegrityError
 from app.db.action_execution import SqlAlchemyActionExecutionStore
 from app.db.actions import SqlAlchemyActionStore
 from app.db.approvals import SqlAlchemyApprovalStore
-from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.models import (
     ActionIntent,
     ApprovalRequest,
@@ -26,7 +25,6 @@ from app.db.models import (
     WorkspaceMembership,
 )
 from app.db.provisioning import SqlAlchemyProvisioningStore
-from app.db.runs import SqlAlchemyRunStore
 from app.db.session import AsyncSessionFactory, create_database_engine, create_session_factory
 from app.domain.action_execution import ActionExecutionIdentity, ConfirmedActionResult
 from app.domain.actions import ACTION_KEY, PrepareActionCommand, SubmitApplicationArgsV1
@@ -35,6 +33,7 @@ from app.domain.errors import DomainInvariantError, DomainNotFoundError
 from app.domain.provisioning import ProvisioningService, WorkspaceRole
 from app.domain.runs import RunMode, RunService
 from app.domain.tenancy import TenantContext
+from tests.legacy_runtime import SqlAlchemyRunStore, SqlAlchemyWorkerJobStore
 
 pytestmark = pytest.mark.integration
 NOW = datetime(2030, 1, 1, 12, tzinfo=UTC)

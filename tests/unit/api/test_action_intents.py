@@ -10,7 +10,7 @@ from app.config import Settings
 from app.domain.approvals import ApprovalService, ApprovalStatus
 from app.domain.provisioning import WorkspaceRole
 from app.domain.tenancy import TenantContext, TenantService
-from app.main import create_app
+from tests.legacy_app import create_app
 
 
 class _ActorProvider:

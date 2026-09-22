@@ -28,8 +28,6 @@ from app.db.models import (
     WorkspaceMembership,
 )
 from app.db.provisioning import SqlAlchemyProvisioningStore
-from app.db.run_execution import SqlAlchemyRunExecutionReader
-from app.db.runs import SqlAlchemyRunStore
 from app.db.session import (
     AsyncSessionFactory,
     create_database_engine,
@@ -49,8 +47,9 @@ from app.domain.run_execution import RunExecutionInvalidError
 from app.domain.runs import DEFAULT_RUN_LIMITS, RunMode, RunService, RunStatus
 from app.domain.tenancy import TenantContext, TenantService
 from app.events.contracts import RunEventType
-from app.main import create_app
 from tests.integration.support import connect_database
+from tests.legacy_app import create_app
+from tests.legacy_runtime import SqlAlchemyRunExecutionReader, SqlAlchemyRunStore
 
 pytestmark = pytest.mark.integration
 

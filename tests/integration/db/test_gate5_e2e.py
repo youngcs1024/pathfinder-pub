@@ -21,7 +21,6 @@ from app.db.approval_expiry import SqlAlchemyApprovalRequestExpirySweeper
 from app.db.approvals import SqlAlchemyApprovalStore
 from app.db.checkpoints import open_postgres_checkpointer
 from app.db.documents import SqlAlchemyDocumentRepository
-from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.llm_invocations import SqlAlchemyInvocationRecorder
 from app.db.models import (
     ActionIntent,
@@ -39,8 +38,6 @@ from app.db.models import (
 )
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.retrieval_events import SqlAlchemyRetrievalEventRecorder
-from app.db.run_execution import SqlAlchemyRunExecutionReader
-from app.db.runs import SqlAlchemyRunStore
 from app.db.session import create_database_engine, create_session_factory, transaction
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.db.tool_invocations import SqlAlchemyToolInvocationRecorder
@@ -59,7 +56,6 @@ from app.llm.ports import (
     ProviderAdapterError,
     ProviderAttemptContext,
 )
-from app.main import create_app
 from app.retrieval.chunking import normalize_and_chunk_batch
 from app.retrieval.documents import DocumentIngestionService
 from app.retrieval.ingestion import ValidatedIngestionBatch, ValidatedIngestionSource
@@ -71,6 +67,12 @@ from app.worker.fake_research_adapter import DeterministicResearchFakeChatAdapte
 from app.worker.langgraph_executor import LangGraphRunExecutor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
+from tests.legacy_app import create_app
+from tests.legacy_runtime import (
+    SqlAlchemyRunExecutionReader,
+    SqlAlchemyRunStore,
+    SqlAlchemyWorkerJobStore,
+)
 from tests.tracing import (
     CollectingLLMTraceSink,
     CollectingTraceSink,

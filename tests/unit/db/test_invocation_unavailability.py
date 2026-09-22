@@ -90,8 +90,8 @@ async def test_database_guards_distinguish_failed_queries_from_missing_membershi
 
 
 async def test_execution_permission_query_failure_is_unavailable_after_close():
-    from app.db.run_execution import SqlAlchemyRunExecutionReader
     from app.domain.runs import CURRENT_GRAPH_VERSION
+    from tests.legacy_runtime import SqlAlchemyRunExecutionReader
 
     closed = []
 

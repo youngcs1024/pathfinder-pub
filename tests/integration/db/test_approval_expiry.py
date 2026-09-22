@@ -12,10 +12,8 @@ from sqlalchemy import func, select, text
 
 from app.db.actions import SqlAlchemyActionStore
 from app.db.approval_expiry import SqlAlchemyApprovalRequestExpirySweeper
-from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.models import ApprovalRequest, Document, Run, RunEvent, RunJob, ToolInvocation
 from app.db.provisioning import SqlAlchemyProvisioningStore
-from app.db.runs import SqlAlchemyRunStore
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.domain.actions import ACTION_KEY, PrepareActionCommand, SubmitApplicationArgsV1
@@ -25,6 +23,7 @@ from app.domain.jobs import ClaimedJob, JobStatus
 from app.domain.provisioning import ProvisioningService
 from app.domain.runs import RunMode, RunService, RunStatus
 from app.domain.tenancy import TenantContext, TenantService
+from tests.legacy_runtime import SqlAlchemyRunStore, SqlAlchemyWorkerJobStore
 
 pytestmark = pytest.mark.integration
 

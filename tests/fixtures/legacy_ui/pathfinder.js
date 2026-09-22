@@ -45,9 +45,9 @@ function isCurrentSubmission(submission) {
 
 function renderSubmissionControls() {
   const submission = state.submission;
-  byId("create-run").disabled = true;
+  byId("create-run").disabled = runCreateInFlight;
   byId("retry-submission").hidden = !submission || Boolean(submission.accepted);
-  byId("retry-submission").disabled = true;
+  byId("retry-submission").disabled = runCreateInFlight || Boolean(submission?.conflict);
   byId("retry-run-read").hidden = !submission?.accepted || submission.readComplete;
   byId("retry-run-read").disabled = runCreateInFlight;
   byId("submission-status").textContent = !submission ? "No submission retained in this page."
@@ -388,7 +388,12 @@ function renderRun(detail) {
   addFact(facts, "Resume document", detail.resume_document_id);
   addFact(facts, "Error category", detail.error_category);
   runPanel.append(facts);
-
+  if (!["completed", "failed", "cancelled"].includes(detail.status)) {
+    const cancelButton = node("button", "Cancel run", "danger");
+    cancelButton.type = "button";
+    cancelButton.addEventListener("click", cancelCurrentRun);
+    runPanel.append(cancelButton);
+  }
   if (detail.result) renderReport(runPanel, detail.result);
   runPanel.append(sectionTitle("Usage / cost"));
   renderUsageBucket(runPanel, "Chat", detail.usage.chat);
@@ -481,7 +486,13 @@ async function fetchRun(operation = "readRun", { propagate = false, signal } = {
 }
 
 async function cancelCurrentRun() {
-  showProblem({ status: 410, title: "Historical workflow retired", detail: "Historical runs are read-only. Resume creation is not available yet." }, "readRun");
+  if (!state.workspace || !state.run) return;
+  try {
+    await apiFetch(`/api/v1/workspaces/${state.workspace.workspace_id}/runs/${state.run.run_id}/cancel`, { method: "POST" });
+    await fetchRun();
+  } catch (error) {
+    showProblem(error.problem || { title: "Cancellation failed", detail: error.message }, "cancel");
+  }
 }
 
 function renderAction(review) {
@@ -515,7 +526,25 @@ function renderAction(review) {
   if (review.manual_review_required || review.status === "outcome_unknown") {
     actionPanel.append(node("p", review.manual_review_instruction || "Verify the external target; do not retry the effect.", "manual-review"));
   }
-
+  const role = state.workspace ? state.workspace.role : "member";
+  const pending = review.approval_request.status === "pending";
+  const unexpired = Date.parse(review.approval_request.expires_at) > Date.now();
+  if (["reviewer", "admin"].includes(role) && pending && unexpired) {
+    const reasonLabel = node("label", "Optional decision reason");
+    const reason = node("input");
+    reason.type = "text";
+    reason.maxLength = 2000;
+    reasonLabel.append(reason);
+    actionPanel.append(reasonLabel);
+    for (const decision of ["approve", "reject"]) {
+      const button = node("button", decision === "approve" ? "Approve" : "Reject", decision === "reject" ? "danger" : "");
+      button.type = "button";
+      button.addEventListener("click", () => {
+        submitDecision(decision, reason.value).catch(reportInterfaceFailure);
+      });
+      actionPanel.append(button);
+    }
+  }
 }
 
 async function fetchAction(actionIntentId, operation = "readAction", { propagate = false, signal } = {}) {
@@ -537,7 +566,49 @@ async function fetchAction(actionIntentId, operation = "readAction", { propagate
 }
 
 async function submitDecision(decision, reason) {
-  showProblem({ status: 410, title: "Historical workflow retired", detail: "Historical runs are read-only. Resume creation is not available yet." }, "readRun");
+  if (!state.me || !state.workspace || !state.run || !state.action) return;
+  const workspaceId = state.workspace.workspace_id;
+  const actionIntentId = state.action.action_intent_id;
+  const actorId = state.me.user_id;
+  const runId = state.run.run_id;
+  const contextGeneration = state.contextGeneration;
+  const generation = state.streamGeneration;
+  const current = () => state.contextGeneration === contextGeneration
+    && state.streamGeneration === generation
+    && state.me?.user_id === actorId
+    && state.workspace?.workspace_id === workspaceId
+    && state.run?.run_id === runId
+    && state.action?.action_intent_id === actionIntentId;
+  const exactPayload = {
+    decision,
+    expected_version: state.action.approval_request.version,
+    reason: reason.trim() || null,
+  };
+  let decisionProblem = null;
+  try {
+    await apiFetch(`/api/v1/workspaces/${workspaceId}/action-intents/${actionIntentId}/decision`, {
+      method: "POST",
+      body: exactPayload,
+    });
+    if (!current()) return;
+  } catch (error) {
+    if (!current()) return;
+    decisionProblem = error.problem || { title: "Decision failed", detail: error.message };
+    if (decisionProblem.status !== 409) {
+      showProblem(decisionProblem, "decision");
+      return;
+    }
+  }
+  try {
+    const refreshed = await apiFetch(`/api/v1/workspaces/${workspaceId}/action-intents/${actionIntentId}`);
+    if (!current()) return;
+    renderAction(refreshed);
+    if (decisionProblem) showProblem(decisionProblem, "decision");
+    else hideProblem();
+  } catch (error) {
+    if (!current()) return;
+    showProblem(error.problem || { title: "Action review failed", detail: error.message }, "readAction");
+  }
 }
 
 async function applyEvent(eventType, data) {
@@ -711,15 +782,77 @@ async function streamEvents(eventsUrl) {
 }
 
 async function createRun() {
-  showProblem({ status: 410, title: "Historical workflow retired", detail: "Historical runs are read-only. Resume creation is not available yet." }, "readRun");
+  if (runCreateInFlight) return;
+  if (!state.workspace || !state.me) {
+    showProblem({ title: "No active workspace", detail: "Choose an active workspace first." }, "createRun");
+    return;
+  }
+  if (!runForm.reportValidity()) return;
+  if (typeof globalThis.crypto?.randomUUID !== "function") {
+    showProblem({ title: "Secure request ID unavailable", detail: "This browser requires crypto.randomUUID in a secure context to create a task." }, "createRun");
+    return;
+  }
+  if (state.submission && !state.submission.accepted
+      && !window.confirm("The original request may already have created a task. Create a separate new task using the current form inputs?")) return;
+  const payload = Object.freeze({
+    mode: byId("run-mode").value,
+    query: byId("run-query").value,
+    resume_document_id: byId("resume-document-id").value.trim() || null,
+  });
+  const identity = Object.freeze({
+    requestId: globalThis.crypto.randomUUID(),
+    actorId: state.me.user_id,
+    workspaceId: state.workspace.workspace_id,
+    generation: state.contextGeneration,
+    payload,
+  });
+  resetProjection();
+  state.submission = { ...identity, accepted: null, conflict: false, readComplete: false };
+  await submitRunIntent(state.submission);
 }
 
 async function retrySubmission() {
-  showProblem({ status: 410, title: "Historical workflow retired", detail: "Historical runs are read-only. Resume creation is not available yet." }, "readRun");
+  const submission = state.submission;
+  if (!submission || submission.accepted || submission.conflict || !isCurrentSubmission(submission)) return;
+  await submitRunIntent(submission);
 }
 
 async function submitRunIntent(submission) {
-  showProblem({ status: 410, title: "Historical workflow retired", detail: "Historical runs are read-only. Resume creation is not available yet." }, "readRun");
+  if (runCreateInFlight) return;
+  if (!isCurrentSubmission(submission)) return;
+  runCreateInFlight = true;
+  renderSubmissionControls();
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 30000);
+  try {
+    const accepted = await apiFetch(`/api/v1/workspaces/${submission.workspaceId}/runs`, {
+      method: "POST",
+      headers: { "Idempotency-Key": submission.requestId },
+      body: submission.payload,
+      signal: controller.signal,
+    });
+    if (!isCurrentSubmission(submission)) return;
+    const uuid4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    if (!accepted || !uuid4.test(accepted.run_id) || accepted.status !== "queued"
+        || accepted.events_url !== `/api/v1/workspaces/${submission.workspaceId}/runs/${accepted.run_id}/events`) {
+      throw new Error("Invalid acceptance receipt; the original submission is retained for manual retry.");
+    }
+    submission.accepted = Object.freeze(accepted);
+    state.run = { run_id: accepted.run_id };
+    hideProblem();
+  } catch (error) {
+    if (!isCurrentSubmission(submission)) return;
+    submission.conflict = error.problem?.status === 409;
+    showProblem(error.problem || { title: "Run creation uncertain", detail: "No valid receipt was received. Retry this submission with its original key and inputs." }, "createRun");
+    return;
+  } finally {
+    window.clearTimeout(timer);
+    if (isCurrentSubmission(submission)) {
+      runCreateInFlight = false;
+      renderSubmissionControls();
+    }
+  }
+  await readAcceptedRun(submission);
 }
 
 async function readAcceptedRun(submission = state.submission) {

@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.provisioning import WorkspaceRole
-from app.domain.research import ResearchRequestV1
+from app.domain.run_payloads import RunInput
 from app.domain.runs import RunMode
 
 
@@ -34,7 +34,7 @@ class RunExecutionInput:
     actor_user_id: UUID
     conversation_id: UUID
     graph_version: str
-    request: ResearchRequestV1
+    request: RunInput
     limits: RunExecutionLimitsV1
     mode: RunMode = RunMode.RESEARCH
     resume_document_id: UUID | None = None
@@ -75,4 +75,4 @@ class RunExecutionReader(Protocol):
         graph_version: str,
     ) -> None: ...
 
-    async def has_nonterminal_other_graph_versions(self, graph_version: str) -> bool: ...
+    async def has_unsupported_pending_work(self) -> bool: ...

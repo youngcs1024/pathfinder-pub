@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.research import ResearchOutput, ResearchOutputV1, ResearchOutputV2
+from app.domain.research import ResearchOutputV1, ResearchOutputV2
+from app.domain.run_payloads import ResumeRunOutputV1, RunOutput
 from app.domain.runs import RunStatus
 from app.domain.tenancy import TenantContext
 
@@ -19,7 +20,7 @@ _EXECUTOR_RESULT_STATUSES = frozenset(
 @dataclass(frozen=True, slots=True)
 class RunExecutionResult:
     status: RunStatus
-    result: ResearchOutput | None = None
+    result: RunOutput | None = None
     error_category: str | None = None
     retryable: bool = False
     approval_request_id: UUID | None = None
@@ -33,7 +34,7 @@ class RunExecutionResult:
             raise TypeError("executor result retryable must be a boolean")
         if self.status is RunStatus.COMPLETED:
             if (
-                not isinstance(self.result, ResearchOutputV1 | ResearchOutputV2)
+                not isinstance(self.result, ResearchOutputV1 | ResearchOutputV2 | ResumeRunOutputV1)
                 or self.error_category is not None
                 or self.retryable
                 or self.approval_request_id is not None

@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-REQUIRED_DATABASE_REVISION: Final = "0015_e3_run_request_identity"
+REQUIRED_DATABASE_REVISION: Final = "0016_r1_execution_contracts"
 _READINESS_TIMEOUT_SECONDS: Final = 1.0
 
 

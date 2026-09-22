@@ -14,18 +14,22 @@ from pydantic import ValidationError
 
 from app.domain.errors import DomainValidationError
 from app.domain.provisioning import WorkspaceRole
-from app.domain.research import ResearchOutput, ResearchRequestV1, normalize_research_query
+from app.domain.research import ResearchRequestV1, normalize_research_query
+from app.domain.run_payloads import (
+    EXECUTION_CONTRACTS,
+    LEGACY_GRAPH_VERSION,
+    LEGACY_RUN_MODES,
+    READ_CONTRACTS,
+    RunInput,
+    RunMode,
+    RunOutput,
+)
 from app.domain.tenancy import TenantContext
 
 
 class MessageRole(StrEnum):
     USER = "user"
     ASSISTANT = "assistant"
-
-
-class RunMode(StrEnum):
-    RESEARCH = "research"
-    APPLICATION = "application"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +55,7 @@ def create_request_digest_v1(
 ) -> str:
     """Hash explicit request content; preserve v1 normalization for future replay."""
     if (
-        not isinstance(mode, RunMode)
+        (not isinstance(mode, RunMode) or mode not in LEGACY_RUN_MODES)
         or not isinstance(query, str)
         or (resume_document_id is not None and not isinstance(resume_document_id, UUID))
         or (mode is RunMode.APPLICATION and resume_document_id is None)
@@ -89,18 +93,11 @@ class RunStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-CURRENT_GRAPH_VERSION = "pathfinder-research-v6"
-EXECUTABLE_GRAPH_VERSIONS = frozenset({CURRENT_GRAPH_VERSION})
-READABLE_GRAPH_VERSIONS = frozenset(
-    {
-        "pathfinder-research-v1",
-        "pathfinder-research-v2",
-        "pathfinder-research-v3",
-        "pathfinder-research-v4",
-        "pathfinder-research-v5",
-        CURRENT_GRAPH_VERSION,
-    }
-)
+# Historical compatibility name for the preserved research graph and its fixtures.
+# Production execution is determined exclusively by EXECUTION_CONTRACTS.
+CURRENT_GRAPH_VERSION = LEGACY_GRAPH_VERSION
+EXECUTABLE_GRAPH_VERSIONS = frozenset(c.graph_version for c in EXECUTION_CONTRACTS)
+READABLE_GRAPH_VERSIONS = frozenset(c.graph_version for c in READ_CONTRACTS)
 SUPPORTED_GRAPH_VERSIONS = EXECUTABLE_GRAPH_VERSIONS
 
 _RUN_TRANSITIONS: dict[RunStatus, frozenset[RunStatus]] = {
@@ -168,7 +165,7 @@ class RunRecord:
     mode: RunMode
     status: RunStatus
     graph_version: str
-    result: ResearchOutput | None
+    result: RunOutput | None
     error_category: str | None
     cancel_requested_at: datetime | None
     started_at: datetime | None
@@ -193,7 +190,7 @@ class RunStore(Protocol):
         tenant: TenantContext,
         mode: RunMode,
         resume_document_id: UUID | None,
-        request: ResearchRequestV1,
+        request: RunInput,
         limits: dict[str, int],
         graph_version: str,
         request_identity: RunCreateIdentity | None = None,
@@ -230,7 +227,7 @@ class RunService:
     ) -> RunAccepted:
         if not isinstance(tenant, TenantContext):
             raise DomainValidationError("tenant context is invalid")
-        if not isinstance(mode, RunMode) or (
+        if (not isinstance(mode, RunMode) or mode not in LEGACY_RUN_MODES) or (
             resume_document_id is not None and not isinstance(resume_document_id, UUID)
         ):
             raise DomainValidationError("run creation input is invalid")

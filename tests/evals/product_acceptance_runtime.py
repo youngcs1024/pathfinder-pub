@@ -20,7 +20,6 @@ from app.db.approval_expiry import SqlAlchemyApprovalRequestExpirySweeper
 from app.db.approvals import SqlAlchemyApprovalStore
 from app.db.checkpoints import open_postgres_checkpointer
 from app.db.documents import SqlAlchemyDocumentRepository
-from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.models import (
     ActionIntent,
     ApprovalDecision,
@@ -32,7 +31,6 @@ from app.db.models import (
     ToolInvocation,
 )
 from app.db.retrieval_events import SqlAlchemyRetrievalEventRecorder
-from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.db.tool_invocations import SqlAlchemyToolInvocationRecorder
 from app.domain.provisioning import WorkspaceRole
@@ -40,7 +38,6 @@ from app.domain.tenancy import TenantContext, TenantService
 from app.llm.factory import LLMFactory
 from app.llm.invocations import LLMInvocationContext
 from app.llm.ports import ModelToolCall
-from app.main import create_app
 from app.retrieval.chunking import PreparedIngestionBatch
 from app.retrieval.documents import DocumentIngestionService
 from app.tools.adapters.mock_portal import MockPortalHTTPAdapter
@@ -70,6 +67,8 @@ from tests.evals.quality_dataset import (
     quality_digest,
 )
 from tests.evals.quality_generation import FrozenQualityWeb
+from tests.legacy_app import create_app
+from tests.legacy_runtime import SqlAlchemyRunExecutionReader, SqlAlchemyWorkerJobStore
 
 
 class AcceptanceFakeChat(DeterministicResearchFakeChatAdapter):

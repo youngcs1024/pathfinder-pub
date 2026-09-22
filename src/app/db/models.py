@@ -241,7 +241,11 @@ class Message(UUIDPrimaryKeyMixin, Base):
 class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "runs"
     __table_args__ = (
-        CheckConstraint("mode IN ('research', 'application')", name="mode"),
+        CheckConstraint(
+            "mode IN ('research', 'application', 'material_preparation', "
+            "'resume_generation', 'resume_revision')",
+            name="mode",
+        ),
         CheckConstraint(
             "status IN "
             "('queued', 'running', 'waiting_approval', 'completed', 'failed', "
@@ -253,6 +257,17 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "'pathfinder-research-v3', 'pathfinder-research-v4', "
             "'pathfinder-research-v5', 'pathfinder-research-v6')",
             name="graph_version",
+        ),
+        CheckConstraint(
+            "(mode IN ('research', 'application') "
+            "AND graph_version LIKE 'pathfinder-research-v%') "
+            "OR (mode IN ('material_preparation', 'resume_generation', 'resume_revision') "
+            "AND graph_version LIKE 'pathfinder-resume-v%')",
+            name="mode_graph_family",
+        ),
+        CheckConstraint(
+            "mode IN ('research', 'application') OR status <> 'waiting_approval'",
+            name="resume_no_legacy_approval",
         ),
         CheckConstraint("jsonb_typeof(input_json) = 'object'", name="input_json"),
         CheckConstraint("jsonb_typeof(limits_json) = 'object'", name="limits_json"),
@@ -355,7 +370,6 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     mode: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        server_default=text("'research'"),
     )
     resume_document_id: Mapped[UUID | None] = mapped_column(nullable=True)
     input_json: Mapped[dict[str, object]] = mapped_column(
@@ -374,7 +388,6 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     graph_version: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        server_default=text("'pathfinder-research-v6'"),
     )
     next_event_seq: Mapped[int] = mapped_column(
         BigInteger,

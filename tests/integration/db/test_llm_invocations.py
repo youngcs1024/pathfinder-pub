@@ -304,6 +304,8 @@ async def _create_research_run(
         session.add(message)
         await session.flush()
         run = Run(
+            mode="research",
+            graph_version="pathfinder-research-v6",
             workspace_id=identity.workspace_id,
             created_by_user_id=identity.user_id,
             conversation_id=conversation.id,

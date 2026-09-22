@@ -128,6 +128,10 @@ def _http_problem(status_code: int) -> _ProblemSpec:
 
     if status_code == 404:
         detail = "The requested resource was not found."
+    elif status_code == 410:
+        detail = (
+            "The research and application workflow is retired; historical records are read-only."
+        )
     elif status_code == 405:
         detail = "The requested method is not allowed for this resource."
     elif status_code == 503:

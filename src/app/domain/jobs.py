@@ -5,7 +5,7 @@ from typing import Literal, Protocol
 from uuid import UUID
 
 from app.domain.action_execution import ActionExecutionIdentity
-from app.domain.research import ResearchOutput
+from app.domain.run_payloads import RunOutput
 from app.domain.tenancy import TenantContext
 
 
@@ -152,7 +152,7 @@ class WorkerJobStore(JobClaimer, StaleLeaseReclaimer, Protocol):
         self,
         *,
         job: ClaimedJob,
-        result: ResearchOutput,
+        result: RunOutput,
         now: datetime,
     ) -> bool: ...
 

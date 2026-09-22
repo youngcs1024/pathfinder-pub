@@ -13,13 +13,13 @@ import pytest
 from app.config import Settings
 from app.db.runtime_policy import DatabaseComponent, DatabasePoolPolicy, DatabaseSessionPolicy
 from app.obs.logging import configure_logging
-from app.worker.main import (
+from app.worker.settings import WorkerRuntimeSettings
+from tests.legacy_worker import (
     _clear_worker_ready_marker,
     _create_worker_ready_marker,
     _run_with_checkpoint_supervisor,
     _worker_readiness_marker,
 )
-from app.worker.settings import WorkerRuntimeSettings
 
 
 def test_worker_ready_marker_can_replace_stale_file_with_private_permissions(
@@ -52,7 +52,7 @@ def test_worker_ready_marker_is_removed_when_runner_scope_fails(tmp_path: Path) 
 def test_production_executor_wiring_uses_runtime_execution_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    main_module = importlib.import_module("app.worker.main")
+    main_module = importlib.import_module("tests.legacy_worker")
     captured: dict[str, object] = {}
     executor = object()
 
@@ -111,7 +111,7 @@ async def test_supabase_worker_fails_at_database_readiness_without_creating_mark
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    main_module = importlib.import_module("app.worker.main")
+    main_module = importlib.import_module("tests.legacy_worker")
     marker = tmp_path / "worker-ready"
     marker.write_text("stale", encoding="utf-8")
     engine = _FakeEngine()
@@ -227,7 +227,7 @@ async def test_worker_wires_two_adapter_views_with_one_client_lifecycle(
 
     from app.obs.langfuse import LangfuseTraceSink
 
-    main_module = importlib.import_module("app.worker.main")
+    main_module = importlib.import_module("tests.legacy_worker")
     client = Mock()
     legacy_sink = LangfuseTraceSink(client)
     build = Mock(return_value=legacy_sink)

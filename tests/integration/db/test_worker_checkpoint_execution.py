@@ -13,7 +13,6 @@ from app.config import Settings
 from app.db.checkpoints import CHECKPOINT_SCHEMA, open_postgres_checkpointer
 from app.db.models import LLMInvocation, Run, ToolInvocation
 from app.db.provisioning import SqlAlchemyProvisioningStore
-from app.db.runs import SqlAlchemyRunStore
 from app.db.runtime_policy import DatabaseComponent, DatabaseSessionPolicy
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tool_invocations import SqlAlchemyToolInvocationRecorder
@@ -24,6 +23,7 @@ from app.domain.tool_effects import ToolEffect
 from app.domain.tool_invocations import ToolInvocationLimitError
 from app.worker.main import run_worker
 from tests.integration.support import connect_database
+from tests.legacy_runtime import SqlAlchemyRunStore
 
 pytestmark = pytest.mark.integration
 _CHECKPOINT_TABLES = {

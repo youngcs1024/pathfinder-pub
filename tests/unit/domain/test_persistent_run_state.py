@@ -29,7 +29,13 @@ def _value_set(enum_type: type[StrEnum]) -> set[str]:
 
 def test_persistent_state_enum_values_are_exact() -> None:
     assert _value_set(MessageRole) == {"user", "assistant"}
-    assert _value_set(RunMode) == {"research", "application"}
+    assert _value_set(RunMode) == {
+        "research",
+        "application",
+        "material_preparation",
+        "resume_generation",
+        "resume_revision",
+    }
     assert _value_set(RunStatus) == {
         "queued",
         "running",
@@ -55,7 +61,7 @@ def test_persistent_state_enum_values_are_exact() -> None:
 
 def test_graph_and_event_versions_are_fixed() -> None:
     assert CURRENT_GRAPH_VERSION == "pathfinder-research-v6"
-    assert SUPPORTED_GRAPH_VERSIONS == frozenset({CURRENT_GRAPH_VERSION})
+    assert SUPPORTED_GRAPH_VERSIONS == frozenset()
     assert CURRENT_RUN_EVENT_VERSION == 1
     assert _value_set(RunEventType) == {
         "run.created",

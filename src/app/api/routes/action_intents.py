@@ -1,17 +1,13 @@
-from datetime import UTC, datetime
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, status
+from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import ApprovalServiceDependency, TenantDependency
 from app.api.schemas.action_intents import (
     ActionIntentReviewResponse,
-    ApprovalDecisionRequest,
     ApprovalDecisionResponse,
     ApprovalRequestResponse,
 )
-from app.domain.approvals import ApprovalDecisionCommand
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}", tags=["action-intents"])
 
@@ -76,25 +72,11 @@ async def get_action_intent(
     )
 
 
-@router.post(
-    "/action-intents/{action_intent_id}/decision",
-    response_model=ApprovalDecisionResponse,
-    status_code=status.HTTP_200_OK,
-)
+@router.post("/action-intents/{action_intent_id}/decision", status_code=410)
 async def decide_action_intent(
     action_intent_id: UUID,
-    payload: Annotated[ApprovalDecisionRequest, Body()],
     tenant: TenantDependency,
     service: ApprovalServiceDependency,
-) -> ApprovalDecisionResponse:
-    decision = await service.decide(
-        ApprovalDecisionCommand(
-            tenant=tenant,
-            action_intent_id=action_intent_id,
-            decision=payload.decision,
-            expected_version=payload.expected_version,
-            reason=payload.reason,
-            now=datetime.now(UTC),
-        )
-    )
-    return ApprovalDecisionResponse.model_validate(decision)
+) -> None:
+    await service.get_action_review(tenant=tenant, action_intent_id=action_intent_id)
+    raise HTTPException(status_code=410, detail="Historical approvals are read-only.")

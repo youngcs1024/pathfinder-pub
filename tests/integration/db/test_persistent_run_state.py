@@ -75,8 +75,9 @@ def _insert_run_graph(
         """
         INSERT INTO runs (
             id, workspace_id, created_by_user_id, conversation_id,
-            request_message_id, input_json, limits_json
-        ) VALUES (%s, %s, %s, %s, %s, '{}'::jsonb, '{}'::jsonb)
+            request_message_id, input_json, limits_json, mode, graph_version
+        ) VALUES (%s, %s, %s, %s, %s, '{}'::jsonb, '{}'::jsonb,
+            'research', 'pathfinder-research-v6')
         """,
         (run_id, workspace_id, user_id, conversation_id, message_id),
     )
@@ -587,5 +588,5 @@ def test_downgrade_fails_closed_when_gate4_business_facts_exist(
     with connect_database(migrated_database_url) as connection:
         assert connection.execute("SELECT count(*) FROM runs").fetchone() == (1,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0015_e3_run_request_identity",
+            "0016_r1_execution_contracts",
         )

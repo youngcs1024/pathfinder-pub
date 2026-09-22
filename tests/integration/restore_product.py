@@ -12,7 +12,6 @@ from sqlalchemy import func, select, update
 
 from app.api.dependencies import actor_context
 from app.auth.contracts import ActorContext
-from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.models import LLMInvocation, RunJob, WorkspaceMembership
 from app.llm.fake import FakeEmbeddingModel
 from app.tools.adapters.mock_portal import MockPortalHTTPAdapter, MockPortalTransportError
@@ -28,6 +27,7 @@ from tests.integration.restore_support import (
     require,
 )
 from tests.integration.support import alembic_config
+from tests.legacy_runtime import SqlAlchemyWorkerJobStore
 
 CASES = ("success", "approve", "reject", "unknown")
 LEGACY_RESULT = {

@@ -81,7 +81,7 @@ def test_migration_round_trip_constraints_and_metadata(database_url: str) -> Non
                 WorkspaceMembership.metadata,
             )
 
-            assert revision == "0015_e3_run_request_identity"
+            assert revision == "0016_r1_execution_contracts"
         assert metadata_diff == []
         with engine.connect() as connection:
             vector_extension = connection.scalar(
@@ -272,7 +272,7 @@ def test_migration_round_trip_constraints_and_metadata(database_url: str) -> Non
         run_graph_version = next(
             item for item in inspector.get_columns("runs") if item["name"] == "graph_version"
         )
-        assert "pathfinder-research-v6" in str(run_graph_version["default"])
+        assert run_graph_version["default"] is None
         graph_check = next(
             item
             for item in inspector.get_check_constraints("runs")
@@ -542,6 +542,8 @@ def test_migration_round_trip_constraints_and_metadata(database_url: str) -> Non
                 "ck_runs_input_json",
                 "ck_runs_limits_json",
                 "ck_runs_mode",
+                "ck_runs_mode_graph_family",
+                "ck_runs_resume_no_legacy_approval",
                 "ck_runs_next_event_seq",
                 "ck_runs_queued_fields",
                 "ck_runs_result_json",
@@ -703,7 +705,7 @@ def test_gate65_downgrade_fails_closed_for_recovery_event(
 
     with connect_database(migrated_database_url) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0015_e3_run_request_identity",
+            "0016_r1_execution_contracts",
         )
     engine.dispose()
 
@@ -829,7 +831,7 @@ def test_gate65_database_enforces_unknown_terminal_shape_and_lifecycle_events(
             )
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0015_e3_run_request_identity"
+                "0016_r1_execution_contracts"
             )
     finally:
         engine.dispose()
@@ -863,7 +865,7 @@ def test_gate6_upgrade_from_0009_and_empty_downgrade_reupgrade(database_url: str
         command.upgrade(config, "head")
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0015_e3_run_request_identity"
+                "0016_r1_execution_contracts"
             )
     finally:
         engine.dispose()
@@ -1022,7 +1024,7 @@ def test_gate6_downgrade_fails_closed_for_every_gate6_business_fact(
             command.downgrade(config, "0009_gate5_graph_rag")
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0015_e3_run_request_identity"
+                "0016_r1_execution_contracts"
             )
     finally:
         engine.dispose()
@@ -1189,7 +1191,7 @@ def test_qwen_profile_migration_preserves_legacy_rows_and_downgrade_fails_closed
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT count(*) FROM llm_invocations")) == 2
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0015_e3_run_request_identity"
+                "0016_r1_execution_contracts"
             )
     finally:
         engine.dispose()
@@ -1323,7 +1325,7 @@ def test_gate5_migration_downgrade_fails_closed_when_gate5_evidence_exists(
 
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0015_e3_run_request_identity"
+                "0016_r1_execution_contracts"
             )
     finally:
         engine.dispose()

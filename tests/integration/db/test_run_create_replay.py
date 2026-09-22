@@ -11,7 +11,6 @@ from sqlalchemy.exc import IntegrityError
 
 import app.db.runs as runs_module
 from app.db.models import Run, RunEvent, WorkspaceMembership
-from app.db.runs import SqlAlchemyRunStore
 from app.db.session import transaction
 from app.domain.errors import (
     DomainConflictError,
@@ -34,6 +33,7 @@ from app.domain.runs import (
 from app.domain.tenancy import TenantContext
 from tests.integration.db import test_run_api_store as support
 from tests.integration.db.test_run_api_store import runtime as runtime
+from tests.legacy_runtime import SqlAlchemyRunStore
 
 pytestmark = pytest.mark.integration
 QUERY = "Synthetic private query canary E33"

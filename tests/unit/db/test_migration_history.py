@@ -33,6 +33,15 @@ APPLIED_MIGRATION_HASHES = {
     "0012_gate6_approval_decisions.py": (
         "86f00733fd1ea4c2af20ffd5186678d19069eb8837a3427c2258d6ca69134299"
     ),
+    "0013_gate6_mock_action_execution.py": (
+        "a45d7efeb8e31be2f84ee5c144ec422a5634c0bc21b7a33235d39523e5498122"
+    ),
+    "0014_gate6_action_recovery.py": (
+        "4e3108c8a4a1db40a2fc20a3094a338b2fb1ab050a334aaa009f24bd6d36adfb"
+    ),
+    "0015_e3_run_request_identity.py": (
+        "5582d4480f0f138959f7178a1cae2b67a672a82f5392d16edd2f7bba4af30d7a"
+    ),
 }
 
 

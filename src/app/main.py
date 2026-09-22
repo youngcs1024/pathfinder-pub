@@ -18,7 +18,6 @@ from app.auth.supabase import SupabaseActorProvider, SupabaseJwtVerifier
 from app.config import Settings
 from app.db.approvals import SqlAlchemyApprovalStore
 from app.db.events import SqlAlchemyRunEventReader
-from app.db.mock_submissions import SqlAlchemyMockSubmissionRepository
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.readiness import DatabaseReadinessProbe
 from app.db.runs import SqlAlchemyRunStore
@@ -29,8 +28,6 @@ from app.domain.approvals import ApprovalService
 from app.domain.provisioning import ProvisioningService
 from app.domain.runs import RunService
 from app.domain.tenancy import TenantService
-from app.mock_portal.router import router as mock_portal_router
-from app.mock_portal.service import MockPortalService
 from app.obs.logging import configure_logging
 
 _STATIC_DIR = Path(__file__).resolve().parent / "api" / "static"
@@ -59,7 +56,6 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         run_service = RunService(SqlAlchemyRunStore(session_factory))
         run_event_reader = SqlAlchemyRunEventReader(session_factory)
         approval_service = ApprovalService(SqlAlchemyApprovalStore(session_factory))
-        mock_portal_service = MockPortalService(SqlAlchemyMockSubmissionRepository(session_factory))
         application.state.database_engine = engine
         application.state.database_session_factory = session_factory
         application.state.readiness_probe = readiness_probe
@@ -68,7 +64,6 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.run_service = run_service
         application.state.run_event_reader = run_event_reader
         application.state.approval_service = approval_service
-        application.state.mock_portal_service = mock_portal_service
         yield
     finally:
         try:
@@ -84,7 +79,6 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
                 application.state.run_service = None
                 application.state.run_event_reader = None
                 application.state.approval_service = None
-                application.state.mock_portal_service = None
                 application.state.database_session_factory = None
                 application.state.database_engine = None
 
@@ -109,7 +103,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     install_exception_handlers(application)
     application.include_router(api_router)
-    application.include_router(mock_portal_router)
     application.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
     return application
 

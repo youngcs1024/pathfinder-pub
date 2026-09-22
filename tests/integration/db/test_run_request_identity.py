@@ -17,7 +17,7 @@ from tests.integration.support import alembic_config, connect_database
 pytestmark = pytest.mark.integration
 
 OLD_HEAD = "0014_gate6_action_recovery"
-NEW_HEAD = "0015_e3_run_request_identity"
+NEW_HEAD = "0016_r1_execution_contracts"
 IDENTITY_COLUMNS = {"client_request_id", "create_request_digest", "create_request_version"}
 
 
@@ -41,9 +41,9 @@ def _clone(connection: sa.Connection, run_id: object, actor: object) -> object:
     return connection.scalar(
         sa.text(
             "INSERT INTO runs (workspace_id, created_by_user_id, conversation_id, "
-            "request_message_id, input_json, limits_json, graph_version) "
+            "request_message_id, input_json, limits_json, graph_version, mode) "
             "SELECT workspace_id, :actor, conversation_id, request_message_id, "
-            "input_json, limits_json, graph_version FROM runs WHERE id = :run_id RETURNING id"
+            "input_json, limits_json, graph_version, mode FROM runs WHERE id = :run_id RETURNING id"
         ),
         {"actor": actor, "run_id": run_id},
     )

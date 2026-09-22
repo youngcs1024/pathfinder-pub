@@ -14,9 +14,9 @@ from app.db.models import Run, RunEvent, RunJob, WorkspaceMembership
 from app.db.session import transaction
 from app.domain.provisioning import WorkspaceRole
 from app.domain.tenancy import TenantContext
-from app.main import create_app
 from tests.integration.db import test_run_api_store as support
 from tests.integration.db.test_run_api_store import runtime as runtime
+from tests.legacy_app import create_app
 
 pytestmark = pytest.mark.integration
 KEY = "12345678-1234-4234-9234-123456789abc"

@@ -214,8 +214,10 @@ def test_login_submit_keeps_dom_event_outside_async_lifetime() -> None:
     assert 'loginForm.addEventListener("submit", async' not in source
 
 
-def test_run_submit_guards_create_post_and_separates_stream_stage() -> None:
-    source = (_STATIC_DIR / "pathfinder.js").read_text(encoding="utf-8")
+def test_historical_run_submit_guards_create_post_and_separates_stream_stage() -> None:
+    source = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/legacy_ui/pathfinder.js"
+    ).read_text(encoding="utf-8")
     create_run = _function_source(
         source,
         "async function createRun()",
@@ -248,8 +250,10 @@ def test_run_submit_guards_create_post_and_separates_stream_stage() -> None:
     assert 'node("span", accepted.status' not in source
 
 
-def test_submission_snapshot_and_key_are_generated_only_for_explicit_new_task() -> None:
-    source = (_STATIC_DIR / "pathfinder.js").read_text(encoding="utf-8")
+def test_historical_submission_snapshot_and_key_are_generated_only_for_explicit_new_task() -> None:
+    source = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/legacy_ui/pathfinder.js"
+    ).read_text(encoding="utf-8")
     create_run = _function_source(
         source,
         "async function createRun()",
@@ -282,8 +286,10 @@ def test_submission_snapshot_and_key_are_generated_only_for_explicit_new_task() 
     assert "${submission.workspaceId}/runs" in submit
 
 
-def test_uncertain_submission_retains_identity_and_conflict_stops_retry() -> None:
-    source = (_STATIC_DIR / "pathfinder.js").read_text(encoding="utf-8")
+def test_historical_uncertain_submission_retains_identity_and_conflict_stops_retry() -> None:
+    source = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/legacy_ui/pathfinder.js"
+    ).read_text(encoding="utf-8")
     submit = _function_source(
         source,
         "async function submitRunIntent",
@@ -336,9 +342,9 @@ def test_submission_buttons_and_memory_only_recovery_limit_are_explicit() -> Non
 
     for button_id in ("create-run", "retry-submission", "retry-run-read"):
         assert f'id="{button_id}"' in html
-        assert f'byId("{button_id}").disabled = runCreateInFlight' in source
+        assert f'byId("{button_id}").disabled = ' in source
     for button_id in ("retry-submission", "retry-run-read"):
-        assert f'<button id="{button_id}" type="button" hidden>' in html
+        assert f'<button id="{button_id}" type="button" hidden' in html
     assert 'id="submission-status" class="muted" aria-live="polite"' in html
     assert "recovery after refresh is not automatic" in html
     assert "The original task may already exist" in html
@@ -347,8 +353,10 @@ def test_submission_buttons_and_memory_only_recovery_limit_are_explicit() -> Non
     assert "localStorage" not in source
 
 
-def test_context_changes_invalidate_submission_and_ignore_late_results() -> None:
-    source = (_STATIC_DIR / "pathfinder.js").read_text(encoding="utf-8")
+def test_historical_context_changes_invalidate_submission_and_ignore_late_results() -> None:
+    source = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/legacy_ui/pathfinder.js"
+    ).read_text(encoding="utf-8")
     invalidate = _function_source(
         source,
         "function invalidateSubmission",
@@ -403,8 +411,10 @@ def test_auth_retry_preserves_options_and_checks_context_before_replaying() -> N
     )
 
 
-def test_old_sse_and_projection_reads_cannot_overwrite_new_submission() -> None:
-    source = (_STATIC_DIR / "pathfinder.js").read_text(encoding="utf-8")
+def test_historical_old_sse_and_projection_reads_cannot_overwrite_new_submission() -> None:
+    source = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/legacy_ui/pathfinder.js"
+    ).read_text(encoding="utf-8")
     for start, end in (
         ("async function fetchRun", "async function cancelCurrentRun"),
         ("async function fetchAction", "async function submitDecision"),
@@ -418,8 +428,10 @@ def test_old_sse_and_projection_reads_cannot_overwrite_new_submission() -> None:
     assert frame.index("await applyEvent") < frame.rindex("generation !== state.streamGeneration")
 
 
-def test_decision_failure_refresh_stays_bound_to_captured_workspace() -> None:
-    source = (_STATIC_DIR / "pathfinder.js").read_text(encoding="utf-8")
+def test_historical_decision_failure_refresh_stays_bound_to_captured_workspace() -> None:
+    source = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/legacy_ui/pathfinder.js"
+    ).read_text(encoding="utf-8")
     submit_decision = _function_source(
         source,
         "async function submitDecision",

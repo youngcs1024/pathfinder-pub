@@ -15,7 +15,6 @@ from app.config import Settings
 from app.db.errors import classify_database_failure
 from app.db.models import Run, ToolInvocation, WorkspaceMembership
 from app.db.provisioning import SqlAlchemyProvisioningStore
-from app.db.runs import SqlAlchemyRunStore
 from app.db.runtime_policy import DatabaseComponent, DatabasePoolPolicy, DatabaseSessionPolicy
 from app.db.session import create_database_engine, create_session_factory, transaction
 from app.db.tool_invocations import SqlAlchemyToolInvocationRecorder
@@ -25,6 +24,7 @@ from app.domain.runs import RunService
 from app.domain.tenancy import TenantContext
 from app.domain.tool_effects import ToolEffect
 from app.domain.tool_invocations import ToolInvocationAuthorizationError
+from tests.legacy_runtime import SqlAlchemyRunStore
 
 pytestmark = pytest.mark.integration
 

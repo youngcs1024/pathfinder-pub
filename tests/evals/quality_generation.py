@@ -40,7 +40,6 @@ from app.db.llm_invocations import SqlAlchemyInvocationRecorder
 from app.db.models import Run, RunJob, ToolInvocation, User
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.retrieval_events import SqlAlchemyRetrievalEventRecorder
-from app.db.runs import SqlAlchemyRunStore
 from app.db.session import AsyncSessionFactory, transaction
 from app.db.tool_invocations import SqlAlchemyToolInvocationRecorder
 from app.domain.provisioning import ProvisioningService
@@ -120,6 +119,7 @@ from tests.evals.quality_generation_support import (
     secret_markers,
 )
 from tests.evals.quality_run import _QualityAttemptRecorder, _representation, _stop_category, _usage
+from tests.legacy_runtime import SqlAlchemyRunStore
 
 GENERATION_SUITE_VERSION = "quality-generation-v1"
 

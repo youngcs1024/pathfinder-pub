@@ -97,11 +97,11 @@ class FaultCalls(Calls):
 
 @contextmanager
 def instrument_faults(worker, calls):
-    from app.db.jobs import SqlAlchemyWorkerJobStore
     from app.db.llm_invocations import SqlAlchemyInvocationRecorder
     from app.tools.registry import ToolRegistry
     from app.worker.runner import WorkerRunner
     from app.worker.settings import WorkerRuntimeSettings
+    from tests.legacy_runtime import SqlAlchemyWorkerJobStore
 
     scenario = calls.config.scenario
 

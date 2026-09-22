@@ -11,10 +11,8 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import DBAPIError
 
 from app.config import Settings
-from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.models import Run, RunEvent, RunJob, WorkspaceMembership
 from app.db.provisioning import SqlAlchemyProvisioningStore
-from app.db.runs import SqlAlchemyRunStore
 from app.db.session import (
     AsyncSessionFactory,
     create_database_engine,
@@ -33,6 +31,7 @@ from app.worker.main import run_worker
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
 from tests.integration.support import connect_database
+from tests.legacy_runtime import SqlAlchemyRunStore, SqlAlchemyWorkerJobStore
 
 pytestmark = pytest.mark.integration
 

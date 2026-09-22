@@ -18,7 +18,6 @@ from app.db.models import (
     ToolInvocation,
     WorkspaceMembership,
 )
-from app.db.runs import SqlAlchemyRunStore
 from app.db.tool_invocations import SqlAlchemyToolInvocationRecorder
 from app.domain.errors import DomainInvariantError
 from app.domain.runs import CURRENT_GRAPH_VERSION, DEFAULT_RUN_LIMITS, RunMode
@@ -48,6 +47,7 @@ from tests.evals.quality_run import (
     run_quality_generation,
     run_quality_generation_slot,
 )
+from tests.legacy_runtime import SqlAlchemyRunStore
 
 pytestmark = pytest.mark.integration
 

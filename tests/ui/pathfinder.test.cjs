@@ -6,6 +6,7 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 const vm = require("node:vm");
 
+const historicalSource = readFileSync(join(__dirname, "../fixtures/legacy_ui/pathfinder.js"), "utf8");
 const source = readFileSync(join(__dirname, "../../src/app/api/static/pathfinder.js"), "utf8");
 
 class Element {
@@ -105,7 +106,7 @@ function stream(frames, metrics = { cancelled: 0, released: 0 }) {
   };
 }
 
-async function loadUi(t, { randomUUID, confirm = () => true } = {}) {
+async function loadUi(t, { randomUUID, confirm = () => true, historical = false } = {}) {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, new Element());
@@ -136,7 +137,7 @@ async function loadUi(t, { randomUUID, confirm = () => true } = {}) {
       }
     },
   });
-  vm.runInContext(source, context, { filename: "pathfinder.js" });
+  vm.runInContext(historical ? historicalSource : source, context, { filename: "pathfinder.js" });
   const state = vm.runInContext("state", context);
   await until(() => state.config !== null);
   Object.assign(state, {
@@ -335,7 +336,7 @@ for (const stage of ["post", "get"]) {
   for (const outcome of ["success", "conflict", "read-failure"]) {
     for (const change of ["run", "workspace", "logout"]) {
       test(`late approval ${stage}/${outcome} cannot update after ${change}`, { timeout: 5000 }, async t => {
-        const h = await loadUi(t);
+        const h = await loadUi(t, { historical: true });
         h.state.action = action();
         const delayed = deferred();
         h.route((url, options) => {
@@ -375,7 +376,7 @@ for (const stage of ["post", "get"]) {
 
 for (const status of [200, 409]) {
   test(`current approval ${status} refreshes the same action once`, { timeout: 5000 }, async t => {
-    const h = await loadUi(t);
+    const h = await loadUi(t, { historical: true });
     h.state.action = action();
     h.route((url, options) => options.method === "POST"
       ? (status === 409 ? failure(409) : json({}))
@@ -389,7 +390,7 @@ for (const status of [200, 409]) {
 
 for (const kind of ["run", "action"]) {
   test(`manual ${kind} read still reports failure without starting recovery`, { timeout: 5000 }, async t => {
-    const h = await loadUi(t);
+    const h = await loadUi(t, { historical: true });
     h.route(() => failure(503));
     if (kind === "run") await h.call("fetchRun");
     else await h.call("fetchAction", "action-a");
@@ -401,7 +402,7 @@ for (const kind of ["run", "action"]) {
 }
 
 test("revisiting the same resource cannot revive an old approval generation", { timeout: 5000 }, async t => {
-  const h = await loadUi(t);
+  const h = await loadUi(t, { historical: true });
   h.state.action = action();
   const old = deferred();
   h.route((url, options) => options.method === "POST" ? json({}) : old.promise);
@@ -417,7 +418,7 @@ test("revisiting the same resource cannot revive an old approval generation", { 
   assert.match(h.element("problem-panel").textContent, /New visit/);
 });
 
-// E3.6: execute the production submission lifecycle with controlled HTTP outcomes.
+// Historical E3.6: execute the frozen submission lifecycle with controlled HTTP outcomes.
 const requestKey = "12345678-1234-4234-9234-123456789abc";
 const nextRequestKey = "22345678-1234-4234-9234-123456789abc";
 const acceptedRunId = "32345678-1234-4234-9234-123456789abc";
@@ -430,7 +431,7 @@ const posts = h => h.calls.filter(call => call.method === "POST");
 for (const outcome of ["connection", "timeout", "invalid-json", "invalid-receipt"]) {
   test(`submission ${outcome} retains the key and immutable inputs for manual retry`, { timeout: 5000 }, async t => {
     let generated = 0;
-    const h = await loadUi(t, { randomUUID: () => { generated += 1; return requestKey; } });
+    const h = await loadUi(t, { historical: true, randomUUID: () => { generated += 1; return requestKey; } });
     h.element("run-query").value = "original synthetic query";
     const pending = deferred();
     h.route(() => pending.promise);
@@ -491,7 +492,7 @@ test("uncertain new submission requires confirmation and uses a fresh key and cu
 
 test("409 disables retry without generating another request identity", { timeout: 5000 }, async t => {
   let generated = 0;
-  const h = await loadUi(t, { randomUUID: () => { generated += 1; return requestKey; } });
+  const h = await loadUi(t, { historical: true, randomUUID: () => { generated += 1; return requestKey; } });
   h.route(() => failure(409));
   await h.call("createRun");
   assert.equal(h.state.submission.conflict, true);
@@ -504,7 +505,7 @@ test("409 disables retry without generating another request identity", { timeout
 
 for (const status of ["completed", "failed", "cancelled"]) {
   test(`${status} receipt reads current state before SSE and read recovery never POSTs`, { timeout: 5000 }, async t => {
-    const h = await loadUi(t, { randomUUID: () => requestKey });
+    const h = await loadUi(t, { historical: true, randomUUID: () => requestKey });
     let reads = 0;
     const detail = deferred();
     h.route((url, options) => {
@@ -535,7 +536,7 @@ for (const status of ["completed", "failed", "cancelled"]) {
 for (const change of ["workspace", "identity"]) {
   for (const boundary of ["POST", "GET"]) {
     test(`${change} switch rejects delayed submission ${boundary} callbacks`, { timeout: 5000 }, async t => {
-      const h = await loadUi(t, { randomUUID: () => requestKey });
+      const h = await loadUi(t, { historical: true, randomUUID: () => requestKey });
       const pending = deferred();
       h.route((_url, options) => {
         if (boundary === "GET" && options.method === "POST") return json(receipt(), 202);
@@ -566,9 +567,32 @@ for (const change of ["workspace", "identity"]) {
 }
 
 test("missing secure UUID support prevents submission", { timeout: 5000 }, async t => {
-  const h = await loadUi(t);
+  const h = await loadUi(t, { historical: true });
   await h.call("createRun");
   assert.equal(posts(h).length, 0);
   assert.equal(h.state.submission, null);
   assert.match(h.element("problem-panel").textContent, /Secure request ID unavailable/);
+});
+
+for (const operation of ["createRun", "retrySubmission", "submitRunIntent", "cancelCurrentRun", "submitDecision"]) {
+  test(`retired production operation ${operation} cannot send a write`, async t => {
+    const h = await loadUi(t);
+    h.state.action = action();
+    h.route(() => { throw new Error("Retired operations must not fetch"); });
+    await h.call(operation, "approve", "synthetic");
+    assert.equal(h.calls.length, 0);
+    assert.match(h.element("problem-panel").textContent, /retired/);
+  });
+}
+
+test("production renders historical runs and approvals without write controls", async t => {
+  const h = await loadUi(t);
+  h.call("renderSubmissionControls");
+  assert.equal(h.element("create-run").disabled, true);
+  assert.equal(h.element("retry-submission").disabled, true);
+  h.call("renderRun", run());
+  h.call("renderAction", action());
+  assert.equal(h.element("run-panel").querySelector("button"), null);
+  assert.equal(h.element("action-panel").querySelector("button"), null);
+  assert.match(h.element("run-panel").textContent, /running/);
 });
