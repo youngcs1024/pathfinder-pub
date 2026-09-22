@@ -45,12 +45,12 @@ from app.tools.adapters.mock_portal import MockPortalHTTPAdapter
 from app.tools.fake_search import FakeSearch
 from app.tools.mock_application import create_approved_action_registry
 from app.worker.fake_research_adapter import DeterministicResearchFakeChatAdapter
-from app.worker.main import _create_langgraph_executor, _run_with_checkpoint_supervisor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
 from tests.integration.support import connect_database
 from tests.legacy_app import create_app
 from tests.legacy_runtime import SqlAlchemyRunExecutionReader, SqlAlchemyWorkerJobStore
+from tests.legacy_worker import _create_langgraph_executor, _run_with_checkpoint_supervisor
 
 pytestmark = pytest.mark.integration
 
