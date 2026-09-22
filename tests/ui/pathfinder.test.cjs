@@ -185,7 +185,7 @@ for (const type of ["action.proposed", "run.completed", "run.failed", "run.cance
     if (proposal) {
       assert.equal(h.state.action.action_intent_id, "action-a");
       assert.equal(h.element("action-panel").hidden, false);
-      assert.ok(h.element("action-panel").children.some(child => child.textContent === "Approve"));
+      assert.equal(h.element("action-panel").querySelector("button"), null);
     }
     assert.ok(h.calls.every(call => (call.method || "GET") === "GET"));
     assert.deepEqual(h.calls.filter(call => call.url.endsWith("/events")).map(call => call.headers.get("Last-Event-ID")), ["0", "0"]);
@@ -471,6 +471,7 @@ for (const outcome of ["connection", "timeout", "invalid-json", "invalid-receipt
 test("uncertain new submission requires confirmation and uses a fresh key and current inputs", { timeout: 5000 }, async t => {
   let confirmed = false, confirmations = 0, generated = 0;
   const h = await loadUi(t, {
+    historical: true,
     randomUUID: () => [requestKey, nextRequestKey][generated++],
     confirm: () => { confirmations += 1; return confirmed; },
   });
