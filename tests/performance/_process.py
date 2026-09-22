@@ -1,4 +1,4 @@
-"""Fixed child roles; production assembly with test-only socket/readiness adaptation."""
+"""Fixed historical child roles with test-only assembly and readiness adaptation."""
 
 from __future__ import annotations
 
@@ -74,8 +74,9 @@ def main() -> None:
         import uvicorn
 
         from app import main as api
+        from tests.legacy_app import create_app
 
-        application = api.create_app(settings)
+        application = create_app(settings)
         if collector is not None:
             instrument_application(application, api, collector)
         with socket.socket(fileno=bootstrap["socket_fd"]) as listener:
@@ -92,7 +93,7 @@ def main() -> None:
             )
             asyncio.run(server.serve(sockets=[listener]))
     elif role == "worker":
-        from app.worker import main as worker
+        from tests import legacy_worker as worker
 
         @contextmanager
         def readiness(_path: Path):
@@ -100,8 +101,8 @@ def main() -> None:
                 send_packet(channel, {"owner": owner, "kind": "worker_ready"})
             yield
 
-        # Adapt only the operational readiness marker in this child. The production assembly,
-        # lifecycle, runner, graph, repositories and factory remain the actual implementations.
+        # Adapt the operational readiness marker in this historical test assembly.
+        # The runner, graph, repositories and factory remain the actual implementations.
         adapters = nullcontext()
         if "call_profile" in bootstrap:
             from tests.performance.adapters import Calls, worker_adapters
