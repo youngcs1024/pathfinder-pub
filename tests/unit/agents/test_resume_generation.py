@@ -112,6 +112,7 @@ async def test_confirmed_fact_yields_real_tex_and_human_review_coverage() -> Non
     assert candidate.content.projects[0].bullets[0].text == inputs.facts[0].claim
     assert candidate.coverage[0].fact_version_ids == (fact_id,)
     assert candidate.coverage[0].verification == "needs_human_review"
+    assert candidate.retrieval_config_version.startswith("sha256:")
     tex = render_resume_tex(
         source_bytes=source,
         identity=identity,
@@ -143,6 +144,8 @@ async def test_unsupported_fact_cannot_publish_content(kind: str) -> None:
     assert repairs == ["repair"]
     assert candidate.content is None
     assert candidate.correction_count == 1
+    expected_reason = "plan_not_published" if kind == "plan" else "not_selected_for_this_job"
+    assert candidate.omission_reasons[fact_id] == expected_reason
     assert "no_supported_draft_content" in candidate.questions
 
 

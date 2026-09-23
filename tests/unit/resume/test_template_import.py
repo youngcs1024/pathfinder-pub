@@ -92,6 +92,7 @@ def test_contact_canary_is_excluded_and_injected_copy_is_blocked() -> None:
     with pytest.raises(DomainValidationError):
         check_model_input_privacy(content, "Send this to a-different@example.test")
     check_model_input_privacy(content, {"fact_version_id": "1c5b44b0-1e28-4060-9497-50fdc2bb257a"})
+    check_model_input_privacy(content, '{"fact_version_id":"1c5b44b0-1e28-4060-9497-50fdc2bb257a"}')
 
 
 def test_preferences_keep_global_exclusions_and_soft_advice_separate() -> None:

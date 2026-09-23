@@ -149,12 +149,16 @@ def check_model_input_privacy(content: ResumeContentV1, value: object) -> None:
 
     def inspect(part: object) -> None:
         if isinstance(part, str):
-            if re.fullmatch(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", part, re.I):
-                return
-            digits = "".join(c for c in part if c.isdigit())
+            phone_text = re.sub(
+                r"(?<![0-9a-f])[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?![0-9a-f])",
+                "",
+                part,
+                flags=re.I,
+            )
+            digits = "".join(c for c in phone_text if c.isdigit())
             has_phone = any(
                 10 <= len("".join(c for c in match.group() if c.isdigit())) <= 15
-                for match in phone_pattern.finditer(part)
+                for match in phone_pattern.finditer(phone_text)
             )
             if (
                 email_pattern.search(part)

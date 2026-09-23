@@ -117,6 +117,7 @@ class DraftBulletV1(GenerationModel):
 class DraftSelectionV1(GenerationModel):
     bullets: tuple[DraftBulletV1, ...] = Field(max_length=40)
     omitted_fact_version_ids: tuple[UUID, ...] = ()
+    omission_reasons: dict[UUID, str] = Field(default_factory=dict)
     questions: tuple[str, ...] = Field(default=(), max_length=20)
 
 
@@ -137,9 +138,11 @@ class GenerationCandidateV1(GenerationModel):
     coverage: tuple[CoverageV1, ...]
     questions: tuple[str, ...]
     omitted_fact_version_ids: tuple[UUID, ...] = ()
+    omission_reasons: dict[UUID, str] = Field(default_factory=dict)
     correction_count: int = Field(ge=0, le=1)
     prompt_version: str
     model_id: str
+    retrieval_config_version: str
 
 
 def validate_requirement_positions(jd: str, requirements: tuple[JobRequirementV1, ...]) -> None:

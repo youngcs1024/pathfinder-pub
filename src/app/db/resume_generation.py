@@ -743,6 +743,8 @@ class ResumeGenerationPublisher:
             raise DomainValidationError("generation coverage uses unbound facts")
         if not set(candidate.omitted_fact_version_ids) <= permitted_facts:
             raise DomainValidationError("generation omission uses unbound facts")
+        if set(candidate.omission_reasons) != set(candidate.omitted_fact_version_ids):
+            raise DomainValidationError("generation omission reasons are incomplete")
         if row.current_version_id is not None:
             return ResumeGenerationRunOutputV1(
                 payload=ResumeGenerationResultV1(
@@ -819,10 +821,14 @@ class ResumeGenerationPublisher:
                     "correction_count": candidate.correction_count,
                     "prompt_version": candidate.prompt_version,
                     "model_id": candidate.model_id,
+                    "retrieval_config_version": candidate.retrieval_config_version,
                     "semantic_support": "needs_human_review",
                     "omitted_fact_version_ids": [
                         str(value) for value in candidate.omitted_fact_version_ids
                     ],
+                    "omission_reasons": {
+                        str(key): value for key, value in candidate.omission_reasons.items()
+                    },
                 },
             )
         )

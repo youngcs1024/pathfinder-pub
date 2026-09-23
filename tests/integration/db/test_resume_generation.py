@@ -286,6 +286,7 @@ async def test_scripted_fake_publishes_downloadable_tex(
             tenant, created.receipt.resource_id, detail["current_version_id"]
         )
         assert version["coverage"][0]["fact_version_ids"] == [fact_version_id]
+        assert version["validation"]["retrieval_config_version"].startswith("sha256:")
         payload, _ = await artifacts.get_bytes(tenant, version["artifact_id"])
         assert b"Built a synthetic service" in payload
         assert b"canary@example.test" in payload
