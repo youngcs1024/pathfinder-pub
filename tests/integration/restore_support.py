@@ -19,7 +19,7 @@ from tests.integration.support import alembic_config
 
 ROOT = Path(__file__).resolve().parents[2]
 OLD_HEAD = "0014_gate6_action_recovery"
-HEAD = "0021_r31_resume_profiles"
+HEAD = "0022_r32_resume_tex_artifacts"
 IMAGE = "pgvector/pgvector:0.8.5-pg16"
 LABEL = "pathfinder.e84.owner"
 MAX_DUMP_BYTES = 64 * 1024 * 1024

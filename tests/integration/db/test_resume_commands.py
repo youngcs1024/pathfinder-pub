@@ -516,7 +516,7 @@ def test_0017_empty_downgrade_and_nonempty_guard(database_url: str):
             command.downgrade(config, "0016_r1_execution_contracts")
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0021_r31_resume_profiles"
+                "0022_r32_resume_tex_artifacts"
             )
             assert connection.scalar(text("SELECT count(*) FROM resume_commands")) == 1
     finally:

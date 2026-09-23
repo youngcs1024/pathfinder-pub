@@ -135,6 +135,7 @@ RESTORE_TABLES = {
         "resume_profile_versions",
         "resume_profiles",
         "resume_source_claims",
+        "resume_tex_artifacts",
         "tool_invocations",
         "users",
         "workspace_memberships",
@@ -222,7 +223,7 @@ def restore_projection(value):
             "cleanup",
         },
         "old_revision": {"0014_gate6_action_recovery"},
-        "revision": {"0021_r31_resume_profiles"},
+        "revision": {"0022_r32_resume_tex_artifacts"},
         "graph": {"pathfinder-research-v6"},
         "postgres_image": {"pgvector/pgvector:0.8.5-pg16"},
     }.items():

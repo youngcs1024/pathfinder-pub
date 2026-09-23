@@ -588,5 +588,5 @@ def test_downgrade_fails_closed_when_gate4_business_facts_exist(
     with connect_database(migrated_database_url) as connection:
         assert connection.execute("SELECT count(*) FROM runs").fetchone() == (1,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0021_r31_resume_profiles",
+            "0022_r32_resume_tex_artifacts",
         )

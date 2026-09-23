@@ -824,6 +824,64 @@ class ResumePreferenceVersion(UUIDPrimaryKeyMixin, Base):
     )
 
 
+class ResumeTexArtifact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_tex_artifacts"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint(
+            "workspace_id",
+            "profile_version_id",
+            "template_source_sha256",
+            "content_sha256",
+            "config_sha256",
+            "renderer_version",
+            name="uq_resume_tex_artifacts_identity",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "profile_version_id"],
+            ["resume_profile_versions.workspace_id", "resume_profile_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "created_by_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("octet_length(tex_bytes) BETWEEN 1 AND 524288", name="tex_bytes"),
+        *(
+            CheckConstraint(f"{field} ~ '^[0-9a-f]{{64}}$'", name=field)
+            for field in (
+                "template_source_sha256",
+                "preamble_sha256",
+                "content_sha256",
+                "config_sha256",
+                "tex_sha256",
+            )
+        ),
+        Index(
+            "ix_resume_tex_artifacts_workspace_profile_version",
+            "workspace_id",
+            "profile_version_id",
+        ),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    profile_version_id: Mapped[UUID] = mapped_column(nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    template_commit: Mapped[str] = mapped_column(Text, nullable=False)
+    template_source_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    preamble_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    renderer_version: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    config_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    tex_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    tex_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class ResumeSourceClaim(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "resume_source_claims"
     __table_args__ = (
