@@ -118,6 +118,7 @@ RESTORE_TABLES = {
         "run_events",
         "run_jobs",
         "runs",
+        "resume_commands",
         "tool_invocations",
         "users",
         "workspace_memberships",
