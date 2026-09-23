@@ -30,6 +30,11 @@ def _fk(columns: list[str], table: str, target: list[str]) -> sa.ForeignKeyConst
 
 
 def upgrade() -> None:
+    op.create_unique_constraint(
+        op.f("uq_material_snapshot_files_workspace_id_id"),
+        "material_snapshot_files",
+        ["workspace_id", "id"],
+    )
     op.drop_constraint(op.f("ck_runs_graph_version"), "runs", type_="check")
     op.create_check_constraint(
         op.f("ck_runs_graph_version"),
@@ -181,6 +186,11 @@ def downgrade() -> None:
         "material_fact_sets",
     ):
         op.drop_table(table)
+    op.drop_constraint(
+        op.f("uq_material_snapshot_files_workspace_id_id"),
+        "material_snapshot_files",
+        type_="unique",
+    )
     op.drop_constraint(op.f("ck_runs_graph_version"), "runs", type_="check")
     op.create_check_constraint(
         op.f("ck_runs_graph_version"),

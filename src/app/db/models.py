@@ -528,6 +528,7 @@ class MaterialSnapshot(UUIDPrimaryKeyMixin, Base):
 class MaterialSnapshotFile(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "material_snapshot_files"
     __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
         UniqueConstraint("workspace_id", "snapshot_id", "path"),
         ForeignKeyConstraint(
             ["workspace_id", "snapshot_id"],
