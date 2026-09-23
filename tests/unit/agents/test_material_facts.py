@@ -7,7 +7,9 @@ import pytest
 
 from app.agents.material_facts import FactExtractionError, MaterialFactExtractor
 from app.domain.project_facts import ScopedMaterialFile
-from app.llm.fake import FakeChatModel, ScriptedFakeChatModel
+from app.llm.factory import LLMFactory
+from app.llm.fake import FakeChatModel, FakeEmbeddingModel, ScriptedFakeChatModel
+from app.llm.invocations import LLMInvocationContext
 from app.llm.ports import ChatModelResult, ModelUsage
 
 
@@ -70,3 +72,27 @@ async def test_default_fake_exposes_incomplete_semantic_extraction() -> None:
     result = await MaterialFactExtractor(FakeChatModel()).extract([_file()])
     assert result.facts == ()
     assert result.questions == ("offline_fake_no_semantic_extraction",)
+
+
+async def test_extraction_metadata_is_accepted_by_accounted_factory() -> None:
+    class Recorder:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        async def prepare(self, _attempt) -> None:
+            self.attempts += 1
+
+        async def finalize(self, _attempt, _outcome) -> None:
+            pass
+
+    recorder = Recorder()
+    factory = LLMFactory(
+        recorder=recorder,
+        chat_adapter=FakeChatModel(),
+        embedding_adapter=FakeEmbeddingModel(),
+        provider="fake",
+    )
+    context = LLMInvocationContext(uuid4(), uuid4(), run_id=uuid4())
+    result = await MaterialFactExtractor(factory.create_chat_model(context)).extract([_file()])
+    assert result.questions == ("offline_fake_no_semantic_extraction",)
+    assert recorder.attempts == 1
