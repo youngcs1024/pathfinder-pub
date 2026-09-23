@@ -158,6 +158,7 @@ def validate_requirement_positions(jd: str, requirements: tuple[JobRequirementV1
 
 class ResumeGenerationPort(Protocol):
     async def create(self, tenant: TenantContext, request: SessionCreateV1, request_id: UUID): ...
+    async def list_sessions(self, tenant: TenantContext): ...
     async def get_session(self, tenant: TenantContext, session_id: UUID): ...
     async def get_version(self, tenant: TenantContext, session_id: UUID, version_id: UUID): ...
     async def cancel(self, tenant: TenantContext, session_id: UUID): ...
@@ -177,6 +178,9 @@ class ResumeGenerationService:
 
     async def create(self, tenant: TenantContext, request: SessionCreateV1, request_id: UUID):
         return await self.port.create(tenant, request, request_id)
+
+    async def list_sessions(self, tenant: TenantContext):
+        return await self.port.list_sessions(tenant)
 
     async def get_session(self, tenant: TenantContext, session_id: UUID):
         return await self.port.get_session(tenant, session_id)

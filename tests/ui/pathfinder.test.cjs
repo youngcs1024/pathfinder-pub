@@ -7,7 +7,149 @@ const { test } = require("node:test");
 const vm = require("node:vm");
 
 const historicalSource = readFileSync(join(__dirname, "../fixtures/legacy_ui/pathfinder.js"), "utf8");
+const resumeSource = readFileSync(join(__dirname, "../../src/app/api/static/resume_generation_ui.js"), "utf8");
 const source = readFileSync(join(__dirname, "../../src/app/api/static/pathfinder.js"), "utf8");
+
+const resumeDetail = (status = "completed", result = null) => ({
+  session_id: "session-a", run_id: "run-a", run_status: status, error_category: null,
+  result, current_version_id: null, revision: 0, profile_version_id: "profile-version-a",
+  preference_version: 1, project_ids: ["project-a"], override: { page_target: 1 },
+  budget: { max_model_calls: 6, max_tool_calls: 2, max_cost_cny: "2" },
+  job: { source: "paste", filename: null, text: "synthetic job", sha256: "a".repeat(64) },
+  requirements: [],
+});
+
+test("first draft retry retains key, JD and budget after an uncertain response", async t => {
+  const h = await loadUi(t, { randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+  h.state.resumeProfile = { version_id: "profile-version-a", version: 1,
+    preference_version: 1, preferences: { page_target: 1 } };
+  h.state.materialProjects = [{ id: "project-a", name: "Synthetic" }];
+  h.call("renderResumeGenerationSetup");
+  h.element("resume-job-projects").querySelector("input").checked = true;
+  h.element("resume-job-paste").value = "original JD";
+  h.element("resume-job-pages").value = "2";
+  let posts = 0;
+  h.route((url, options) => {
+    if (options.method === "POST") {
+      posts += 1;
+      if (posts === 1) throw new Error("response lost");
+      return json({ session_id: "session-a", run_id: "run-a" }, 202);
+    }
+    if (url.endsWith("/resume-sessions")) return json([{ session_id: "session-a", job_label: "synthetic job",
+      run_status: "completed", created_at: "2026-09-23T00:00:00Z" }]);
+    if (url.endsWith("/session-a")) return json(resumeDetail("completed",
+      { outcome: "needs_input", questions: ["Need facts"] }));
+    throw new Error(`Unexpected fetch ${url}`);
+  });
+  await assert.rejects(h.call("createResumeSubmission"), /response lost/);
+  h.element("resume-job-paste").value = "changed JD";
+  h.element("resume-job-cost").value = "5";
+  await h.call("sendResumeSubmission", h.state.resumeSubmission);
+  const requests = h.calls.filter(call => call.method === "POST");
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].body, requests[1].body);
+  assert.equal(requests[0].headers.get("Idempotency-Key"), requests[1].headers.get("Idempotency-Key"));
+  const body = JSON.parse(requests[0].body);
+  assert.equal(body.job.text, "original JD");
+  assert.deepEqual(body.project_ids, ["project-a"]);
+  assert.equal(body.override.page_target, 2);
+  assert.equal(body.budget.max_cost_cny, "2");
+  assert.match(h.element("resume-job-draft").textContent, /No draft yet/);
+});
+
+test("JD upload rejects invalid UTF-8 and oversized content before POST", async t => {
+  const h = await loadUi(t);
+  h.element("resume-job-file").files = [{ name: "job.txt", arrayBuffer: async () => Uint8Array.of(255).buffer }];
+  await assert.rejects(h.call("readJobInput"));
+  h.element("resume-job-file").files = [{ name: "job.md", arrayBuffer: async () => new Uint8Array(32769).buffer }];
+  await assert.rejects(h.call("readJobInput"), /32 KiB/);
+  h.element("resume-job-file").files = [{ name: "job.md", arrayBuffer: async () => new TextEncoder().encode("Synthetic JD").buffer }];
+  const job = await h.call("readJobInput");
+  assert.equal(job.source, "upload");
+  assert.equal(job.text, "Synthetic JD");
+  assert.equal(h.calls.length, 0);
+});
+
+test("409 keeps current JD and blocks blind first draft retry", async t => {
+  const h = await loadUi(t, { randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+  h.state.resumeProfile = { version_id: "profile-version-a", version: 1,
+    preference_version: 1, preferences: { page_target: 1 } };
+  h.state.materialProjects = [{ id: "project-a", name: "Synthetic" }];
+  h.call("renderResumeGenerationSetup");
+  h.element("resume-job-projects").querySelector("input").checked = true;
+  h.element("resume-job-paste").value = "Keep this JD";
+  h.route(() => failure(409));
+  await assert.rejects(h.call("createResumeSubmission"));
+  await h.call("sendResumeSubmission", h.state.resumeSubmission);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.element("resume-job-paste").value, "Keep this JD");
+  assert.equal(h.element("resume-job-retry").hidden, true);
+  assert.equal(h.element("resume-job-new").hidden, false);
+});
+
+test("saved session is recovered by list and URL without a new POST", async t => {
+  const h = await loadUi(t);
+  h.call("rememberResumeSession", "session-a");
+  h.route(url => url.endsWith("/resume-sessions")
+    ? json([{ session_id: "session-a", job_label: "synthetic job", run_status: "completed",
+      created_at: "2026-09-23T00:00:00Z" }]) : json(resumeDetail()));
+  await h.call("loadResumeSessions");
+  assert.equal(h.state.resumeSessionId, "session-a");
+  assert.equal(h.state.resumeSession.run_status, "completed");
+  assert.ok(h.calls.every(call => (call.method || "GET") === "GET"));
+});
+
+test("coverage labels keep unchecked material separate from confirmed gap and render text safely", async t => {
+  const h = await loadUi(t);
+  const detail = resumeDetail();
+  detail.requirements = [{ id: "req-a", kind: "inferred", quote: "<img src=x>",
+    start: 0, end: 11, inference_basis: "untrusted JD" }];
+  h.state.resumeSession = detail;
+  h.state.resumeVersion = { content: { display_name: "Synthetic", education: [], projects: [], skills: [] },
+    validation: {}, coverage: [{ requirement_id: "req-a", support: "no_support_found",
+      verification: "unchecked", reason: "Nothing selected", fact_version_ids: [], item_ids: [] }], facts: [] };
+  h.call("renderResumeSession");
+  const panel = h.element("resume-job-coverage");
+  assert.match(panel.textContent, /Not checked/);
+  assert.doesNotMatch(panel.textContent, /Confirmed ability gap/);
+  assert.match(panel.textContent, /<img src=x>/);
+  assert.equal(panel.querySelector("img"), null);
+});
+
+test("SSE detail failure keeps cursor at zero until replay succeeds", async t => {
+  const h = await loadUi(t);
+  h.state.resumeSessionId = "session-a";
+  h.state.resumeSession = resumeDetail("running");
+  let reads = 0;
+  h.route(url => {
+    if (url.endsWith("/events")) return stream([frame(1, "run.completed")]);
+    reads += 1;
+    return reads === 1 ? failure(503) : json(resumeDetail("completed"));
+  });
+  const work = h.call("streamResumeEvents", "session-a", h.state.resumeGeneration);
+  await until(() => h.clock.has(500));
+  assert.equal(h.state.resumeLastEventId, 0);
+  h.clock.fire(500);
+  await work;
+  assert.equal(h.state.resumeLastEventId, 1);
+  assert.deepEqual(h.calls.filter(call => call.url.endsWith("/events"))
+    .map(call => call.headers.get("Last-Event-ID")), ["0", "0"]);
+});
+
+test("TeX download uses authenticated bytes and fixed artifact digest", async t => {
+  const h = await loadUi(t);
+  h.state.config = { auth_mode: "supabase" };
+  h.state.accessToken = "synthetic-token";
+  h.state.resumeVersion = { version_id: "version-a" };
+  h.state.resumeArtifact = { artifact_id: "artifact-a", tex_sha256: "a".repeat(64) };
+  h.route((_url, options) => {
+    assert.equal(options.headers.get("Authorization"), "Bearer synthetic-token");
+    return new Response("synthetic tex", { headers: { "X-Content-SHA256": "a".repeat(64) } });
+  });
+  await h.call("downloadResumeTex");
+  assert.equal(h.created.find(item => item.tagName === "a").download, "resume-version-a.tex");
+  assert.equal(h.calls.length, 1);
+});
 
 test("resume preview and import retry preserve the exact source and key", async t => {
   const h = await loadUi(t, { randomUUID: () => "33333333-3333-4333-8333-333333333333" });
@@ -167,7 +309,7 @@ class Element {
     return found;
   }
   addEventListener(type, callback) { this.listeners.set(type, callback); }
-  click() { assert.ok(this.listeners.has("click")); this.listeners.get("click")(); }
+  click() { if (this.listeners.has("click")) this.listeners.get("click")(); else assert.equal(this.tagName, "a"); }
   reportValidity() { return true; }
   reset() {}
 }
@@ -244,6 +386,7 @@ function stream(frames, metrics = { cancelled: 0, released: 0 }) {
 
 async function loadUi(t, { randomUUID, confirm = () => true, historical = false } = {}) {
   const elements = new Map();
+  const created = [];
   const element = id => {
     if (!elements.has(id)) elements.set(id, new Element());
     return elements.get(id);
@@ -253,10 +396,16 @@ async function loadUi(t, { randomUUID, confirm = () => true, historical = false 
   const calls = [];
   let route = () => { throw new Error("Unexpected fetch"); };
   const context = vm.createContext({
-    document: { getElementById: element, createElement: tag => new Element(tag) },
-    window: { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, confirm },
+    document: { getElementById: element, createElement: tag => {
+      const item = new Element(tag); created.push(item); return item;
+    } },
+    window: { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, confirm,
+      location: { search: "" }, history: { replaceState(_state, _title, path) {
+        this.path = path;
+        context.window.location.search = path.split("?")[1] || "";
+      } } },
     crypto: { randomUUID },
-    Headers, AbortController, DOMException, TextDecoder, Uint8Array, URL, URLSearchParams,
+    Headers, AbortController, DOMException, TextDecoder, TextEncoder, Uint8Array, URL, URLSearchParams, Blob,
     fetch: async (url, options = {}) => {
       if (url === "/api/v1/ui-config") return json({ auth_mode: "supabase" });
       calls.push({ url, ...options });
@@ -273,6 +422,7 @@ async function loadUi(t, { randomUUID, confirm = () => true, historical = false 
       }
     },
   });
+  if (!historical) vm.runInContext(resumeSource, context, { filename: "resume_generation_ui.js" });
   vm.runInContext(historical ? historicalSource : source, context, { filename: "pathfinder.js" });
   const state = vm.runInContext("state", context);
   await until(() => state.config !== null);
@@ -285,7 +435,7 @@ async function loadUi(t, { randomUUID, confirm = () => true, historical = false 
     return vm.runInContext(`${name}(...__arguments)`, context);
   };
   t.after(async () => { call("resetProjection"); await new Promise(resolve => setImmediate(resolve)); });
-  return { state, clock, calls, element, call, route: handler => { route = handler; } };
+  return { state, clock, calls, created, element, call, route: handler => { route = handler; } };
 }
 
 for (const type of ["action.proposed", "run.completed", "run.failed", "run.cancelled"]) {

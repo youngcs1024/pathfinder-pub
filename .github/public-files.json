@@ -206,6 +206,7 @@
     "src/app/api/static/index.html",
     "src/app/api/static/pathfinder.css",
     "src/app/api/static/pathfinder.js",
+    "src/app/api/static/resume_generation_ui.js",
     "src/app/auth/__init__.py",
     "src/app/auth/contracts.py",
     "src/app/auth/errors.py",

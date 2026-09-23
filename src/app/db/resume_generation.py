@@ -398,6 +398,59 @@ class SqlAlchemyResumeGenerationStore:
             writer=_CreateWriter(),
         )
 
+    async def list_sessions(self, tenant: TenantContext):
+        async with database_session(self.sessions) as db:
+            role = await _role(db, tenant)
+            query = (
+                select(
+                    ResumeSession,
+                    Run.status,
+                    JobSnapshot.source,
+                    JobSnapshot.filename,
+                    JobSnapshot.jd_text,
+                )
+                .join(
+                    Run,
+                    (Run.workspace_id == ResumeSession.workspace_id)
+                    & (Run.id == ResumeSession.run_id),
+                )
+                .join(
+                    JobSnapshot,
+                    (JobSnapshot.workspace_id == ResumeSession.workspace_id)
+                    & (JobSnapshot.id == ResumeSession.job_snapshot_id),
+                )
+                .where(ResumeSession.workspace_id == tenant.workspace_id)
+                .order_by(ResumeSession.created_at.desc(), ResumeSession.id.desc())
+            )
+            if role != WorkspaceRole.ADMIN.value:
+                query = query.where(ResumeSession.owner_user_id == tenant.actor_user_id)
+            result = []
+            offset = 0
+            while len(result) < 50:
+                page = (await db.execute(query.limit(100).offset(offset))).all()
+                if not page:
+                    break
+                offset += len(page)
+                for row, run_status, source, filename, jd_text in page:
+                    try:
+                        await _session(db, tenant, row.id)
+                    except DomainNotFoundError:
+                        continue
+                    label = filename if source == "upload" else jd_text.strip().splitlines()[0]
+                    result.append(
+                        {
+                            "session_id": row.id,
+                            "run_id": row.run_id,
+                            "run_status": run_status,
+                            "current_version_id": row.current_version_id,
+                            "created_at": row.created_at,
+                            "job_label": label[:120],
+                        }
+                    )
+                    if len(result) == 50:
+                        break
+            return result
+
     async def get_session(self, tenant: TenantContext, session_id: UUID):
         async with database_session(self.sessions) as db:
             row = await _session(db, tenant, session_id)
@@ -425,6 +478,16 @@ class SqlAlchemyResumeGenerationStore:
             ).all()
             if snapshot is None or run is None:
                 raise DomainInvariantError("session input or run is missing")
+            project_ids = (
+                await db.scalars(
+                    select(ResumeSessionProject.project_id)
+                    .where(
+                        ResumeSessionProject.workspace_id == tenant.workspace_id,
+                        ResumeSessionProject.session_id == session_id,
+                    )
+                    .order_by(ResumeSessionProject.project_id)
+                )
+            ).all()
             return {
                 "session_id": row.id,
                 "run_id": row.run_id,
@@ -440,6 +503,10 @@ class SqlAlchemyResumeGenerationStore:
                 "revision": row.revision,
                 "current_version_id": row.current_version_id,
                 "profile_version_id": row.profile_version_id,
+                "preference_version": await _preference_number(db, row),
+                "project_ids": project_ids,
+                "override": row.override_json,
+                "budget": GenerationBudgetV1.model_validate_json(json.dumps(row.budget_json)),
                 "job": {
                     "source": snapshot.source,
                     "filename": snapshot.filename,
@@ -500,6 +567,67 @@ class SqlAlchemyResumeGenerationStore:
                         "item_ids": item.item_ids_json,
                     }
                 )
+            facts = []
+            bound = (
+                await db.execute(
+                    select(ResumeSessionFact, MaterialFactVersion)
+                    .join(
+                        MaterialFactVersion,
+                        (MaterialFactVersion.workspace_id == ResumeSessionFact.workspace_id)
+                        & (MaterialFactVersion.id == ResumeSessionFact.fact_version_id),
+                    )
+                    .where(
+                        ResumeSessionFact.workspace_id == tenant.workspace_id,
+                        ResumeSessionFact.session_id == session_id,
+                    )
+                    .order_by(ResumeSessionFact.project_id, ResumeSessionFact.fact_version_id)
+                )
+            ).all()
+            for binding, fact in bound:
+                evidence_rows = (
+                    await db.execute(
+                        select(
+                            MaterialFactEvidence,
+                            MaterialSnapshotFile.path,
+                            MaterialSnapshot.source_revision,
+                        )
+                        .join(
+                            MaterialSnapshotFile,
+                            (MaterialSnapshotFile.workspace_id == MaterialFactEvidence.workspace_id)
+                            & (MaterialSnapshotFile.id == MaterialFactEvidence.snapshot_file_id),
+                        )
+                        .join(
+                            MaterialSnapshot,
+                            (MaterialSnapshot.workspace_id == MaterialSnapshotFile.workspace_id)
+                            & (MaterialSnapshot.id == MaterialSnapshotFile.snapshot_id),
+                        )
+                        .where(
+                            MaterialFactEvidence.workspace_id == tenant.workspace_id,
+                            MaterialFactEvidence.fact_version_id == fact.id,
+                        )
+                        .order_by(MaterialSnapshotFile.path, MaterialFactEvidence.start_line)
+                    )
+                ).all()
+                facts.append(
+                    {
+                        "version_id": fact.id,
+                        "project_id": binding.project_id,
+                        "claim": fact.claim,
+                        "kind": fact.kind,
+                        "conditions": fact.conditions_json,
+                        "evidence": [
+                            {
+                                "snapshot_file_id": evidence.snapshot_file_id,
+                                "path": path,
+                                "source_revision": revision,
+                                "start_line": evidence.start_line,
+                                "end_line": evidence.end_line,
+                                "quote": evidence.quote,
+                            }
+                            for evidence, path, revision in evidence_rows
+                        ],
+                    }
+                )
             return {
                 "version_id": row.id,
                 "session_id": session_id,
@@ -508,6 +636,7 @@ class SqlAlchemyResumeGenerationStore:
                 "content": row.content_json,
                 "validation": row.validation_json,
                 "coverage": result,
+                "facts": facts,
             }
 
     async def cancel(self, tenant: TenantContext, session_id: UUID):

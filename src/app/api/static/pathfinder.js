@@ -282,6 +282,7 @@ function resetProjection() {
 }
 
 function logout(showLogin) {
+  resetResumeGeneration();
   resetMaterials();
   resetResumeProfile();
   invalidateSubmission();
@@ -322,6 +323,7 @@ async function loadMe() {
     renderWorkspaces(me.workspaces || []);
     loadMaterials().catch(reportInterfaceFailure);
     loadResumeProfile().catch(reportInterfaceFailure);
+    loadResumeSessions().catch(reportInterfaceFailure);
     hideProblem();
   } catch (error) {
     if (generation !== state.contextGeneration) return;
@@ -337,8 +339,11 @@ function renderWorkspaces(workspaces) {
     option.value = workspace.workspace_id;
     select.append(option);
   }
-  const selected = workspaces.find((item) => item.kind === "personal") || workspaces[0] || null;
+  const requestedWorkspace = resumeLocationSelection().workspaceId;
+  const selected = workspaces.find((item) => item.workspace_id === requestedWorkspace)
+    || workspaces.find((item) => item.kind === "personal") || workspaces[0] || null;
   if (state.workspace?.workspace_id !== selected?.workspace_id) {
+    resetResumeGeneration();
     invalidateSubmission();
     resetProjection();
     resetMaterials();
@@ -1070,6 +1075,7 @@ async function loadMaterials() {
     : [];
   if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId) return;
   renderMaterials();
+  renderResumeGenerationSetup();
   await loadMaterialFacts();
   if (state.resumeProfile && !state.resumePending) renderResumeProfile();
 }
@@ -1442,6 +1448,7 @@ async function loadResumeProfile() {
   if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId) return;
   state.resumeProfile = profile;
   renderResumeProfile();
+  renderResumeGenerationSetup();
   if (!profile) byId("resume-profile-status").textContent = "No profile imported in this workspace.";
 }
 
@@ -1504,14 +1511,17 @@ loginForm.addEventListener("submit", (event) => {
 byId("workspace-select").addEventListener("change", (event) => {
   const selected = (state.me.workspaces || []).find((item) => item.workspace_id === event.target.value);
   invalidateSubmission();
+  resetResumeGeneration();
   resetProjection();
   resetMaterials();
   resetResumeProfile();
   state.workspace = selected || null;
+  if (state.workspace) rememberResumeSession(null);
   renderWorkspaceMeta();
   hideProblem();
   loadMaterials().catch(reportInterfaceFailure);
   loadResumeProfile().catch(reportInterfaceFailure);
+  loadResumeSessions().catch(reportInterfaceFailure);
 });
 
 byId("run-mode").addEventListener("change", updateResumeRequirement);
@@ -1610,4 +1620,5 @@ renderSubmissionControls();
 updateResumeRequirement();
 resetMaterials();
 resetResumeProfile();
+initializeResumeGeneration();
 bootstrap();

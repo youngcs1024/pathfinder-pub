@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.domain.resume_generation import JobRequirementV1, SessionCreateV1
-from app.domain.resume_profile import ResumeContentV1
+from app.domain.resume_generation import GenerationBudgetV1, JobRequirementV1, SessionCreateV1
+from app.domain.resume_profile import JobPreferenceOverrideV1, ResumeContentV1
 from app.domain.run_payloads import ResumeGenerationResultV1
 
 
@@ -36,6 +37,15 @@ class RequirementResponse(JobRequirementV1):
     ordinal: int
 
 
+class SessionListItemResponse(GenerationApiModel):
+    session_id: UUID
+    run_id: UUID
+    run_status: Literal["queued", "running", "completed", "failed", "cancelled"]
+    current_version_id: UUID | None
+    created_at: datetime
+    job_label: str
+
+
 class SessionDetailResponse(GenerationApiModel):
     session_id: UUID
     run_id: UUID
@@ -45,6 +55,10 @@ class SessionDetailResponse(GenerationApiModel):
     revision: int
     current_version_id: UUID | None
     profile_version_id: UUID
+    preference_version: int
+    project_ids: list[UUID]
+    override: JobPreferenceOverrideV1
+    budget: GenerationBudgetV1
     job: JobSnapshotResponse
     requirements: list[RequirementResponse]
 
@@ -60,6 +74,24 @@ class CoverageResponse(GenerationApiModel):
     item_ids: list[UUID]
 
 
+class FactEvidenceResponse(GenerationApiModel):
+    snapshot_file_id: UUID
+    path: str
+    source_revision: str
+    start_line: int
+    end_line: int
+    quote: str
+
+
+class SessionFactResponse(GenerationApiModel):
+    version_id: UUID
+    project_id: UUID
+    claim: str
+    kind: Literal["implementation", "plan", "experiment", "personal_statement"]
+    conditions: dict[str, object]
+    evidence: list[FactEvidenceResponse]
+
+
 class VersionDetailResponse(GenerationApiModel):
     version_id: UUID
     session_id: UUID
@@ -68,6 +100,7 @@ class VersionDetailResponse(GenerationApiModel):
     content: ResumeContentV1
     validation: dict[str, object]
     coverage: list[CoverageResponse]
+    facts: list[SessionFactResponse]
 
 
 class SessionCancelResponse(GenerationApiModel):

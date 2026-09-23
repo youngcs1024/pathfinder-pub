@@ -12,12 +12,17 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
+from app.api.schemas.resume_generation import (
+    SessionDetailResponse,
+    SessionListItemResponse,
+    VersionDetailResponse,
+)
 from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.llm_invocations import SqlAlchemyInvocationRecorder
 from app.db.material import SqlAlchemyMaterialStore
-from app.db.models import ResumeSession, RunJob
+from app.db.models import MaterialSnapshotFile, ResumeSession, RunJob, WorkspaceMembership
 from app.db.project_facts import SqlAlchemyProjectFactStore
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.resume_artifacts import SqlAlchemyResumeArtifactStore
@@ -27,7 +32,7 @@ from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.domain.errors import DomainConflictError, DomainNotFoundError
-from app.domain.project_facts import CandidateFactV1
+from app.domain.project_facts import CandidateFactV1, FactEvidenceV1
 from app.domain.provisioning import ProvisioningService
 from app.domain.resume_generation import GenerationBudgetV1, JobInputV1, SessionCreateV1
 from app.domain.tenancy import TenantService
@@ -90,7 +95,14 @@ async def test_create_replay_scope_and_cancel(migrated_database_url: str) -> Non
         assert replay.replayed and replay.receipt == created.receipt
         assert created.receipt.resource_id is not None
         detail = await store.get_session(tenant, created.receipt.resource_id)
+        SessionDetailResponse.model_validate(detail)
         assert detail["job"]["text"] == request.job.text
+        assert detail["project_ids"] == [project["id"]]
+        listing = await store.list_sessions(tenant)
+        assert len(listing) == 1
+        SessionListItemResponse.model_validate(listing[0])
+        assert listing[0]["session_id"] == created.receipt.resource_id
+        assert await store.list_sessions(outsider) == []
         assert detail["run_status"] == "queued"
         assert detail["result"] is None
         inputs = await store.execution_inputs(tenant, created.receipt.resource_id)
@@ -112,6 +124,19 @@ async def test_create_replay_scope_and_cancel(migrated_database_url: str) -> Non
         assert (await store.get_session(tenant, created.receipt.resource_id))[
             "run_status"
         ] == "cancelled"
+        async with sessions.begin() as db:
+            await db.execute(
+                update(WorkspaceMembership)
+                .where(
+                    WorkspaceMembership.workspace_id == tenant.workspace_id,
+                    WorkspaceMembership.user_id == tenant.actor_user_id,
+                )
+                .values(revoked_at=func.now())
+            )
+        with pytest.raises(DomainNotFoundError):
+            await store.list_sessions(tenant)
+        with pytest.raises(DomainNotFoundError):
+            await store.get_session(tenant, created.receipt.resource_id)
     finally:
         await engine.dispose()
 
@@ -136,13 +161,32 @@ async def test_scripted_fake_publishes_downloadable_tex(
         assert await _runner(sessions, materials).run_once(asyncio.Event())
         facts = SqlAlchemyProjectFactStore(sessions)
         catalog = await facts.current_facts(tenant, project["id"])
+        async with sessions() as db:
+            snapshot_file_id = await db.scalar(
+                select(MaterialSnapshotFile.id).where(
+                    MaterialSnapshotFile.workspace_id == tenant.workspace_id,
+                    MaterialSnapshotFile.path == "main.py",
+                )
+            )
+        assert snapshot_file_id is not None
         added = await facts.command(
             tenant,
             kind="material_fact_add",
             project_id=project["id"],
             import_id=imported.receipt.resource_id,
             request_id=uuid4(),
-            candidate=CandidateFactV1(claim="Built a synthetic service", kind="personal_statement"),
+            candidate=CandidateFactV1(
+                claim="Built a synthetic service",
+                kind="personal_statement",
+                evidence=(
+                    FactEvidenceV1(
+                        snapshot_file_id=snapshot_file_id,
+                        start_line=1,
+                        end_line=1,
+                        quote="print('synthetic')",
+                    ),
+                ),
+            ),
         )
         await facts.command(
             tenant,
@@ -156,7 +200,10 @@ async def test_scripted_fake_publishes_downloadable_tex(
             request_id=uuid4(),
         )
         confirmed = await facts.current_facts(tenant, project["id"])
-        fact_version_id = confirmed["facts"][0]["version_id"]
+        reviewed_fact = next(
+            item for item in confirmed["facts"] if item["id"] == added.receipt.resource_id
+        )
+        fact_version_id = reviewed_fact["version_id"]
         source_text = SOURCE.read_text()
         source_hash = hashlib.sha256(source_text.encode()).hexdigest()
         preamble_hash = hashlib.sha256(
@@ -285,7 +332,31 @@ async def test_scripted_fake_publishes_downloadable_tex(
         version = await store.get_version(
             tenant, created.receipt.resource_id, detail["current_version_id"]
         )
+        VersionDetailResponse.model_validate(version)
         assert version["coverage"][0]["fact_version_ids"] == [fact_version_id]
+        fixed_fact = next(
+            item for item in version["facts"] if item["version_id"] == fact_version_id
+        )
+        assert fixed_fact["evidence"][0]["path"] == "main.py"
+        await facts.command(
+            tenant,
+            kind="material_fact_revise",
+            project_id=project["id"],
+            fact_id=added.receipt.resource_id,
+            import_id=confirmed["import_id"],
+            expected_version=reviewed_fact["version"],
+            candidate=CandidateFactV1(claim="New claim after draft", kind="personal_statement"),
+            request_id=uuid4(),
+        )
+        historic = await store.get_version(
+            tenant, created.receipt.resource_id, detail["current_version_id"]
+        )
+        assert (
+            next(item for item in historic["facts"] if item["version_id"] == fact_version_id)[
+                "claim"
+            ]
+            == "Built a synthetic service"
+        )
         assert version["validation"]["retrieval_config_version"].startswith("sha256:")
         payload, _ = await artifacts.get_bytes(tenant, version["artifact_id"])
         assert b"Built a synthetic service" in payload

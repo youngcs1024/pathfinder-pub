@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pathfinder</title>
     <link rel="stylesheet" href="/static/pathfinder.css">
+    <script src="/static/resume_generation_ui.js" defer></script>
     <script src="/static/pathfinder.js" defer></script>
   </head>
   <body>
     <header>
       <div>
-        <p class="eyebrow">Historical records</p>
+        <p class="eyebrow">Tailored resume</p>
         <h1>Pathfinder</h1>
       </div>
       <div id="session-actions"></div>
@@ -131,6 +132,36 @@
             <label>Writing advice <textarea id="resume-pref-advice" maxlength="2000"></textarea></label>
             <button type="submit">Save preferences</button>
           </form>
+        </section>
+        <section id="resume-job-panel" class="panel">
+          <h2>First draft for one job</h2>
+          <p class="muted">Use a reviewed profile and confirmed project facts. The preview shows content; check the final layout after compiling the downloaded TeX yourself.</p>
+          <form id="resume-job-form">
+            <p id="resume-job-profile" class="muted">Loading profile…</p>
+            <fieldset id="resume-job-projects"><legend>Projects for this job</legend></fieldset>
+            <label>Paste job description <textarea id="resume-job-paste" maxlength="32768"></textarea></label>
+            <label>Or choose a UTF-8 .txt or .md file <input id="resume-job-file" type="file" accept=".txt,.md,text/plain,text/markdown"></label>
+            <p id="resume-job-file-preview" class="muted"></p>
+            <label>Page target <select id="resume-job-pages"><option value="1">One page</option><option value="2">Two pages</option></select></label>
+            <label>Advice for this job <textarea id="resume-job-advice" maxlength="2000"></textarea></label>
+            <label>Maximum bullets per project (optional) <input id="resume-job-bullets" type="number" min="0" max="20"></label>
+            <div class="grid budget-fields">
+              <label>Maximum model calls <input id="resume-job-model-calls" type="number" min="1" max="12" value="6" required></label>
+              <label>Maximum tool calls <input id="resume-job-tool-calls" type="number" min="0" max="8" value="2" required></label>
+              <label>Maximum cost (CNY) <input id="resume-job-cost" type="number" min="0.000001" step="0.000001" value="2" required></label>
+            </div>
+            <button id="resume-job-submit" type="submit" disabled>Create first draft</button>
+            <button id="resume-job-retry" type="button" hidden>Retry the same request</button>
+            <button id="resume-job-new" type="button" hidden>Review and start a new request</button>
+          </form>
+          <p id="resume-job-status" class="muted" aria-live="polite"></p>
+          <label>Recent jobs <select id="resume-job-history"></select></label>
+          <button id="resume-job-refresh" type="button">Refresh jobs and current status</button>
+          <section id="resume-job-progress" aria-live="polite"></section>
+          <section id="resume-job-questions"></section>
+          <section id="resume-job-draft"></section>
+          <section id="resume-job-coverage"></section>
+          <section id="resume-job-delivery"></section>
         </section>
         <button id="retry-events" type="button" hidden>Resume event reads</button>
         <section id="run-panel" class="panel" hidden></section>

@@ -12,6 +12,7 @@ from app.api.schemas.resume_generation import (
     SessionCancelResponse,
     SessionCreateV1,
     SessionDetailResponse,
+    SessionListItemResponse,
     SessionReceiptResponse,
     VersionDetailResponse,
 )
@@ -41,6 +42,11 @@ async def create_session(request: Request, tenant: TenantDependency, body: Sessi
         run_id=receipt.run_id,
         replayed=accepted.replayed,
     )
+
+
+@router.get("", response_model=list[SessionListItemResponse])
+async def list_sessions(request: Request, tenant: TenantDependency):
+    return await _service(request).list_sessions(tenant)
 
 
 @router.get("/{session_id}", response_model=SessionDetailResponse)
