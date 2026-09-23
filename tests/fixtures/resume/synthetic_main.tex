@@ -1,0 +1,34 @@
+\documentclass{article}
+\newcommand{\resumeEducationHeading}[3]{#1 #2 #3}
+\newcommand{\resumeProjectHeading}[4]{#1 #2 #3 #4}
+\newcommand{\resumeItem}[1]{#1}
+\newcommand{\skilltag}[1]{#1}
+\newcommand{\skillgap}{, }
+\begin{document}
+\begin{center}
+{\LARGE\bfseries\color{resumeBlue} Synthetic Candidate} \\ \vspace{2pt}
+\large Phone：555-0100 | Email：{canary@example.test} | Location：Example City
+\end{center}
+\section{Education}
+\resumeEducationListStart
+\resumeEducationHeading
+{Example University}{Synthetic Degree}{2020 -- 2024}
+\resumeEducationListEnd
+\section{Projects}
+\resumeProjectListStart
+\resumeProjectHeading
+{\textbf{Synthetic Parser}}{2024}
+{\skilltag{Python}\skillgap\skilltag{SQL}}
+{\textbf{Summary: }Built a bounded parser.}
+\resumeItemListStart
+\resumeItem{Implemented a \textbf{synthetic} tokenizer with 12 test cases.}
+\resumeItem{Measured 25\% coverage in a local fake test.}
+\resumeItemListEnd
+\resumeProjectListEnd
+\section{Skills}
+\begin{itemize}
+\normalsize{\item{
+\textbf{Languages}{：Python、SQL} \\
+}}
+\end{itemize}
+\end{document}

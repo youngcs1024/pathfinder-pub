@@ -27,6 +27,11 @@ const state = {
   materialPollTimer: null,
   materialFacts: null,
   materialFactPending: null,
+  resumeProfile: null,
+  resumePreview: null,
+  resumeSourceTex: null,
+  resumePending: null,
+  resumeDraft: null,
 };
 
 const byId = (id) => document.getElementById(id);
@@ -278,6 +283,7 @@ function resetProjection() {
 
 function logout(showLogin) {
   resetMaterials();
+  resetResumeProfile();
   invalidateSubmission();
   abortStream();
   clearSession();
@@ -315,6 +321,7 @@ async function loadMe() {
     renderSessionActions();
     renderWorkspaces(me.workspaces || []);
     loadMaterials().catch(reportInterfaceFailure);
+    loadResumeProfile().catch(reportInterfaceFailure);
     hideProblem();
   } catch (error) {
     if (generation !== state.contextGeneration) return;
@@ -335,6 +342,7 @@ function renderWorkspaces(workspaces) {
     invalidateSubmission();
     resetProjection();
     resetMaterials();
+    resetResumeProfile();
   }
   state.workspace = selected;
   if (selected) select.value = selected.workspace_id;
@@ -1063,6 +1071,7 @@ async function loadMaterials() {
   if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId) return;
   renderMaterials();
   await loadMaterialFacts();
+  if (state.resumeProfile && !state.resumePending) renderResumeProfile();
 }
 
 async function createMaterialProject() {
@@ -1185,6 +1194,281 @@ async function submitMaterialImport() {
   await sendMaterialImport(submission);
 }
 
+function resetResumeProfile() {
+  state.resumeProfile = null;
+  state.resumePreview = null;
+  state.resumeSourceTex = null;
+  state.resumePending = null;
+  state.resumeDraft = null;
+  byId("resume-profile-file").value = "";
+  byId("resume-profile-status").textContent = "No profile imported in this workspace.";
+  byId("resume-profile-import").disabled = true;
+  byId("resume-profile-retry").hidden = true;
+  byId("resume-profile-refresh").hidden = true;
+  byId("resume-preferences-form").hidden = true;
+  clear(byId("resume-profile-preview-result"));
+  clear(byId("resume-profile-current"));
+}
+
+function resumeProfileBase() {
+  return `/api/v2/workspaces/${state.workspace.workspace_id}/profiles`;
+}
+
+function renderResumePreview() {
+  const target = byId("resume-profile-preview-result");
+  clear(target);
+  const preview = state.resumePreview;
+  byId("resume-profile-import").disabled = !preview?.complete || Boolean(state.resumeProfile);
+  if (!preview) return;
+  target.append(node("p", preview.complete
+    ? `Recognized source ${preview.source_sha256}; review every imported field.`
+    : `Import blocked: ${preview.issues.length} structural or identity issue(s).`));
+  for (const issue of preview.issues) {
+    target.append(node("p", `${issue.code} at line ${issue.line}, column ${issue.column}`));
+  }
+  if (preview.content) {
+    const content = preview.content;
+    target.append(node("p", `Name: ${content.display_name}`));
+    for (const item of content.contact) target.append(node("p", `${item.label}: ${item.value}`));
+    for (const item of content.education) {
+      target.append(node("p", `Education: ${item.institution.text} · ${item.qualification.text} · ${item.period.text}`));
+    }
+    for (const item of content.projects) {
+      target.append(node("p", `Project: ${item.title.text} · ${item.period.text}`));
+      target.append(node("p", `Technologies: ${item.technologies.join(", ")}`));
+      target.append(node("p", `Summary: ${item.summary.text}`));
+      for (const bullet of item.bullets) target.append(node("p", `Bullet: ${bullet.text}`));
+    }
+    for (const item of content.skills) target.append(node("p", `${item.label}: ${item.items.join(", ")}`));
+    target.append(node("p", `${preview.claims.length} project statements remain pending fact review.`));
+  }
+}
+
+async function previewResumeSource() {
+  if (!state.workspace) return;
+  const file = byId("resume-profile-file").files?.[0];
+  if (!file || !file.name.endsWith(".tex")) {
+    byId("resume-profile-status").textContent = "Choose the frozen .tex file first.";
+    return;
+  }
+  const generation = state.contextGeneration;
+  const sourceTex = await file.text();
+  if (generation !== state.contextGeneration) return;
+  const preview = await apiFetch(`${resumeProfileBase()}/import-preview`, {
+    method: "POST", body: { source_tex: sourceTex },
+  });
+  if (generation !== state.contextGeneration) return;
+  state.resumeSourceTex = sourceTex;
+  state.resumePreview = preview;
+  renderResumePreview();
+  byId("resume-profile-status").textContent = preview.complete
+    ? "Preview ready. Inspect fields before importing." : "Import blocked; inspect the reported positions.";
+}
+
+async function sendResumeCommand(pending = state.resumePending) {
+  if (!pending || pending !== state.resumePending ||
+      pending.actorId !== state.me?.user_id ||
+      pending.workspaceId !== state.workspace?.workspace_id || pending.conflict) return;
+  try {
+    await apiFetch(pending.path, {
+      method: "POST", headers: { "Idempotency-Key": pending.key }, body: pending.body,
+    });
+    if (pending !== state.resumePending) return;
+    state.resumePending = null;
+    state.resumeDraft = null;
+    byId("resume-profile-retry").hidden = true;
+    byId("resume-profile-refresh").hidden = true;
+    byId("resume-profile-status").textContent = "Profile command accepted.";
+    await loadResumeProfile();
+    hideProblem();
+  } catch (error) {
+    if (pending !== state.resumePending) return;
+    pending.conflict = error.problem?.status === 409;
+    byId("resume-profile-retry").hidden = pending.conflict;
+    byId("resume-profile-refresh").hidden = !pending.conflict;
+    byId("resume-profile-status").textContent = pending.conflict
+      ? "Version conflict. Your inputs remain here; inspect the current version before a new request."
+      : "Response uncertain. Retry sends the same key and original input.";
+    throw error;
+  }
+}
+
+async function queueResumeCommand(path, body) {
+  if (!state.workspace || state.resumePending) return;
+  const pending = {
+    path, body, key: crypto.randomUUID(), actorId: state.me.user_id,
+    workspaceId: state.workspace.workspace_id, conflict: false,
+  };
+  state.resumePending = pending;
+  await sendResumeCommand(pending);
+}
+
+function reviewResumeItem(itemId) {
+  const profile = state.resumeProfile;
+  return queueResumeCommand(`${resumeProfileBase()}/${profile.profile_id}/item-reviews`, {
+    expected_version: profile.version, item_id: itemId,
+  });
+}
+
+function editableContact(target, id, label, value, reviewed) {
+  const row = node("div");
+  const input = node("input");
+  const draft = state.resumeDraft;
+  input.value = draft?.path.endsWith("/contact-edits") && draft.body.item_id === id
+    ? draft.body.value : value;
+  input.maxLength = 300;
+  const caption = node("label", `${label} (user edit only) `);
+  caption.append(input);
+  const save = node("button", "Save new version");
+  save.type = "button";
+  save.addEventListener("click", () => {
+    const profile = state.resumeProfile;
+    queueResumeCommand(`${resumeProfileBase()}/${profile.profile_id}/contact-edits`, {
+      expected_version: profile.version, item_id: id, value: input.value,
+    }).catch(reportInterfaceFailure);
+  });
+  row.append(caption, save);
+  if (reviewed !== "reviewed") {
+    const review = node("button", "Mark reviewed");
+    review.type = "button";
+    review.addEventListener("click", () => reviewResumeItem(id).catch(reportInterfaceFailure));
+    row.append(review);
+  }
+  target.append(row);
+}
+
+function reviewableResumeItem(target, label, item) {
+  const row = node("div");
+  row.append(node("p", `${label} · ${item.review_status}`));
+  if (item.review_status !== "reviewed") {
+    const review = node("button", "Mark reviewed");
+    review.type = "button";
+    review.addEventListener("click", () => reviewResumeItem(item.id).catch(reportInterfaceFailure));
+    row.append(review);
+  }
+  target.append(row);
+}
+
+function renderResumeProfile() {
+  const target = byId("resume-profile-current");
+  clear(target);
+  const profile = state.resumeProfile;
+  byId("resume-preferences-form").hidden = !profile;
+  byId("resume-profile-import").disabled = Boolean(profile) || !state.resumePreview?.complete;
+  if (!profile) return;
+  const content = profile.content;
+  target.append(node("h3", `Profile version ${profile.version}`));
+  editableContact(target, content.display_name_id, "Name", content.display_name,
+                  content.display_name_review_status);
+  for (const item of content.contact) {
+    editableContact(target, item.id, item.label, item.value, item.review_status);
+  }
+  for (const item of content.education) {
+    reviewableResumeItem(target,
+      `Education: ${item.institution.text} · ${item.qualification.text} · ${item.period.text}`, item);
+  }
+  for (const item of content.projects) {
+    reviewableResumeItem(target, `Project: ${item.title.text} · ${item.summary.text}`, item);
+  }
+  for (const item of content.skills) {
+    reviewableResumeItem(target, `Skills: ${item.label} · ${item.items.join(", ")}`, item);
+  }
+  target.append(node("h3", "Original project statements"));
+  for (const claim of profile.claims) {
+    const box = node("article", null, "source");
+    box.append(node("p", `${claim.field}: ${claim.text}`));
+    box.append(node("p", `${claim.decision} · source line ${claim.source.start_line} · review ${claim.review_version}`));
+    if (claim.fact_version_ids.length) box.append(node("p", `Linked fact versions: ${claim.fact_version_ids.join(", ")}`));
+    const project = node("select");
+    for (const optionData of state.materialProjects) {
+      const option = node("option", optionData.name);
+      option.value = optionData.id;
+      project.append(option);
+    }
+    const facts = node("input");
+    facts.placeholder = "Confirmed fact version IDs, comma separated";
+    const claimDraft = state.resumeDraft?.path.endsWith("/claim-reviews")
+      && state.resumeDraft.body.claim_id === claim.id ? state.resumeDraft.body : null;
+    if (claimDraft) {
+      project.value = claimDraft.project_id || "";
+      facts.value = (claimDraft.fact_version_ids || []).join(", ");
+    }
+    const link = node("button", "Link for review");
+    link.type = "button";
+    link.addEventListener("click", () => {
+      queueResumeCommand(`${resumeProfileBase()}/${profile.profile_id}/claim-reviews`, {
+        claim_id: claim.id, expected_review_version: claim.review_version,
+        decision: "linked", project_id: project.value,
+        fact_version_ids: facts.value.split(",").map(value => value.trim()).filter(Boolean),
+      }).catch(reportInterfaceFailure);
+    });
+    box.append(project, facts, link);
+    for (const decision of ["needs_evidence", "excluded"]) {
+      const button = node("button", decision === "excluded" ? "Exclude" : "Needs evidence");
+      button.type = "button";
+      button.addEventListener("click", () => {
+        queueResumeCommand(`${resumeProfileBase()}/${profile.profile_id}/claim-reviews`, {
+          claim_id: claim.id, expected_review_version: claim.review_version,
+          decision,
+        }).catch(reportInterfaceFailure);
+      });
+      box.append(button);
+    }
+    target.append(box);
+  }
+  const preferences = state.resumeDraft?.path.endsWith("/preference-versions")
+    ? state.resumeDraft.body.preferences : profile.preferences;
+  byId("resume-pref-projects").value = preferences.excluded_project_ids.join(", ");
+  byId("resume-pref-fields").value = preferences.excluded_field_ids.join(", ");
+  byId("resume-pref-locks").value = preferences.locked_item_ids.join(", ");
+  byId("resume-pref-terms").value = preferences.banned_terms.join(", ");
+  byId("resume-pref-bullets").value = preferences.max_bullets_per_project ?? "";
+  byId("resume-pref-order").value = preferences.section_order.join(",");
+  byId("resume-pref-pages").value = String(preferences.page_target);
+  byId("resume-pref-advice").value = preferences.writing_advice;
+}
+
+async function loadResumeProfile() {
+  if (!state.workspace) return;
+  const generation = state.contextGeneration;
+  const workspaceId = state.workspace.workspace_id;
+  let profile;
+  try {
+    profile = await apiFetch(`${resumeProfileBase()}/me`);
+  } catch (error) {
+    if (error.problem?.status !== 404) throw error;
+    profile = null;
+  }
+  if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId) return;
+  state.resumeProfile = profile;
+  renderResumeProfile();
+  if (!profile) byId("resume-profile-status").textContent = "No profile imported in this workspace.";
+}
+
+function splitResumeList(id) {
+  return byId(id).value.split(",").map(value => value.trim()).filter(Boolean);
+}
+
+async function saveResumePreferences() {
+  const profile = state.resumeProfile;
+  if (!profile) return;
+  const bullets = byId("resume-pref-bullets").value;
+  await queueResumeCommand(`${resumeProfileBase()}/${profile.profile_id}/preference-versions`, {
+    expected_version: profile.preference_version,
+    preferences: {
+      schema_version: 1,
+      excluded_project_ids: splitResumeList("resume-pref-projects"),
+      excluded_field_ids: splitResumeList("resume-pref-fields"),
+      locked_item_ids: splitResumeList("resume-pref-locks"),
+      banned_terms: splitResumeList("resume-pref-terms"),
+      max_bullets_per_project: bullets === "" ? null : Number(bullets),
+      section_order: byId("resume-pref-order").value.split(","),
+      page_target: Number(byId("resume-pref-pages").value),
+      writing_advice: byId("resume-pref-advice").value,
+    },
+  });
+}
+
 async function bootstrap() {
   try {
     const response = await fetch("/api/v1/ui-config", { headers: { Accept: "application/json" } });
@@ -1222,10 +1506,12 @@ byId("workspace-select").addEventListener("change", (event) => {
   invalidateSubmission();
   resetProjection();
   resetMaterials();
+  resetResumeProfile();
   state.workspace = selected || null;
   renderWorkspaceMeta();
   hideProblem();
   loadMaterials().catch(reportInterfaceFailure);
+  loadResumeProfile().catch(reportInterfaceFailure);
 });
 
 byId("run-mode").addEventListener("change", updateResumeRequirement);
@@ -1291,7 +1577,37 @@ byId("material-fact-search-form").addEventListener("submit", (event) => {
   event.preventDefault();
   searchMaterialFacts().catch(reportInterfaceFailure);
 });
+byId("resume-profile-file").addEventListener("change", () => {
+  state.resumePreview = null;
+  state.resumeSourceTex = null;
+  renderResumePreview();
+});
+byId("resume-profile-preview").addEventListener("click", () => {
+  previewResumeSource().catch(reportInterfaceFailure);
+});
+byId("resume-profile-import").addEventListener("click", () => {
+  if (!state.resumePreview?.complete || !state.resumeSourceTex || state.resumeProfile) return;
+  queueResumeCommand(`${resumeProfileBase()}/imports`, { source_tex: state.resumeSourceTex })
+    .catch(reportInterfaceFailure);
+});
+byId("resume-profile-retry").addEventListener("click", () => {
+  if (state.resumePending) sendResumeCommand(state.resumePending).catch(reportInterfaceFailure);
+});
+byId("resume-profile-refresh").addEventListener("click", () => {
+  if (!state.resumePending?.conflict) return;
+  state.resumeDraft = state.resumePending;
+  state.resumePending = null;
+  byId("resume-profile-refresh").hidden = true;
+  loadResumeProfile().then(() => {
+    byId("resume-profile-status").textContent = "Current version loaded; your draft remains. Review it before submitting a new request.";
+  }).catch(reportInterfaceFailure);
+});
+byId("resume-preferences-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveResumePreferences().catch(reportInterfaceFailure);
+});
 renderSubmissionControls();
 updateResumeRequirement();
 resetMaterials();
+resetResumeProfile();
 bootstrap();

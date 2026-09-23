@@ -1,0 +1,1 @@
+"""Fixed resume template adapters."""

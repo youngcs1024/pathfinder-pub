@@ -9,6 +9,49 @@ const vm = require("node:vm");
 const historicalSource = readFileSync(join(__dirname, "../fixtures/legacy_ui/pathfinder.js"), "utf8");
 const source = readFileSync(join(__dirname, "../../src/app/api/static/pathfinder.js"), "utf8");
 
+test("resume preview and import retry preserve the exact source and key", async t => {
+  const h = await loadUi(t, { randomUUID: () => "33333333-3333-4333-8333-333333333333" });
+  h.element("resume-profile-file").files = [{ name: "synthetic.tex", text: async () => "PRIVATE-SYNTHETIC-CANARY" }];
+  let attempts = 0;
+  h.route((url, options) => {
+    if (url.endsWith("/import-preview")) return json({
+      template_commit: "synthetic", source_sha256: "a".repeat(64), complete: true,
+      content: null, claims: [], issues: [],
+    });
+    if (url.endsWith("/imports")) {
+      attempts += 1;
+      if (attempts === 1) throw new Error("response lost");
+      return json({ command_id: "command-a", resource_id: "profile-a", status: "completed", replayed: true }, 201);
+    }
+    if (url.endsWith("/profiles/me")) return failure(404);
+    throw new Error(`Unexpected fetch ${url}`);
+  });
+  await h.call("previewResumeSource");
+  assert.equal(h.element("resume-profile-import").disabled, false);
+  await assert.rejects(h.call("queueResumeCommand", "/api/v2/workspaces/workspace-a/profiles/imports",
+    { source_tex: h.state.resumeSourceTex }), /response lost/);
+  h.element("resume-profile-file").files = [{ name: "changed.tex", text: async () => "CHANGED" }];
+  await h.call("sendResumeCommand", h.state.resumePending);
+  const requests = h.calls.filter(item => item.url.endsWith("/imports"));
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].headers.get("Idempotency-Key"), requests[1].headers.get("Idempotency-Key"));
+  assert.equal(requests[0].body, requests[1].body);
+  assert.match(requests[1].body, /PRIVATE-SYNTHETIC-CANARY/);
+});
+
+test("resume version conflict retains preference input and blocks blind retry", async t => {
+  const h = await loadUi(t, { randomUUID: () => "44444444-4444-4444-8444-444444444444" });
+  h.state.resumeProfile = { profile_id: "profile-a", preference_version: 1 };
+  h.element("resume-pref-terms").value = "explicit synthetic term";
+  h.element("resume-pref-order").value = "education,projects,skills";
+  h.element("resume-pref-pages").value = "1";
+  h.route(() => failure(409));
+  await assert.rejects(h.call("saveResumePreferences"));
+  assert.equal(h.element("resume-pref-terms").value, "explicit synthetic term");
+  assert.equal(h.state.resumePending.conflict, true);
+  assert.equal(h.element("resume-profile-retry").hidden, true);
+});
+
 test("material import retry keeps the original key and source selection", async t => {
   const h = await loadUi(t, { randomUUID: () => "11111111-1111-4111-8111-111111111111" });
   h.state.materialProjectId = "project-a";

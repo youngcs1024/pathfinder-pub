@@ -699,6 +699,219 @@ class MaterialFactEvidence(UUIDPrimaryKeyMixin, Base):
     quote: Mapped[str] = mapped_column(Text, nullable=False)
 
 
+class ResumeProfile(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "resume_profiles"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "owner_user_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "owner_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "current_version >= 1 AND current_preference_version >= 1", name="versions"
+        ),
+        Index("ix_resume_profiles_workspace_owner", "workspace_id", "owner_user_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_preference_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class ResumeProfileImport(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_profile_imports"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "profile_id", "id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "profile_id"],
+            ["resume_profiles.workspace_id", "resume_profiles.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("source_sha256 ~ '^[0-9a-f]{64}$'", name="source_sha256"),
+        CheckConstraint("octet_length(source_bytes) BETWEEN 1 AND 131072", name="source_bytes"),
+        Index("ix_resume_profile_imports_workspace_profile", "workspace_id", "profile_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    profile_id: Mapped[UUID] = mapped_column(nullable=False)
+    template_commit: Mapped[str] = mapped_column(Text, nullable=False)
+    source_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    source_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResumeProfileVersion(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_profile_versions"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "profile_id", "version"),
+        ForeignKeyConstraint(
+            ["workspace_id", "profile_id"],
+            ["resume_profiles.workspace_id", "resume_profiles.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "profile_id", "source_import_id"],
+            [
+                "resume_profile_imports.workspace_id",
+                "resume_profile_imports.profile_id",
+                "resume_profile_imports.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "created_by_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version >= 1 AND jsonb_typeof(content_json) = 'object'", name="content"),
+        Index("ix_resume_profile_versions_workspace_profile", "workspace_id", "profile_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    profile_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_import_id: Mapped[UUID] = mapped_column(nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResumePreferenceVersion(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_preference_versions"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "profile_id", "version"),
+        ForeignKeyConstraint(
+            ["workspace_id", "profile_id"],
+            ["resume_profiles.workspace_id", "resume_profiles.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "created_by_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "version >= 1 AND jsonb_typeof(preferences_json) = 'object'", name="preferences"
+        ),
+        Index("ix_resume_preference_versions_workspace_profile", "workspace_id", "profile_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    profile_id: Mapped[UUID] = mapped_column(nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    preferences_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResumeSourceClaim(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_source_claims"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "source_import_id"],
+            ["resume_profile_imports.workspace_id", "resume_profile_imports.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "review_version >= 0 AND char_length(claim_text) BETWEEN 1 AND 4000", name="claim"
+        ),
+        CheckConstraint("jsonb_typeof(source_json) = 'object'", name="source"),
+        Index("ix_resume_source_claims_workspace_import", "workspace_id", "source_import_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_import_id: Mapped[UUID] = mapped_column(nullable=False)
+    project_item_id: Mapped[UUID] = mapped_column(nullable=False)
+    item_id: Mapped[UUID] = mapped_column(nullable=False)
+    field: Mapped[str] = mapped_column(Text, nullable=False)
+    claim_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_json: Mapped[dict[str, object]] = mapped_column(JSONB(none_as_null=True), nullable=False)
+    review_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class ResumeClaimReview(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_claim_reviews"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "claim_id", "version"),
+        ForeignKeyConstraint(
+            ["workspace_id", "claim_id"],
+            ["resume_source_claims.workspace_id", "resume_source_claims.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["material_projects.workspace_id", "material_projects.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "actor_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "version >= 1 AND decision IN ('linked', 'needs_evidence', 'excluded')", name="decision"
+        ),
+        Index("ix_resume_claim_reviews_workspace_claim", "workspace_id", "claim_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    claim_id: Mapped[UUID] = mapped_column(nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    decision: Mapped[str] = mapped_column(Text, nullable=False)
+    project_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    actor_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResumeClaimFactLink(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_claim_fact_links"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "review_id", "fact_version_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "review_id"],
+            ["resume_claim_reviews.workspace_id", "resume_claim_reviews.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_version_id"],
+            ["material_fact_versions.workspace_id", "material_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        Index("ix_resume_claim_fact_links_workspace_review", "workspace_id", "review_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    review_id: Mapped[UUID] = mapped_column(nullable=False)
+    fact_version_id: Mapped[UUID] = mapped_column(nullable=False)
+
+
 class ResumeCommand(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "resume_commands"
     __table_args__ = (

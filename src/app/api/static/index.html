@@ -100,6 +100,38 @@
           </form>
           <div id="material-search-results"></div>
         </section>
+        <section id="resume-profile-panel" class="panel">
+          <h2>Resume profile</h2>
+          <p class="muted">Choose the frozen main.tex. Imported statements need review before they can support a tailored resume.</p>
+          <label>Frozen .tex file <input id="resume-profile-file" type="file" accept=".tex,text/plain"></label>
+          <button id="resume-profile-preview" type="button">Preview import</button>
+          <button id="resume-profile-import" type="button" disabled>Import reviewed preview</button>
+          <button id="resume-profile-retry" type="button" hidden>Retry same request</button>
+          <button id="resume-profile-refresh" type="button" hidden>Refresh after conflict</button>
+          <p id="resume-profile-status" class="muted" aria-live="polite"></p>
+          <div id="resume-profile-preview-result"></div>
+          <div id="resume-profile-current"></div>
+          <h3>Global preferences</h3>
+          <p class="muted">Hard constraints are checked by code. Writing advice guides later generation. Page target still needs external compile review.</p>
+          <form id="resume-preferences-form" hidden>
+            <label>Excluded project item IDs <input id="resume-pref-projects"></label>
+            <label>Excluded field IDs <input id="resume-pref-fields"></label>
+            <label>Locked item IDs <input id="resume-pref-locks"></label>
+            <label>Explicit banned terms <input id="resume-pref-terms"></label>
+            <label>Maximum bullets per project <input id="resume-pref-bullets" type="number" min="0" max="20"></label>
+            <label>Section order <select id="resume-pref-order">
+              <option value="education,projects,skills">Education, projects, skills</option>
+              <option value="projects,education,skills">Projects, education, skills</option>
+              <option value="projects,skills,education">Projects, skills, education</option>
+              <option value="education,skills,projects">Education, skills, projects</option>
+              <option value="skills,education,projects">Skills, education, projects</option>
+              <option value="skills,projects,education">Skills, projects, education</option>
+            </select></label>
+            <label>Page target <select id="resume-pref-pages"><option value="1">1</option><option value="2">2</option></select></label>
+            <label>Writing advice <textarea id="resume-pref-advice" maxlength="2000"></textarea></label>
+            <button type="submit">Save preferences</button>
+          </form>
+        </section>
         <button id="retry-events" type="button" hidden>Resume event reads</button>
         <section id="run-panel" class="panel" hidden></section>
         <div class="grid results">
