@@ -129,7 +129,7 @@ async def _files_for_import(
     return {row.id: row for row in rows}
 
 
-def _add_version(
+async def _add_version(
     session: AsyncSession,
     tenant: TenantContext,
     *,
@@ -155,6 +155,9 @@ def _add_version(
             created_by_user_id=actor,
         )
     )
+    # Persist the parent version before evidence rows with a composite foreign key.
+    if candidate.evidence:
+        await session.flush()
     session.add_all(
         MaterialFactEvidence(
             id=uuid4(),
@@ -287,7 +290,7 @@ class _FactWriter(ResumeCommandWriter):
                     current_version=1,
                 )
             )
-            _add_version(
+            await _add_version(
                 session,
                 tenant,
                 fact_id=fact_id,
@@ -344,7 +347,7 @@ class _FactWriter(ResumeCommandWriter):
             else:
                 status = "rejected"
         fact.current_version += 1
-        version_id = _add_version(
+        version_id = await _add_version(
             session,
             tenant,
             fact_id=fact.id,
@@ -498,7 +501,7 @@ class SqlAlchemyProjectFactStore:
                         current_version=1,
                     )
                 )
-                _add_version(
+                await _add_version(
                     session,
                     tenant,
                     fact_id=fact_id,
