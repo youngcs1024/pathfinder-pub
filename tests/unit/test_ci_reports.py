@@ -45,6 +45,12 @@ def restore_packet():
 
 def test_successful_restore_evidence_survives_both_projections():
     assert "public.resume_commands" in RESTORE_TABLES
+    assert {
+        "public.material_fact_sets",
+        "public.material_facts",
+        "public.material_fact_versions",
+        "public.material_fact_evidence",
+    } <= RESTORE_TABLES
     value = restore_packet()
     value["raw_dump"] = "PRIVATE-CANARY"
     value["tables"]["public.runs"]["body"] = "PRIVATE-CANARY"
