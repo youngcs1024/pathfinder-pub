@@ -7,8 +7,8 @@ from collections.abc import Callable
 from uuid import UUID
 
 from app.agents.resume_generation import GenerationError, ResumeGenerationGraph
-from app.db.resume_generation import SqlAlchemyResumeGenerationStore
 from app.domain.errors import DomainNotFoundError, DomainUnavailableError, DomainValidationError
+from app.domain.resume_generation import ResumeGenerationExecutionPort
 from app.domain.run_execution import (
     RunExecutionCancelledError,
     RunExecutionInvalidError,
@@ -31,7 +31,7 @@ class GenerationRunExecutor:
         self,
         *,
         reader: RunExecutionReader,
-        sessions: SqlAlchemyResumeGenerationStore,
+        sessions: ResumeGenerationExecutionPort,
         model_factory: Callable[[TenantContext, UUID], ChatModelPort],
         tools_factory: Callable[[TenantContext, UUID, object], ToolRuntime],
     ) -> None:

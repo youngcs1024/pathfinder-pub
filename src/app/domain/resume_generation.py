@@ -160,6 +160,14 @@ class ResumeGenerationPort(Protocol):
     async def cancel(self, tenant: TenantContext, session_id: UUID): ...
 
 
+class ResumeGenerationExecutionPort(Protocol):
+    async def execution_inputs(
+        self, tenant: TenantContext, session_id: UUID
+    ) -> GenerationInputs: ...
+    async def spend_allowed(self, tenant: TenantContext, session_id: UUID) -> bool: ...
+    async def reserve_repair(self, tenant: TenantContext, session_id: UUID) -> bool: ...
+
+
 class ResumeGenerationService:
     def __init__(self, port: ResumeGenerationPort) -> None:
         self.port = port
