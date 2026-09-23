@@ -112,7 +112,9 @@ def _runner(sessions, store):
             sessions, ExponentialBackoff(WorkerRuntimeSettings(), Random(1))
         ),
         tenant_service=TenantService(SqlAlchemyTenantResolver(sessions)),
-        executor=RunExecutorDispatcher({"pathfinder-resume-v2": executor}),
+        executor=RunExecutorDispatcher(
+            {"pathfinder-resume-v2": executor, "pathfinder-resume-v3": executor}
+        ),
         settings=WorkerRuntimeSettings(),
         unsupported_work_guard=reader.has_unsupported_pending_work,
     )

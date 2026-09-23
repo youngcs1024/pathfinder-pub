@@ -173,6 +173,7 @@ gate12-comparison: verify-toolchain-quiet
 
 evals-regression: verify-toolchain-quiet
 	@$(UV) run --locked python -m tests.evals.regression
+	@$(UV) run --locked pytest -q tests/unit/agents/test_resume_generation.py
 
 evals-retrieval: verify-toolchain
 	TMPDIR="$(PYTEST_TMPDIR)" $(UV) run --locked pytest -q -s \

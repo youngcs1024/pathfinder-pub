@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-REQUIRED_DATABASE_REVISION: Final = "0022_r32_resume_tex_artifacts"
+REQUIRED_DATABASE_REVISION: Final = "0023_r41_resume_generation"
 _READINESS_TIMEOUT_SECONDS: Final = 1.0
 
 

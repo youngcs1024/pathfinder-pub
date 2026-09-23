@@ -53,6 +53,8 @@ def test_only_approved_v2_and_explicitly_retired_legacy_routes_are_published():
         "/api/v2/workspaces/{workspace_id}/profiles/{profile_id}/item-reviews",
         "/api/v2/workspaces/{workspace_id}/profiles/{profile_id}/preference-versions",
         "/api/v2/workspaces/{workspace_id}/profiles/{profile_id}/claim-reviews",
+        "/api/v2/workspaces/{workspace_id}/resume-sessions",
+        "/api/v2/workspaces/{workspace_id}/resume-sessions/{session_id}/cancel",
     }
     assert all(
         "410" in spec["responses"]

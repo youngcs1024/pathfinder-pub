@@ -23,6 +23,7 @@ from app.db.project_facts import SqlAlchemyProjectFactStore
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.readiness import DatabaseReadinessProbe
 from app.db.resume_artifacts import SqlAlchemyResumeArtifactStore
+from app.db.resume_generation import SqlAlchemyResumeGenerationStore
 from app.db.resume_profiles import SqlAlchemyResumeProfileStore
 from app.db.runs import SqlAlchemyRunStore
 from app.db.runtime_policy import DatabaseComponent, DatabasePoolPolicy
@@ -33,6 +34,7 @@ from app.domain.material import MaterialService
 from app.domain.project_facts import ProjectFactService
 from app.domain.provisioning import ProvisioningService
 from app.domain.resume_artifacts import ResumeArtifactService
+from app.domain.resume_generation import ResumeGenerationService
 from app.domain.resume_profiles import ResumeProfileService
 from app.domain.runs import RunService
 from app.domain.tenancy import TenantService
@@ -74,6 +76,9 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         resume_artifact_service = ResumeArtifactService(
             SqlAlchemyResumeArtifactStore(session_factory)
         )
+        resume_generation_service = ResumeGenerationService(
+            SqlAlchemyResumeGenerationStore(session_factory)
+        )
         application.state.database_engine = engine
         application.state.database_session_factory = session_factory
         application.state.readiness_probe = readiness_probe
@@ -87,6 +92,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.project_fact_service = project_fact_service
         application.state.resume_profile_service = resume_profile_service
         application.state.resume_artifact_service = resume_artifact_service
+        application.state.resume_generation_service = resume_generation_service
         yield
     finally:
         try:
@@ -107,6 +113,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
                 application.state.project_fact_service = None
                 application.state.resume_profile_service = None
                 application.state.resume_artifact_service = None
+                application.state.resume_generation_service = None
                 application.state.database_session_factory = None
                 application.state.database_engine = None
 

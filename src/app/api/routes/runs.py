@@ -6,6 +6,8 @@ from app.api.dependencies import RunServiceDependency, TenantDependency
 from app.api.schemas.runs import (
     RunDetailResponse,
 )
+from app.domain.errors import DomainNotFoundError
+from app.domain.run_payloads import LEGACY_RUN_MODES
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}", tags=["runs"])
 
@@ -26,6 +28,8 @@ async def get_run(
     service: RunServiceDependency,
 ) -> RunDetailResponse:
     record = await service.get_run(tenant=tenant, run_id=run_id)
+    if record.mode not in LEGACY_RUN_MODES:
+        raise DomainNotFoundError
     return RunDetailResponse.model_validate(record)
 
 

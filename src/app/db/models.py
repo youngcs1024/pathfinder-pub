@@ -258,7 +258,7 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "graph_version IN ('pathfinder-research-v1', 'pathfinder-research-v2', "
             "'pathfinder-research-v3', 'pathfinder-research-v4', "
             "'pathfinder-research-v5', 'pathfinder-research-v6', "
-            "'pathfinder-resume-v1', 'pathfinder-resume-v2')",
+            "'pathfinder-resume-v1', 'pathfinder-resume-v2', 'pathfinder-resume-v3')",
             name="graph_version",
         ),
         CheckConstraint(
@@ -880,6 +880,239 @@ class ResumeTexArtifact(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class JobSnapshot(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "job_snapshots"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        CheckConstraint("source IN ('paste', 'upload')", name="source"),
+        CheckConstraint("octet_length(jd_text) BETWEEN 1 AND 32768", name="jd_text"),
+        CheckConstraint("jd_sha256 ~ '^[0-9a-f]{64}$'", name="jd_sha256"),
+        Index("ix_job_snapshots_workspace", "workspace_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str | None] = mapped_column(Text)
+    jd_text: Mapped[str] = mapped_column(Text, nullable=False)
+    jd_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResumeSession(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_sessions"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "run_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "owner_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "profile_version_id"],
+            ["resume_profile_versions.workspace_id", "resume_profile_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "preference_version_id"],
+            ["resume_preference_versions.workspace_id", "resume_preference_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "job_snapshot_id"],
+            ["job_snapshots.workspace_id", "job_snapshots.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "run_id"], ["runs.workspace_id", "runs.id"], ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "current_version_id"],
+            ["resume_versions.workspace_id", "resume_versions.id"],
+            ondelete="RESTRICT",
+            name="fk_resume_sessions_current_version",
+            use_alter=True,
+        ),
+        CheckConstraint("revision >= 0 AND repair_count BETWEEN 0 AND 1", name="state"),
+        CheckConstraint("jsonb_typeof(override_json) = 'object'", name="override_json"),
+        CheckConstraint("jsonb_typeof(budget_json) = 'object'", name="budget_json"),
+        Index("ix_resume_sessions_workspace_owner", "workspace_id", "owner_user_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    owner_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    profile_version_id: Mapped[UUID] = mapped_column(nullable=False)
+    preference_version_id: Mapped[UUID] = mapped_column(nullable=False)
+    job_snapshot_id: Mapped[UUID] = mapped_column(nullable=False)
+    run_id: Mapped[UUID] = mapped_column(nullable=False)
+    current_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    repair_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    override_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    budget_json: Mapped[dict[str, object]] = mapped_column(JSONB(none_as_null=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResumeSessionFact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_session_facts"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "session_id", "fact_version_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "session_id"],
+            ["resume_sessions.workspace_id", "resume_sessions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["material_projects.workspace_id", "material_projects.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_version_id"],
+            ["material_fact_versions.workspace_id", "material_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        Index("ix_resume_session_facts_workspace_session", "workspace_id", "session_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    session_id: Mapped[UUID] = mapped_column(nullable=False)
+    project_id: Mapped[UUID] = mapped_column(nullable=False)
+    fact_version_id: Mapped[UUID] = mapped_column(nullable=False)
+
+
+class ResumeSessionProject(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_session_projects"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "session_id", "project_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "session_id"],
+            ["resume_sessions.workspace_id", "resume_sessions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["material_projects.workspace_id", "material_projects.id"],
+            ondelete="RESTRICT",
+        ),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    session_id: Mapped[UUID] = mapped_column(nullable=False)
+    project_id: Mapped[UUID] = mapped_column(nullable=False)
+
+
+class JobRequirement(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "job_requirements"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "session_id", "ordinal"),
+        ForeignKeyConstraint(
+            ["workspace_id", "session_id"],
+            ["resume_sessions.workspace_id", "resume_sessions.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("kind IN ('explicit', 'preferred', 'inferred')", name="kind"),
+        CheckConstraint("start_offset >= 0 AND end_offset > start_offset", name="offsets"),
+        Index("ix_job_requirements_workspace_session", "workspace_id", "session_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    session_id: Mapped[UUID] = mapped_column(nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    quote: Mapped[str] = mapped_column(Text, nullable=False)
+    inference_basis: Mapped[str | None] = mapped_column(Text)
+
+
+class ResumeVersion(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_versions"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "session_id", "version"),
+        ForeignKeyConstraint(
+            ["workspace_id", "session_id"],
+            ["resume_sessions.workspace_id", "resume_sessions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "artifact_id"],
+            ["resume_tex_artifacts.workspace_id", "resume_tex_artifacts.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version >= 1 AND jsonb_typeof(content_json) = 'object'", name="content"),
+        CheckConstraint("jsonb_typeof(validation_json) = 'object'", name="validation"),
+        Index("ix_resume_versions_workspace_session", "workspace_id", "session_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    session_id: Mapped[UUID] = mapped_column(nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    artifact_id: Mapped[UUID] = mapped_column(nullable=False)
+    content_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    validation_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RequirementCoverage(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "requirement_coverage"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "version_id", "requirement_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "version_id"],
+            ["resume_versions.workspace_id", "resume_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "requirement_id"],
+            ["job_requirements.workspace_id", "job_requirements.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("support IN ('supported', 'partial', 'no_support_found')", name="support"),
+        CheckConstraint(
+            "verification IN ('needs_human_review', 'confirmed_gap', "
+            "'material_insufficient', 'unchecked')",
+            name="verification",
+        ),
+        CheckConstraint("jsonb_typeof(item_ids_json) = 'array'", name="item_ids"),
+        Index("ix_requirement_coverage_workspace_version", "workspace_id", "version_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    version_id: Mapped[UUID] = mapped_column(nullable=False)
+    requirement_id: Mapped[UUID] = mapped_column(nullable=False)
+    support: Mapped[str] = mapped_column(Text, nullable=False)
+    verification: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    item_ids_json: Mapped[list[str]] = mapped_column(JSONB(none_as_null=True), nullable=False)
+
+
+class RequirementCoverageFact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "requirement_coverage_facts"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "coverage_id", "fact_version_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "coverage_id"],
+            ["requirement_coverage.workspace_id", "requirement_coverage.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_version_id"],
+            ["material_fact_versions.workspace_id", "material_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    coverage_id: Mapped[UUID] = mapped_column(nullable=False)
+    fact_version_id: Mapped[UUID] = mapped_column(nullable=False)
 
 
 class ResumeSourceClaim(UUIDPrimaryKeyMixin, Base):

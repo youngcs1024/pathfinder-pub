@@ -16,6 +16,7 @@ from app.db.models import (
     ToolInvocation,
     WorkspaceMembership,
 )
+from app.db.resume_generation import ResumeGenerationPublisher
 from app.db.session import AsyncSessionFactory, transaction
 from app.domain.action_execution import ActionExecutionIdentity
 from app.domain.actions import validate_exact_approval_binding
@@ -32,6 +33,7 @@ from app.domain.provisioning import WorkspaceRole
 from app.domain.run_payloads import (
     EXECUTION_CONTRACTS,
     LEGACY_RUN_MODES,
+    ResumeGenerationCandidateOutputV1,
     RunContractV1,
     RunOutput,
     find_run_contract,
@@ -181,6 +183,7 @@ class SqlAlchemyWorkerJobStore:
         action_recovery_max_attempts: int = 3,
         *,
         execution_contracts: tuple[RunContractV1, ...] = EXECUTION_CONTRACTS,
+        generation_publisher: ResumeGenerationPublisher | None = None,
     ) -> None:
         if (
             isinstance(action_recovery_max_attempts, bool)
@@ -193,6 +196,7 @@ class SqlAlchemyWorkerJobStore:
         self._executable_versions = frozenset(c.graph_version for c in execution_contracts)
         self._retry_delay = retry_delay
         self._action_recovery_max_attempts = action_recovery_max_attempts
+        self._generation_publisher = generation_publisher
 
     def _executable_run_predicate(self):
         return (
@@ -580,6 +584,34 @@ class SqlAlchemyWorkerJobStore:
                 return True
             if run.status != RunStatus.RUNNING.value:
                 raise DomainInvariantError("completed job run is not running")
+            if isinstance(result, ResumeGenerationCandidateOutputV1):
+                if (
+                    self._generation_publisher is None
+                    or run.mode != RunMode.RESUME_GENERATION.value
+                ):
+                    raise DomainInvariantError("generation publisher is unavailable")
+                membership = await session.scalar(
+                    select(WorkspaceMembership)
+                    .where(
+                        WorkspaceMembership.workspace_id == job.workspace_id,
+                        WorkspaceMembership.user_id == job.originating_actor_user_id,
+                        WorkspaceMembership.revoked_at.is_(None),
+                    )
+                    .with_for_update(read=True)
+                )
+                if membership is None:
+                    _mark_run_cancelled(session, run=run, reason="authorization_revoked", now=now)
+                    return True
+                result = await self._generation_publisher.publish(
+                    session,
+                    TenantContext(
+                        job.workspace_id,
+                        job.originating_actor_user_id,
+                        WorkspaceRole(membership.role),
+                    ),
+                    job.run_id,
+                    result,
+                )
             try:
                 contract = find_run_contract(
                     self._execution_contracts, run.graph_version, RunMode(run.mode)

@@ -83,6 +83,16 @@ class FakeChatModel:
                 usage=ModelUsage(input_tokens=0, output_tokens=0),
             )
 
+        if metadata.get("task") == "resume_generation":
+            content = (
+                '{"requirements":[],"questions":["offline_fake_no_semantic_generation"]}'
+                if metadata.get("graph_node") == "analyze_job"
+                else '{"bullets":[],"omitted_fact_version_ids":[],"questions":[]}'
+            )
+            return ChatModelResult(
+                content=content, usage=ModelUsage(input_tokens=0, output_tokens=0)
+            )
+
         return _DIRECT_CHAT_RESULT.model_copy(deep=True)
 
 

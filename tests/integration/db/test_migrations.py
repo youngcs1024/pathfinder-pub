@@ -48,6 +48,14 @@ APP_TABLES = {
     "resume_claim_reviews",
     "resume_claim_fact_links",
     "resume_tex_artifacts",
+    "job_snapshots",
+    "resume_sessions",
+    "resume_session_projects",
+    "resume_session_facts",
+    "job_requirements",
+    "resume_versions",
+    "requirement_coverage",
+    "requirement_coverage_facts",
 }
 
 
@@ -99,7 +107,7 @@ def test_migration_round_trip_constraints_and_metadata(database_url: str) -> Non
                 WorkspaceMembership.metadata,
             )
 
-            assert revision == "0022_r32_resume_tex_artifacts"
+            assert revision == "0023_r41_resume_generation"
         assert metadata_diff == []
         with engine.connect() as connection:
             vector_extension = connection.scalar(
@@ -723,7 +731,7 @@ def test_gate65_downgrade_fails_closed_for_recovery_event(
 
     with connect_database(migrated_database_url) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0022_r32_resume_tex_artifacts",
+            "0023_r41_resume_generation",
         )
     engine.dispose()
 
@@ -849,7 +857,7 @@ def test_gate65_database_enforces_unknown_terminal_shape_and_lifecycle_events(
             )
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0022_r32_resume_tex_artifacts"
+                "0023_r41_resume_generation"
             )
     finally:
         engine.dispose()
@@ -883,7 +891,7 @@ def test_gate6_upgrade_from_0009_and_empty_downgrade_reupgrade(database_url: str
         command.upgrade(config, "head")
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0022_r32_resume_tex_artifacts"
+                "0023_r41_resume_generation"
             )
     finally:
         engine.dispose()
@@ -1042,7 +1050,7 @@ def test_gate6_downgrade_fails_closed_for_every_gate6_business_fact(
             command.downgrade(config, "0009_gate5_graph_rag")
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0022_r32_resume_tex_artifacts"
+                "0023_r41_resume_generation"
             )
     finally:
         engine.dispose()
@@ -1209,7 +1217,7 @@ def test_qwen_profile_migration_preserves_legacy_rows_and_downgrade_fails_closed
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT count(*) FROM llm_invocations")) == 2
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0022_r32_resume_tex_artifacts"
+                "0023_r41_resume_generation"
             )
     finally:
         engine.dispose()
@@ -1343,7 +1351,7 @@ def test_gate5_migration_downgrade_fails_closed_when_gate5_evidence_exists(
 
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == (
-                "0022_r32_resume_tex_artifacts"
+                "0023_r41_resume_generation"
             )
     finally:
         engine.dispose()

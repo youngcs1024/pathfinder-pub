@@ -351,6 +351,7 @@ class _ProfileWriter(ResumeCommandWriter):
                     actor_user_id=tenant.actor_user_id,
                 )
             )
+            await session.flush()
             session.add_all(
                 ResumeClaimFactLink(
                     id=uuid4(),

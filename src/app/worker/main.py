@@ -17,6 +17,8 @@ from app.db.llm_invocations import SqlAlchemyInvocationRecorder
 from app.db.material import SqlAlchemyMaterialStore
 from app.db.project_facts import SqlAlchemyProjectFactStore, extractor_identity
 from app.db.readiness import DatabaseReadinessProbe
+from app.db.resume_artifacts import SqlAlchemyResumeArtifactStore
+from app.db.resume_generation import ResumeGenerationPublisher, SqlAlchemyResumeGenerationStore
 from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.runtime_policy import DatabaseComponent, DatabasePoolPolicy
 from app.db.session import create_database_engine, create_session_factory
@@ -34,6 +36,7 @@ from app.tools.contracts import ToolRunContext
 from app.tools.material_retrieval import MATERIAL_POLICY, create_material_registry
 from app.worker.backoff import ExponentialBackoff
 from app.worker.dispatcher import RunExecutorDispatcher
+from app.worker.generation_executor import GenerationRunExecutor
 from app.worker.material_executor import MaterialRunExecutor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WORKER_READY_PATH, WorkerRuntimeSettings
@@ -87,6 +90,7 @@ async def run_worker(settings: Settings | None = None) -> None:
         aliases = load_aliases(resolved_settings.material_aliases_file)
         materials = SqlAlchemyMaterialStore(sessions, aliases)
         facts = SqlAlchemyProjectFactStore(sessions)
+        generation_sessions = SqlAlchemyResumeGenerationStore(sessions)
         if resolved_settings.llm_mode == "qwen":
             if (
                 resolved_settings.qwen_api_key is None
@@ -170,6 +174,44 @@ async def run_worker(settings: Settings | None = None) -> None:
                 ),
             ),
         )
+        generation_executor = GenerationRunExecutor(
+            reader=reader,
+            sessions=generation_sessions,
+            model_factory=lambda tenant, run_id: llm.create_chat_model(
+                LLMInvocationContext(
+                    workspace_id=tenant.workspace_id,
+                    actor_user_id=tenant.actor_user_id,
+                    run_id=run_id,
+                )
+            ),
+            tools_factory=lambda tenant, run_id, scope: create_material_registry(
+                scope=scope,
+                service=DocumentRetrievalService(
+                    repository=document_repository,
+                    embedding=llm.create_embedding_model(
+                        LLMInvocationContext(
+                            workspace_id=tenant.workspace_id,
+                            actor_user_id=tenant.actor_user_id,
+                            run_id=run_id,
+                        )
+                    ),
+                ),
+                tenant=tenant,
+                recorder=SqlAlchemyToolInvocationRecorder(sessions),
+            ).bind(
+                policy_name=MATERIAL_POLICY,
+                context=ToolRunContext(
+                    workspace_id=tenant.workspace_id,
+                    actor_user_id=tenant.actor_user_id,
+                    run_id=run_id,
+                    action_intent_id=None,
+                    approval_request_id=None,
+                    trusted_target=None,
+                    deadline=monotonic() + 120,
+                    cancellation=_NoCancellation(),
+                ),
+            ),
+        )
         if await reader.has_unsupported_pending_work():
             raise RuntimeError("unsupported pending work requires the previous executor")
         for handled_signal in (signal.SIGINT, signal.SIGTERM):
@@ -178,9 +220,20 @@ async def run_worker(settings: Settings | None = None) -> None:
         runtime = WorkerRuntimeSettings()
         runner = WorkerRunner(
             worker_id=f"pathfinder-worker-{uuid4()}",
-            store=SqlAlchemyWorkerJobStore(sessions, ExponentialBackoff(runtime, Random())),
+            store=SqlAlchemyWorkerJobStore(
+                sessions,
+                ExponentialBackoff(runtime, Random()),
+                generation_publisher=ResumeGenerationPublisher(
+                    SqlAlchemyResumeArtifactStore(sessions)
+                ),
+            ),
             tenant_service=TenantService(SqlAlchemyTenantResolver(sessions)),
-            executor=RunExecutorDispatcher({"pathfinder-resume-v2": material_executor}),
+            executor=RunExecutorDispatcher(
+                {
+                    "pathfinder-resume-v2": material_executor,
+                    "pathfinder-resume-v3": generation_executor,
+                }
+            ),
             settings=runtime,
             unsupported_work_guard=reader.has_unsupported_pending_work,
         )
