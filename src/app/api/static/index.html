@@ -54,6 +54,27 @@
             </form>
           </section>
         </div>
+        <section id="materials-panel" class="panel">
+          <h2>Project materials</h2>
+          <p id="materials-availability" class="muted">Loading authorized sources…</p>
+          <form id="material-project-form">
+            <label>New project name <input id="material-project-name" maxlength="120" required></label>
+            <button type="submit">Create project</button>
+          </form>
+          <label>Project <select id="material-project-select"></select></label>
+          <form id="material-source-form">
+            <label>Authorized source alias <select id="material-alias-select"></select></label>
+            <button id="material-add-source" type="submit">Add source</button>
+          </form>
+          <div id="material-source-list"></div>
+          <button id="material-import" type="button">Import selected sources</button>
+          <button id="material-retry-import" type="button" hidden>Retry same import request</button>
+          <button id="material-refresh-import" type="button" hidden>Refresh progress</button>
+          <label>Previous imports <select id="material-import-history"></select></label>
+          <button id="material-view-import" type="button">View selected import</button>
+          <p id="material-import-status" class="muted" aria-live="polite"></p>
+          <div id="material-import-progress"></div>
+        </section>
         <button id="retry-events" type="button" hidden>Resume event reads</button>
         <section id="run-panel" class="panel" hidden></section>
         <div class="grid results">

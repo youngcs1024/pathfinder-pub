@@ -22,6 +22,7 @@ ROOT_FILES = frozenset(
         "Makefile",
         "alembic.ini",
         "compose.dev.yaml",
+        "compose.materials.example.yaml",
         "compose.yaml",
         "pyproject.toml",
         "uv.lock",

@@ -43,9 +43,10 @@ def test_typed_resume_roundtrip_is_not_research_or_an_arbitrary_dictionary(contr
     assert isinstance(request.payload.receipt_id, UUID)
     assert output.model_dump(mode="json") == raw
     assert RunExecutionResult(status=RunStatus.COMPLETED, result=output).result == output
-    assert EXECUTION_CONTRACTS == ()
+    registered = find_run_contract(EXECUTION_CONTRACTS, contract.graph_version, contract.mode)
+    assert registered.input_model.__name__.startswith("MaterialPreparationRunInputV1")
     with pytest.raises(ValueError, match="unsupported"):
-        find_run_contract(EXECUTION_CONTRACTS, contract.graph_version, contract.mode)
+        find_run_contract(EXECUTION_CONTRACTS, "pathfinder-resume-v2", contract.mode)
 
 
 @pytest.mark.parametrize(

@@ -15,6 +15,16 @@ const state = {
   eventsUrl: null,
   contextGeneration: 0,
   submission: null,
+  materialAliases: [],
+  materialProjects: [],
+  materialSources: [],
+  materialImports: [],
+  materialViewedImport: null,
+  materialProjectId: null,
+  materialSubmission: null,
+  materialProjectSubmission: null,
+  materialSourceSubmission: null,
+  materialPollTimer: null,
 };
 
 const byId = (id) => document.getElementById(id);
@@ -265,6 +275,7 @@ function resetProjection() {
 }
 
 function logout(showLogin) {
+  resetMaterials();
   invalidateSubmission();
   abortStream();
   clearSession();
@@ -301,6 +312,7 @@ async function loadMe() {
     appPanel.hidden = false;
     renderSessionActions();
     renderWorkspaces(me.workspaces || []);
+    loadMaterials().catch(reportInterfaceFailure);
     hideProblem();
   } catch (error) {
     if (generation !== state.contextGeneration) return;
@@ -320,6 +332,7 @@ function renderWorkspaces(workspaces) {
   if (state.workspace?.workspace_id !== selected?.workspace_id) {
     invalidateSubmission();
     resetProjection();
+    resetMaterials();
   }
   state.workspace = selected;
   if (selected) select.value = selected.workspace_id;
@@ -762,6 +775,219 @@ function updateResumeRequirement() {
     : "Optional for research.";
 }
 
+function resetMaterials() {
+  if (state.materialPollTimer !== null) window.clearTimeout(state.materialPollTimer);
+  state.materialPollTimer = null;
+  state.materialAliases = [];
+  state.materialProjects = [];
+  state.materialSources = [];
+  state.materialImports = [];
+  state.materialViewedImport = null;
+  state.materialProjectId = null;
+  state.materialSubmission = null;
+  state.materialProjectSubmission = null;
+  state.materialSourceSubmission = null;
+  clear(byId("material-project-select"));
+  clear(byId("material-alias-select"));
+  clear(byId("material-source-list"));
+  clear(byId("material-import-history"));
+  clear(byId("material-import-progress"));
+  byId("material-import-status").textContent = "";
+  byId("material-retry-import").hidden = true;
+  byId("material-refresh-import").hidden = true;
+  byId("material-import").disabled = true;
+}
+
+function materialBase() {
+  return `/api/v2/workspaces/${state.workspace.workspace_id}`;
+}
+
+function renderMaterials() {
+  const projectSelect = byId("material-project-select");
+  clear(projectSelect);
+  for (const project of state.materialProjects) {
+    const option = node("option", project.name);
+    option.value = project.id;
+    projectSelect.append(option);
+  }
+  if (state.materialProjectId) projectSelect.value = state.materialProjectId;
+  projectSelect.disabled = !state.materialProjects.length;
+  const aliasSelect = byId("material-alias-select");
+  clear(aliasSelect);
+  for (const alias of state.materialAliases) {
+    const option = node("option", `${alias.name} · ${alias.kind}`);
+    option.value = alias.name;
+    aliasSelect.append(option);
+  }
+  byId("material-add-source").disabled = !state.materialProjectId || !state.materialAliases.length;
+  byId("materials-availability").textContent = state.materialAliases.length
+    ? "Select authorized sources. Imports read fixed snapshots in the background."
+    : "No material aliases are configured. Ask the operator to register a private allowlist before importing.";
+  const list = byId("material-source-list");
+  clear(list);
+  for (const source of state.materialSources) {
+    const label = node("label");
+    const box = node("input");
+    box.type = "checkbox";
+    box.id = `material-source-${source.id}`;
+    box.checked = true;
+    label.append(box, node("span", `${source.alias} · ${source.kind}`));
+    list.append(label);
+  }
+  byId("material-import").disabled = !state.materialSources.length || Boolean(state.materialSubmission);
+  const history = byId("material-import-history");
+  clear(history);
+  for (const item of state.materialImports) {
+    const option = node("option", `${item.created_at} · ${item.status} · ${item.id}`);
+    option.value = item.id;
+    history.append(option);
+  }
+  byId("material-view-import").disabled = !state.materialImports.length;
+}
+
+async function loadMaterials() {
+  if (!state.workspace) return;
+  const generation = state.contextGeneration;
+  const workspaceId = state.workspace.workspace_id;
+  const [aliases, projects] = await Promise.all([
+    apiFetch(`${materialBase()}/material-aliases`),
+    apiFetch(`${materialBase()}/projects`),
+  ]);
+  if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId) return;
+  state.materialAliases = aliases;
+  state.materialProjects = projects;
+  if (!projects.some(item => item.id === state.materialProjectId)) {
+    state.materialProjectId = projects[0]?.id || null;
+  }
+  state.materialSources = state.materialProjectId
+    ? await apiFetch(`${materialBase()}/projects/${state.materialProjectId}/material-sources`)
+    : [];
+  state.materialImports = state.materialProjectId
+    ? await apiFetch(`${materialBase()}/projects/${state.materialProjectId}/imports`)
+    : [];
+  if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId) return;
+  renderMaterials();
+}
+
+async function createMaterialProject() {
+  const name = byId("material-project-name").value;
+  const pending = state.materialProjectSubmission?.name === name
+    ? state.materialProjectSubmission : { name, key: crypto.randomUUID() };
+  state.materialProjectSubmission = pending;
+  const project = await apiFetch(`${materialBase()}/projects`, {
+    method: "POST", headers: { "Idempotency-Key": pending.key }, body: { name },
+  });
+  state.materialProjectSubmission = null;
+  state.materialProjectId = project.id;
+  byId("material-project-form").reset();
+  await loadMaterials();
+}
+
+async function addMaterialSource() {
+  const projectId = state.materialProjectId;
+  if (!projectId) return;
+  const alias = byId("material-alias-select").value;
+  const pending = state.materialSourceSubmission?.projectId === projectId
+    && state.materialSourceSubmission?.alias === alias
+    ? state.materialSourceSubmission : { projectId, alias, key: crypto.randomUUID() };
+  state.materialSourceSubmission = pending;
+  await apiFetch(`${materialBase()}/projects/${projectId}/material-sources`, {
+    method: "POST", headers: { "Idempotency-Key": pending.key }, body: { alias },
+  });
+  state.materialSourceSubmission = null;
+  await loadMaterials();
+}
+
+function renderMaterialProgress(progress) {
+  const container = byId("material-import-progress");
+  clear(container);
+  const summary = node("p", `Import ${progress.status} · ${progress.snapshots.length} source snapshots`);
+  container.append(summary);
+  if (progress.error_category) container.append(node("p", `Failure: ${progress.error_category}`));
+  for (const snapshot of progress.snapshots) {
+    const item = node("article", null, "source");
+    item.append(node("strong", `${snapshot.source_id} · ${snapshot.source_revision}`));
+    item.append(node("p", `${snapshot.indexed_count}/${snapshot.file_count} files indexed`));
+    if (snapshot.unindexed_paths.length) {
+      item.append(node("p", `${snapshot.unindexed_paths.length} files not indexed`, "muted"));
+    }
+    container.append(item);
+  }
+}
+
+async function refreshMaterialImport() {
+  const submission = state.materialViewedImport || state.materialSubmission;
+  if (!submission?.accepted || state.workspace?.workspace_id !== submission.workspaceId) return;
+  if (state.materialPollTimer !== null) window.clearTimeout(state.materialPollTimer);
+  state.materialPollTimer = null;
+  const progress = await apiFetch(
+    `/api/v2/workspaces/${submission.workspaceId}/projects/${submission.projectId}/imports/${submission.accepted.import_id}`,
+  );
+  if (state.materialViewedImport !== submission && state.materialSubmission !== submission) return;
+  renderMaterialProgress(progress);
+  byId("material-import-status").textContent = `Import ${progress.status}.`;
+  byId("material-refresh-import").hidden = false;
+  if (["queued", "running"].includes(progress.status)) {
+    state.materialPollTimer = window.setTimeout(() => {
+      refreshMaterialImport().catch(reportInterfaceFailure);
+    }, 2000);
+  } else if (state.materialSubmission === submission) {
+    state.materialViewedImport = submission;
+    state.materialSubmission = null;
+    byId("material-import").disabled = !state.materialSources.length;
+    state.materialImports.unshift({
+      id: submission.accepted.import_id,
+      status: progress.status,
+      created_at: new Date().toISOString(),
+    });
+    renderMaterials();
+  }
+}
+
+async function sendMaterialImport(submission) {
+  if (state.materialSubmission !== submission || state.workspace?.workspace_id !== submission.workspaceId) return;
+  try {
+    const accepted = await apiFetch(
+      `/api/v2/workspaces/${submission.workspaceId}/projects/${submission.projectId}/imports`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": submission.key },
+        body: submission.body,
+      },
+    );
+    if (state.materialSubmission !== submission) return;
+    submission.accepted = accepted;
+    state.materialViewedImport = submission;
+    byId("material-retry-import").hidden = true;
+    byId("material-import-status").textContent = `Accepted import ${accepted.import_id}.`;
+    await refreshMaterialImport();
+  } catch (error) {
+    if (state.materialSubmission !== submission) return;
+    byId("material-retry-import").hidden = error.problem?.status === 409;
+    byId("material-import-status").textContent = "The response was not confirmed. Retry sends the same key and source selection.";
+    throw error;
+  }
+}
+
+async function submitMaterialImport() {
+  if (!state.workspace || !state.materialProjectId || state.materialSubmission) return;
+  const sourceIds = state.materialSources
+    .filter(item => byId(`material-source-${item.id}`).checked)
+    .map(item => item.id);
+  if (!sourceIds.length) return;
+  const submission = {
+    workspaceId: state.workspace.workspace_id,
+    projectId: state.materialProjectId,
+    key: crypto.randomUUID(),
+    body: { source_ids: sourceIds },
+    accepted: null,
+  };
+  state.materialSubmission = submission;
+  state.materialViewedImport = submission;
+  byId("material-import").disabled = true;
+  await sendMaterialImport(submission);
+}
+
 async function bootstrap() {
   try {
     const response = await fetch("/api/v1/ui-config", { headers: { Accept: "application/json" } });
@@ -798,9 +1024,11 @@ byId("workspace-select").addEventListener("change", (event) => {
   const selected = (state.me.workspaces || []).find((item) => item.workspace_id === event.target.value);
   invalidateSubmission();
   resetProjection();
+  resetMaterials();
   state.workspace = selected || null;
   renderWorkspaceMeta();
   hideProblem();
+  loadMaterials().catch(reportInterfaceFailure);
 });
 
 byId("run-mode").addEventListener("change", updateResumeRequirement);
@@ -817,6 +1045,45 @@ byId("retry-run-read").addEventListener("click", () => {
 byId("retry-events").addEventListener("click", () => {
   recoverEvents().catch(reportInterfaceFailure);
 });
+byId("material-project-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  createMaterialProject().catch(reportInterfaceFailure);
+});
+byId("material-project-select").addEventListener("change", (event) => {
+  if (state.materialPollTimer !== null) window.clearTimeout(state.materialPollTimer);
+  state.materialPollTimer = null;
+  state.materialSubmission = null;
+  state.materialViewedImport = null;
+  state.materialProjectId = event.target.value;
+  clear(byId("material-import-progress"));
+  byId("material-retry-import").hidden = true;
+  byId("material-refresh-import").hidden = true;
+  loadMaterials().catch(reportInterfaceFailure);
+});
+byId("material-source-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  addMaterialSource().catch(reportInterfaceFailure);
+});
+byId("material-import").addEventListener("click", () => {
+  submitMaterialImport().catch(reportInterfaceFailure);
+});
+byId("material-retry-import").addEventListener("click", () => {
+  if (state.materialSubmission) sendMaterialImport(state.materialSubmission).catch(reportInterfaceFailure);
+});
+byId("material-refresh-import").addEventListener("click", () => {
+  refreshMaterialImport().catch(reportInterfaceFailure);
+});
+byId("material-view-import").addEventListener("click", () => {
+  const importId = byId("material-import-history").value;
+  if (!importId || !state.workspace || !state.materialProjectId) return;
+  state.materialViewedImport = {
+    workspaceId: state.workspace.workspace_id,
+    projectId: state.materialProjectId,
+    accepted: { import_id: importId },
+  };
+  refreshMaterialImport().catch(reportInterfaceFailure);
+});
 renderSubmissionControls();
 updateResumeRequirement();
+resetMaterials();
 bootstrap();

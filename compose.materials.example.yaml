@@ -1,0 +1,23 @@
+# Optional operator override. Supply private host paths when launching Compose.
+# The API sees alias metadata only; only the worker mounts material roots.
+services:
+  api:
+    environment:
+      PF_MATERIAL_ALIASES_FILE: /run/pathfinder/material-aliases.json
+    volumes:
+      - type: bind
+        source: ${PF_MATERIAL_ALIASES_HOST_FILE:?Set a private alias configuration file}
+        target: /run/pathfinder/material-aliases.json
+        read_only: true
+  worker:
+    environment:
+      PF_MATERIAL_ALIASES_FILE: /run/pathfinder/material-aliases.json
+    volumes:
+      - type: bind
+        source: ${PF_MATERIAL_ALIASES_HOST_FILE:?Set a private alias configuration file}
+        target: /run/pathfinder/material-aliases.json
+        read_only: true
+      - type: bind
+        source: ${PF_MATERIAL_ROOT_HOST:?Set the authorized material root}
+        target: /materials
+        read_only: true

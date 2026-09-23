@@ -82,7 +82,7 @@ def test_migration_round_trip_constraints_and_metadata(database_url: str) -> Non
                 WorkspaceMembership.metadata,
             )
 
-            assert revision == "0017_r12_resume_commands"
+            assert revision == "0018_r21_material_snapshots"
         assert metadata_diff == []
         with engine.connect() as connection:
             vector_extension = connection.scalar(

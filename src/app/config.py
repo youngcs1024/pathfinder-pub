@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import urlsplit
 
@@ -111,6 +112,9 @@ class Settings(BaseSettings):
         validation_alias="PF_API_HOST",
     )
     log_level: LogLevel = Field(default="INFO", validation_alias="PF_LOG_LEVEL")
+    material_aliases_file: Path | None = Field(
+        default=None, validation_alias="PF_MATERIAL_ALIASES_FILE"
+    )
     qwen_workspace_id: SecretStr | None = Field(
         default=None,
         validation_alias="PF_QWEN_WORKSPACE_ID",

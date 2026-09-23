@@ -6,8 +6,10 @@ FROM python:3.12.13-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e2631
 RUN --mount=type=tmpfs,target=/var/lib/apt/lists \
     --mount=type=tmpfs,target=/var/cache/apt \
     apt-get update \
+    && apt-get install --yes --no-install-recommends git \
     && apt-get install --yes --no-install-recommends --only-upgrade libpcre2-8-0=10.42-1+deb12u1 \
-    && test "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" = '10.42-1+deb12u1'
+    && test "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" = '10.42-1+deb12u1' \
+    && git --version
 
 FROM python-base AS builder
 

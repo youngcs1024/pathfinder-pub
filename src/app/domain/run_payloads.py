@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -60,6 +61,31 @@ class ResumeRunInputV1[Payload: BaseModel](_ResumeEnvelopeV1[Payload]):
 
 class ResumeRunOutputV1[Payload: BaseModel](_ResumeEnvelopeV1[Payload]):
     """A typed result, never an unvalidated dictionary or a successful placeholder."""
+
+
+class MaterialPreparationInputV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    import_id: UUID
+    project_id: UUID
+    source_ids: tuple[UUID, ...]
+
+
+class MaterialPreparationResultV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    import_id: UUID
+    snapshot_ids: tuple[UUID, ...]
+    file_count: int
+    document_count: int
+
+
+class MaterialPreparationRunInputV1(ResumeRunInputV1[MaterialPreparationInputV1]):
+    mode: Literal[RunMode.MATERIAL_PREPARATION] = RunMode.MATERIAL_PREPARATION
+    payload: MaterialPreparationInputV1
+
+
+class MaterialPreparationRunOutputV1(ResumeRunOutputV1[MaterialPreparationResultV1]):
+    mode: Literal[RunMode.MATERIAL_PREPARATION] = RunMode.MATERIAL_PREPARATION
+    payload: MaterialPreparationResultV1
 
 
 type RunInput = ResearchRequestV1 | ResumeRunInputV1
@@ -148,8 +174,15 @@ LEGACY_READ_CONTRACTS = tuple(
     for mode in (RunMode.RESEARCH, RunMode.APPLICATION)
 )
 # No resume handlers exist in R1.1. A readable schema does not authorize execution.
-EXECUTION_CONTRACTS: tuple[RunContractV1, ...] = ()
-READ_CONTRACTS = LEGACY_READ_CONTRACTS
+EXECUTION_CONTRACTS: tuple[RunContractV1, ...] = (
+    RunContractV1(
+        RunMode.MATERIAL_PREPARATION,
+        "pathfinder-resume-v1",
+        MaterialPreparationRunInputV1,
+        (MaterialPreparationRunOutputV1,),
+    ),
+)
+READ_CONTRACTS = LEGACY_READ_CONTRACTS + EXECUTION_CONTRACTS
 
 
 def find_run_contract(

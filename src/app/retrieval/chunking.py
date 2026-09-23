@@ -30,6 +30,8 @@ class PreparedIngestionChunk:
     text: str = field(repr=False)
     content_hash: str
     token_count: int
+    start_line: int | None = None
+    end_line: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

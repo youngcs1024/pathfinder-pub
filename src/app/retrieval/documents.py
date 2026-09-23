@@ -74,6 +74,8 @@ class ImmutableDocumentChunk:
     content_hash: str
     token_count: int
     embedding: tuple[float, ...] = field(repr=False)
+    start_line: int | None = None
+    end_line: int | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -83,6 +85,8 @@ class ExpectedDocumentChunk:
     text: str = field(repr=False)
     content_hash: str
     token_count: int
+    start_line: int | None = None
+    end_line: int | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -170,6 +174,8 @@ def build_document_expectation(source: PreparedIngestionSource) -> ExpectedDocum
                 text=chunk.text,
                 content_hash=chunk.content_hash,
                 token_count=chunk.token_count,
+                start_line=chunk.start_line,
+                end_line=chunk.end_line,
             )
             for chunk in source.chunks
         ),
@@ -248,6 +254,8 @@ class DocumentIngestionService:
                             content_hash=chunk.content_hash,
                             token_count=chunk.token_count,
                             embedding=vector,
+                            start_line=chunk.start_line,
+                            end_line=chunk.end_line,
                         )
                         for chunk, vector in zip(source.chunks, vectors, strict=True)
                     ),

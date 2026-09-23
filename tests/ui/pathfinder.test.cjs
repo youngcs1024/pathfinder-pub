@@ -9,6 +9,44 @@ const vm = require("node:vm");
 const historicalSource = readFileSync(join(__dirname, "../fixtures/legacy_ui/pathfinder.js"), "utf8");
 const source = readFileSync(join(__dirname, "../../src/app/api/static/pathfinder.js"), "utf8");
 
+test("material import retry keeps the original key and source selection", async t => {
+  const h = await loadUi(t, { randomUUID: () => "11111111-1111-4111-8111-111111111111" });
+  h.state.materialProjectId = "project-a";
+  h.state.materialSources = [{ id: "source-a", alias: "synthetic", kind: "file" }];
+  h.element("material-source-source-a").checked = true;
+  let submissions = 0;
+  h.route((url, options) => {
+    if (url.endsWith("/imports") && options.method === "POST") {
+      submissions += 1;
+      if (submissions === 1) throw new Error("response lost");
+      return json({ command_id: "command-a", run_id: "run-a", import_id: "import-a", status: "queued", replayed: true }, 202);
+    }
+    if (url.endsWith("/imports/import-a")) {
+      return json({ id: "import-a", project_id: "project-a", run_id: "run-a", status: "completed", error_category: null, snapshots: [] });
+    }
+    throw new Error(`Unexpected fetch ${url}`);
+  });
+  await assert.rejects(h.call("submitMaterialImport"), /response lost/);
+  assert.equal(h.element("material-retry-import").hidden, false);
+  await h.call("sendMaterialImport", h.state.materialSubmission);
+  const requests = h.calls.filter(item => item.url.endsWith("/imports") && item.method === "POST");
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].headers.get("Idempotency-Key"), requests[1].headers.get("Idempotency-Key"));
+  assert.equal(requests[0].body, requests[1].body);
+  assert.equal(h.element("material-import-status").textContent, "Import completed.");
+});
+
+test("empty material aliases disable import setup", async t => {
+  const h = await loadUi(t);
+  h.state.materialAliases = [];
+  h.state.materialProjects = [];
+  h.state.materialSources = [];
+  h.call("renderMaterials");
+  assert.equal(h.element("material-add-source").disabled, true);
+  assert.equal(h.element("material-import").disabled, true);
+  assert.match(h.element("materials-availability").textContent, /No material aliases/);
+});
+
 class Element {
   constructor(tag = "div") {
     this.tagName = tag;

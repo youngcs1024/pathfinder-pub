@@ -18,6 +18,7 @@ from app.auth.supabase import SupabaseActorProvider, SupabaseJwtVerifier
 from app.config import Settings
 from app.db.approvals import SqlAlchemyApprovalStore
 from app.db.events import SqlAlchemyRunEventReader
+from app.db.material import SqlAlchemyMaterialStore
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.readiness import DatabaseReadinessProbe
 from app.db.runs import SqlAlchemyRunStore
@@ -25,9 +26,11 @@ from app.db.runtime_policy import DatabaseComponent, DatabasePoolPolicy
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.domain.approvals import ApprovalService
+from app.domain.material import MaterialService
 from app.domain.provisioning import ProvisioningService
 from app.domain.runs import RunService
 from app.domain.tenancy import TenantService
+from app.material.aliases import load_aliases
 from app.obs.logging import configure_logging
 
 _STATIC_DIR = Path(__file__).resolve().parent / "api" / "static"
@@ -56,6 +59,10 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         run_service = RunService(SqlAlchemyRunStore(session_factory))
         run_event_reader = SqlAlchemyRunEventReader(session_factory)
         approval_service = ApprovalService(SqlAlchemyApprovalStore(session_factory))
+        material_aliases = load_aliases(application.state.settings.material_aliases_file)
+        material_service = MaterialService(
+            SqlAlchemyMaterialStore(session_factory, material_aliases)
+        )
         application.state.database_engine = engine
         application.state.database_session_factory = session_factory
         application.state.readiness_probe = readiness_probe
@@ -64,6 +71,8 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.run_service = run_service
         application.state.run_event_reader = run_event_reader
         application.state.approval_service = approval_service
+        application.state.material_aliases = material_aliases
+        application.state.material_service = material_service
         yield
     finally:
         try:
@@ -79,6 +88,8 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
                 application.state.run_service = None
                 application.state.run_event_reader = None
                 application.state.approval_service = None
+                application.state.material_aliases = None
+                application.state.material_service = None
                 application.state.database_session_factory = None
                 application.state.database_engine = None
 

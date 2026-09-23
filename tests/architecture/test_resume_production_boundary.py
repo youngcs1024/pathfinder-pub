@@ -32,7 +32,7 @@ def test_production_roots_do_not_wire_retired_execution_or_test_assemblies():
         )
 
 
-def test_only_explicitly_retired_write_routes_are_published():
+def test_only_material_writes_and_explicitly_retired_legacy_routes_are_published():
     app = create_app()
     writes = [
         (path, spec["post"]) for path, spec in app.openapi()["paths"].items() if "post" in spec
@@ -41,10 +41,17 @@ def test_only_explicitly_retired_write_routes_are_published():
         "/api/v1/workspaces/{workspace_id}/runs",
         "/api/v1/workspaces/{workspace_id}/runs/{run_id}/cancel",
         "/api/v1/workspaces/{workspace_id}/action-intents/{action_intent_id}/decision",
+        "/api/v2/workspaces/{workspace_id}/projects",
+        "/api/v2/workspaces/{workspace_id}/projects/{project_id}/material-sources",
+        "/api/v2/workspaces/{workspace_id}/projects/{project_id}/imports",
     }
     assert all(
         "410" in spec["responses"]
         and "200" not in spec["responses"]
         and "202" not in spec["responses"]
-        for _, spec in writes
+        for path, spec in writes
+        if path.startswith("/api/v1/")
+    )
+    assert all(
+        "410" not in spec["responses"] for path, spec in writes if path.startswith("/api/v2/")
     )

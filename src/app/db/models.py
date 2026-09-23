@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     Text,
     UniqueConstraint,
@@ -76,10 +77,10 @@ class WorkspaceMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class Document(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "documents"
     __table_args__ = (
-        CheckConstraint("source_type IN ('markdown', 'text')", name="source_type"),
+        CheckConstraint("source_type IN ('markdown', 'text', 'code')", name="source_type"),
         CheckConstraint("char_length(title) BETWEEN 1 AND 255", name="title"),
         CheckConstraint("char_length(source_name) BETWEEN 1 AND 255", name="source_name"),
-        CheckConstraint("octet_length(content) BETWEEN 1 AND 400000", name="content"),
+        CheckConstraint("octet_length(content) BETWEEN 1 AND 1048576", name="content"),
         CheckConstraint("content_hash ~ '^[0-9a-f]{64}$'", name="content_hash"),
         CheckConstraint(
             "normalization_version ~ '^[a-z0-9][a-z0-9._-]{0,99}$'",
@@ -134,6 +135,11 @@ class DocumentChunk(UUIDPrimaryKeyMixin, Base):
     __table_args__ = (
         CheckConstraint("ordinal >= 0", name="ordinal"),
         CheckConstraint(
+            "(start_line IS NULL AND end_line IS NULL) OR "
+            "(start_line > 0 AND end_line >= start_line)",
+            name="line_range",
+        ),
+        CheckConstraint(
             "section IS NULL OR char_length(section) BETWEEN 1 AND 800", name="section"
         ),
         CheckConstraint("octet_length(text) BETWEEN 1 AND 800", name="text"),
@@ -161,6 +167,8 @@ class DocumentChunk(UUIDPrimaryKeyMixin, Base):
     )
     document_id: Mapped[UUID] = mapped_column(nullable=False)
     ordinal: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    start_line: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    end_line: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     section: Mapped[str | None] = mapped_column(Text, nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
@@ -255,7 +263,7 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "graph_version IN ('pathfinder-research-v1', 'pathfinder-research-v2', "
             "'pathfinder-research-v3', 'pathfinder-research-v4', "
-            "'pathfinder-research-v5', 'pathfinder-research-v6')",
+            "'pathfinder-research-v5', 'pathfinder-research-v6', 'pathfinder-resume-v1')",
             name="graph_version",
         ),
         CheckConstraint(
@@ -410,6 +418,146 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     finished_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+
+class MaterialProject(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "material_projects"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "created_by_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("char_length(name) BETWEEN 1 AND 120", name="name"),
+        Index("ix_material_projects_workspace_id", "workspace_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class MaterialSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "material_sources"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["material_projects.workspace_id", "material_projects.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("alias_digest ~ '^[0-9a-f]{64}$'", name="alias_digest"),
+        CheckConstraint("kind IN ('git', 'file')", name="kind"),
+        Index("ix_material_sources_workspace_project", "workspace_id", "project_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    project_id: Mapped[UUID] = mapped_column(nullable=False)
+    alias_name: Mapped[str] = mapped_column(Text, nullable=False)
+    alias_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class MaterialImport(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "material_imports"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "run_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["material_projects.workspace_id", "material_projects.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "run_id"], ["runs.workspace_id", "runs.id"], ondelete="RESTRICT"
+        ),
+        CheckConstraint("jsonb_typeof(source_ids) = 'array'", name="source_ids"),
+        CheckConstraint(
+            "cache_digest IS NULL OR cache_digest ~ '^[0-9a-f]{64}$'",
+            name="cache_digest",
+        ),
+        Index("ix_material_imports_workspace_project", "workspace_id", "project_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    project_id: Mapped[UUID] = mapped_column(nullable=False)
+    run_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_ids: Mapped[list[str]] = mapped_column(JSONB(none_as_null=True), nullable=False)
+    cache_digest: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class MaterialSnapshot(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "material_snapshots"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "import_id", "source_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "import_id"],
+            ["material_imports.workspace_id", "material_imports.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "source_id"],
+            ["material_sources.workspace_id", "material_sources.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("manifest_digest ~ '^[0-9a-f]{64}$'", name="manifest_digest"),
+        CheckConstraint("cache_digest ~ '^[0-9a-f]{64}$'", name="cache_digest"),
+        CheckConstraint("jsonb_typeof(inventory_json) = 'object'", name="inventory_json"),
+        Index("ix_material_snapshots_workspace_import", "workspace_id", "import_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    import_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_revision: Mapped[str] = mapped_column(Text, nullable=False)
+    manifest_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    cache_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    inventory_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class MaterialSnapshotFile(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "material_snapshot_files"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "snapshot_id", "path"),
+        ForeignKeyConstraint(
+            ["workspace_id", "snapshot_id"],
+            ["material_snapshots.workspace_id", "material_snapshots.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "document_id"],
+            ["documents.workspace_id", "documents.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("octet_length(content) <= 1048576", name="content"),
+        CheckConstraint("content_digest ~ '^[0-9a-f]{64}$'", name="content_digest"),
+        Index("ix_material_snapshot_files_workspace_snapshot", "workspace_id", "snapshot_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    snapshot_id: Mapped[UUID] = mapped_column(nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    document_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
