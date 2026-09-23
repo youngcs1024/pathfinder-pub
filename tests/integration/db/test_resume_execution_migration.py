@@ -37,8 +37,9 @@ def test_upgrade_preserves_history_removes_defaults_and_can_reverse_when_empty_o
         engine.dispose()
 
 
-def test_downgrade_refuses_future_resume_data_without_erasing_it(migrated_database_url):
-    engine = sa.create_engine(migrated_database_url)
+def test_downgrade_refuses_future_resume_data_without_erasing_it(database_url):
+    command.upgrade(alembic_config(database_url), NEW_HEAD)
+    engine = sa.create_engine(database_url)
     try:
         with engine.begin() as connection:
             _seed_gate6_migration_parent(
@@ -53,7 +54,7 @@ def test_downgrade_refuses_future_resume_data_without_erasing_it(migrated_databa
                 )
             )
         with pytest.raises(RuntimeError, match="cannot be safely downgraded"):
-            command.downgrade(alembic_config(migrated_database_url), OLD_HEAD)
+            command.downgrade(alembic_config(database_url), OLD_HEAD)
         with engine.connect() as connection:
             assert connection.scalar(sa.text("SELECT version_num FROM alembic_version")) == NEW_HEAD
             assert connection.scalar(sa.text("SELECT mode FROM runs")) == "material_preparation"

@@ -23,6 +23,7 @@ expected_public_tables(table_name) AS (
         ('run_events'),
         ('run_jobs'),
         ('runs'),
+        ('resume_commands'),
         ('tool_invocations'),
         ('users'),
         ('workspace_memberships'),
@@ -71,6 +72,33 @@ run_request_identity_schema AS (
               AND constraint_row.contype = 'u' AND constraint_row.convalidated
               AND index_row.indisvalid AND NOT index_row.indnullsnotdistinct
         ) AS valid
+),
+resume_command_schema AS (
+    SELECT
+        (SELECT count(*) = 5
+         FROM pg_constraint
+         WHERE conrelid = to_regclass('public.resume_commands')
+           AND conname IN (
+             'ck_resume_commands_kind',
+             'ck_resume_commands_digest_version',
+             'ck_resume_commands_request_digest',
+             'ck_resume_commands_receipt_version',
+             'ck_resume_commands_receipt_json'
+           ) AND contype = 'c' AND convalidated)
+        AND EXISTS (
+            SELECT 1 FROM pg_constraint AS constraint_row
+            JOIN pg_index AS index_row ON index_row.indexrelid = constraint_row.conindid
+            WHERE constraint_row.conrelid = to_regclass('public.resume_commands')
+              AND constraint_row.conname = 'uq_resume_commands_actor_request'
+              AND constraint_row.contype = 'u' AND constraint_row.convalidated
+              AND index_row.indisvalid
+        )
+        AND (SELECT count(*) = 2
+             FROM pg_constraint
+             WHERE conrelid = to_regclass('public.resume_commands')
+               AND conname IN ('fk_resume_commands_actor_membership',
+                               'fk_resume_commands_run')
+               AND contype = 'f' AND convalidated) AS valid
 ),
 fixture_run AS (
     SELECT run.*
@@ -379,6 +407,7 @@ snapshot AS (
         ),
         'checks', jsonb_build_object(
             'run_request_identity_schema', (SELECT valid FROM run_request_identity_schema),
+            'resume_command_schema', (SELECT valid FROM resume_command_schema),
             'all_public_tables_present', (
                 SELECT bool_and(present) FROM public_table_presence
             ),

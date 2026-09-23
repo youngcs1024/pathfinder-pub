@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from starlette.datastructures import Headers
 
 from app.api.errors import InvalidIdempotencyKeyError, install_exception_handlers
-from app.api.run_request_identity import parse_idempotency_key
+from app.api.run_request_identity import parse_idempotency_key, require_idempotency_key
 
 KEY = "12345678-1234-4234-9234-123456789abc"
 
@@ -54,6 +54,13 @@ def test_raw_duplicate_headers_are_not_collapsed() -> None:
     headers = Headers(raw=[(b"idempotency-key", KEY.encode())] * 2)
     with pytest.raises(InvalidIdempotencyKeyError):
         parse_idempotency_key(headers.getlist("Idempotency-Key"))
+
+
+def test_new_command_key_is_required_without_changing_legacy_optional_parser() -> None:
+    assert parse_idempotency_key([]) is None
+    assert require_idempotency_key([KEY]) == UUID(KEY)
+    with pytest.raises(InvalidIdempotencyKeyError):
+        require_idempotency_key([])
 
 
 async def test_parser_error_uses_safe_problem_handler_in_test_only_route() -> None:

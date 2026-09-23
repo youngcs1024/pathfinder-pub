@@ -413,6 +413,53 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class ResumeCommand(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_commands"
+    __table_args__ = (
+        CheckConstraint("kind ~ '^[a-z][a-z0-9_]{0,63}$'", name="kind"),
+        CheckConstraint("digest_version = 1", name="digest_version"),
+        CheckConstraint("request_digest ~ '^[0-9a-f]{64}$'", name="request_digest"),
+        CheckConstraint("receipt_version = 1", name="receipt_version"),
+        CheckConstraint("jsonb_typeof(receipt_json) = 'object'", name="receipt_json"),
+        UniqueConstraint(
+            "workspace_id",
+            "actor_user_id",
+            "client_request_id",
+            name="uq_resume_commands_actor_request",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "actor_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            name="fk_resume_commands_actor_membership",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "run_id"],
+            ["runs.workspace_id", "runs.id"],
+            name="fk_resume_commands_run",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_resume_commands_workspace_id", "workspace_id"),
+    )
+
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    actor_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    client_request_id: Mapped[UUID] = mapped_column(nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    digest_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    receipt_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    receipt_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class RunJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "run_jobs"
     __table_args__ = (

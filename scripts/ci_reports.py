@@ -205,7 +205,7 @@ def restore_projection(value):
             "cleanup",
         },
         "old_revision": {"0014_gate6_action_recovery"},
-        "revision": {"0016_r1_execution_contracts"},
+        "revision": {"0017_r12_resume_commands"},
         "graph": {"pathfinder-research-v6"},
         "postgres_image": {"pgvector/pgvector:0.8.5-pg16"},
     }.items():

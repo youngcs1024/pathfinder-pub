@@ -122,6 +122,7 @@ def _snapshot(*, run_id: str, document_id: str, global_runs: int = 1) -> dict[st
             "all_checkpoint_tables_present": True,
             "runs_has_no_thread_id": True,
             "run_request_identity_schema": True,
+            "resume_command_schema": True,
             "fixture_run_exactly_one": True,
             "fixture_document_exactly_one": True,
             "fixture_document_matches_run": True,

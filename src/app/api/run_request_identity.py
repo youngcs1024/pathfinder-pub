@@ -26,3 +26,11 @@ def parse_idempotency_key(values: Sequence[str]) -> UUID | None:
     ):
         raise InvalidIdempotencyKeyError()
     return UUID(value)
+
+
+def require_idempotency_key(values: Sequence[str]) -> UUID:
+    """New mutating business commands cannot silently omit their request key."""
+    key = parse_idempotency_key(values)
+    if key is None:
+        raise InvalidIdempotencyKeyError()
+    return key
