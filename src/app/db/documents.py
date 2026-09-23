@@ -126,8 +126,6 @@ class SqlAlchemyDocumentRepository:
                         workspace_id=identity.workspace_id,
                         document_id=inserted_id,
                         ordinal=chunk.ordinal,
-                        start_line=chunk.start_line,
-                        end_line=chunk.end_line,
                         section=chunk.section,
                         text=chunk.text,
                         content_hash=chunk.content_hash,
@@ -170,8 +168,6 @@ class SqlAlchemyDocumentRepository:
                         text=chunk.text,
                         content_hash=chunk.content_hash,
                         token_count=chunk.token_count,
-                        start_line=chunk.start_line,
-                        end_line=chunk.end_line,
                     )
                     for chunk in representation.chunks
                 ),
@@ -299,8 +295,6 @@ class SqlAlchemyDocumentRepository:
                     actual.text,
                     actual.content_hash,
                     actual.token_count,
-                    actual.start_line,
-                    actual.end_line,
                     actual.embedding_model,
                 )
                 != (
@@ -309,8 +303,6 @@ class SqlAlchemyDocumentRepository:
                     wanted.text,
                     wanted.content_hash,
                     wanted.token_count,
-                    wanted.start_line,
-                    wanted.end_line,
                     identity.embedding_model,
                 )
                 for actual, wanted in zip(chunks, expected_chunks, strict=True)

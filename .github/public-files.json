@@ -239,6 +239,7 @@
     "src/app/db/migrations/versions/0016_r1_execution_contracts.py",
     "src/app/db/migrations/versions/0017_r12_resume_commands.py",
     "src/app/db/migrations/versions/0018_r21_material_snapshots.py",
+    "src/app/db/migrations/versions/0019_r21_material_line_ranges.py",
     "src/app/db/migrations/versions/__init__.py",
     "src/app/db/mock_submissions.py",
     "src/app/db/models.py",

@@ -135,11 +135,6 @@ class DocumentChunk(UUIDPrimaryKeyMixin, Base):
     __table_args__ = (
         CheckConstraint("ordinal >= 0", name="ordinal"),
         CheckConstraint(
-            "(start_line IS NULL AND end_line IS NULL) OR "
-            "(start_line > 0 AND end_line >= start_line)",
-            name="line_range",
-        ),
-        CheckConstraint(
             "section IS NULL OR char_length(section) BETWEEN 1 AND 800", name="section"
         ),
         CheckConstraint("octet_length(text) BETWEEN 1 AND 800", name="text"),
@@ -167,8 +162,6 @@ class DocumentChunk(UUIDPrimaryKeyMixin, Base):
     )
     document_id: Mapped[UUID] = mapped_column(nullable=False)
     ordinal: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    start_line: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    end_line: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     section: Mapped[str | None] = mapped_column(Text, nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
@@ -546,6 +539,10 @@ class MaterialSnapshotFile(UUIDPrimaryKeyMixin, Base):
         ),
         CheckConstraint("octet_length(content) <= 1048576", name="content"),
         CheckConstraint("content_digest ~ '^[0-9a-f]{64}$'", name="content_digest"),
+        CheckConstraint(
+            "line_ranges_json IS NULL OR jsonb_typeof(line_ranges_json) = 'array'",
+            name="line_ranges_json",
+        ),
         Index("ix_material_snapshot_files_workspace_snapshot", "workspace_id", "snapshot_id"),
     )
     workspace_id: Mapped[UUID] = mapped_column(
@@ -556,6 +553,9 @@ class MaterialSnapshotFile(UUIDPrimaryKeyMixin, Base):
     content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     content_digest: Mapped[str] = mapped_column(Text, nullable=False)
     document_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    line_ranges_json: Mapped[list[dict[str, int]] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

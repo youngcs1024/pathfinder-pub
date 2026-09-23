@@ -115,6 +115,12 @@ class Settings(BaseSettings):
     material_aliases_file: Path | None = Field(
         default=None, validation_alias="PF_MATERIAL_ALIASES_FILE"
     )
+
+    @field_validator("material_aliases_file", mode="before")
+    @classmethod
+    def normalize_empty_material_aliases_file(cls, value: object) -> object:
+        return None if value == "" else value
+
     qwen_workspace_id: SecretStr | None = Field(
         default=None,
         validation_alias="PF_QWEN_WORKSPACE_ID",

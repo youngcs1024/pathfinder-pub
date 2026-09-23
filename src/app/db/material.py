@@ -258,6 +258,7 @@ class _ImportWriter(ResumeCommandWriter):
                 graph_version="pathfinder-resume-v1",
             )
         )
+        await session.flush()
         session.add(
             RunJob(
                 id=uuid4(),
@@ -705,7 +706,11 @@ class SqlAlchemyMaterialStore:
             )
 
     async def attach_document(
-        self, tenant: TenantContext, file_id: UUID, document_id: UUID
+        self,
+        tenant: TenantContext,
+        file_id: UUID,
+        document_id: UUID,
+        line_ranges: tuple[tuple[int, int], ...],
     ) -> None:
         async with transaction(self.sessions) as session:
             await _active_role(session, tenant)
@@ -721,4 +726,11 @@ class SqlAlchemyMaterialStore:
                 raise DomainNotFoundError
             if row.document_id is not None and row.document_id != document_id:
                 raise DomainInvariantError("snapshot file document identity changed")
+            encoded = [
+                {"ordinal": index, "start_line": start, "end_line": end}
+                for index, (start, end) in enumerate(line_ranges)
+            ]
+            if row.line_ranges_json is not None and row.line_ranges_json != encoded:
+                raise DomainInvariantError("snapshot file line ranges changed")
             row.document_id = document_id
+            row.line_ranges_json = encoded

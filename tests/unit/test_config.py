@@ -28,6 +28,7 @@ _CONFIG_ENV_NAMES = (
     "PF_DB_MAX_OVERFLOW",
     "PF_LLM_MODE",
     "PF_LOG_LEVEL",
+    "PF_MATERIAL_ALIASES_FILE",
     "PF_MOCK_PORTAL_BASE_URL",
     "PF_QWEN_CHAT_MODEL",
     "PF_QWEN_EMBEDDING_DIMENSION",
@@ -48,6 +49,13 @@ def _clear_config_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+def test_empty_compose_material_alias_setting_keeps_import_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PF_MATERIAL_ALIASES_FILE", "")
+    assert Settings().material_aliases_file is None
+
+
 def test_settings_use_safe_offline_defaults() -> None:
     settings = Settings()
 
@@ -61,6 +69,7 @@ def test_settings_use_safe_offline_defaults() -> None:
     assert settings.supabase_issuer is None
     assert settings.supabase_jwks_url is None
     assert settings.trace_mode == "off"
+    assert settings.material_aliases_file is None
     assert settings.qwen_chat_model == "qwen3.6-flash-2026-04-16"
     assert settings.qwen_reasoning_effort == "medium"
     assert settings.qwen_embedding_model == "text-embedding-v4"

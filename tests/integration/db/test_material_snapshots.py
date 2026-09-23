@@ -87,6 +87,7 @@ def _runner(sessions, store):
     executor = MaterialRunExecutor(
         reader=reader,
         materials=store,
+        aliases=store.aliases,
         ingestion_factory=lambda tenant, run_id: DocumentIngestionService(
             repository=document_repository,
             embedding=factory.create_embedding_model(
@@ -116,7 +117,7 @@ async def test_code_and_independent_document_keep_provenance_and_refresh(
             SqlAlchemyProvisioningStore(sessions)
         ).provision_personal_workspace("material-r21")
         tenant = await TenantService(SqlAlchemyTenantResolver(sessions)).resolve_tenant(
-            identity.workspace_id, identity.user_id
+            workspace_id=identity.workspace_id, actor_user_id=identity.user_id
         )
         aliases, docs = _fixture_aliases(tmp_path, tenant.workspace_id)
         store = SqlAlchemyMaterialStore(sessions, aliases)
@@ -158,6 +159,8 @@ async def test_code_and_independent_document_keep_provenance_and_refresh(
             ).all()
             assert files[0].document_id is not None
             assert len({item.document_id for item in files}) == 2
+            code_file = next(item for item in files if item.path == "main.py")
+            assert code_file.line_ranges_json == [{"ordinal": 0, "start_line": 1, "end_line": 1}]
             first_doc = await session.scalar(
                 select(Document).where(Document.id == files[0].document_id)
             )
@@ -194,7 +197,7 @@ async def test_code_and_independent_document_keep_provenance_and_refresh(
             SqlAlchemyProvisioningStore(sessions)
         ).provision_personal_workspace("material-other")
         foreign = await TenantService(SqlAlchemyTenantResolver(sessions)).resolve_tenant(
-            other.workspace_id, other.user_id
+            workspace_id=other.workspace_id, actor_user_id=other.user_id
         )
         with pytest.raises(DomainNotFoundError):
             await store.get_import(foreign, project["id"], accepted.receipt.resource_id)

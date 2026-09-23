@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-REQUIRED_DATABASE_REVISION: Final = "0018_r21_material_snapshots"
+REQUIRED_DATABASE_REVISION: Final = "0019_r21_material_line_ranges"
 _READINESS_TIMEOUT_SECONDS: Final = 1.0
 
 

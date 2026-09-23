@@ -106,6 +106,7 @@ async def run_worker(settings: Settings | None = None) -> None:
         material_executor = MaterialRunExecutor(
             reader=reader,
             materials=materials,
+            aliases=aliases,
             ingestion_factory=lambda tenant, run_id: DocumentIngestionService(
                 repository=document_repository,
                 embedding=llm.create_embedding_model(

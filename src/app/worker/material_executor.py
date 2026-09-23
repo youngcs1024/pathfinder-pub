@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Protocol
 from uuid import UUID
 
-from app.db.material import SqlAlchemyMaterialStore
 from app.domain.errors import DomainNotFoundError, DomainUnavailableError, DomainValidationError
 from app.domain.run_execution import (
     RunExecutionCancelledError,
@@ -20,8 +20,9 @@ from app.domain.run_payloads import (
 from app.domain.runs import RunStatus
 from app.domain.tenancy import TenantContext
 from app.llm.factory import LLMAccountingError, LLMProviderError
+from app.material.aliases import MaterialAliasRegistry
 from app.material.chunking import prepare_material_file
-from app.material.reader import MaterialFile, MaterialReadError, read_alias
+from app.material.reader import MaterialFile, MaterialRead, MaterialReadError, read_alias
 from app.retrieval.chunking import PreparedIngestionBatch
 from app.retrieval.documents import (
     DocumentIngestionAuthorizationError,
@@ -33,16 +34,56 @@ from app.worker.contracts import RunExecutionResult
 MAX_INDEX_CHUNKS = 100
 
 
+class MaterialSourceView(Protocol):
+    alias_name: str
+    alias_digest: str
+
+
+class MaterialFileView(Protocol):
+    id: UUID
+    path: str
+    content: bytes
+    content_digest: str
+    document_id: UUID | None
+
+
+class MaterialExecutionPort(Protocol):
+    async def source_for_execution(
+        self, tenant: TenantContext, import_id: UUID, source_id: UUID
+    ) -> MaterialSourceView: ...
+    async def existing_snapshot(
+        self, tenant: TenantContext, import_id: UUID, source_id: UUID
+    ) -> UUID | None: ...
+    async def persist_snapshot(
+        self, tenant: TenantContext, import_id: UUID, source_id: UUID, read: MaterialRead
+    ) -> UUID: ...
+    async def snapshot_files(
+        self, tenant: TenantContext, snapshot_id: UUID
+    ) -> list[MaterialFileView]: ...
+    async def attach_document(
+        self,
+        tenant: TenantContext,
+        file_id: UUID,
+        document_id: UUID,
+        line_ranges: tuple[tuple[int, int], ...],
+    ) -> None: ...
+    async def record_import_cache_digest(
+        self, tenant: TenantContext, import_id: UUID, source_ids: tuple[UUID, ...]
+    ) -> str: ...
+
+
 class MaterialRunExecutor:
     def __init__(
         self,
         *,
         reader: RunExecutionReader,
-        materials: SqlAlchemyMaterialStore,
+        materials: MaterialExecutionPort,
+        aliases: MaterialAliasRegistry,
         ingestion_factory,
     ) -> None:
         self.reader = reader
         self.materials = materials
+        self.aliases = aliases
         self.ingestion_factory = ingestion_factory
 
     async def execute(
@@ -78,7 +119,7 @@ class MaterialRunExecutor:
                     tenant, payload.import_id, source_id
                 )
                 try:
-                    alias = self.materials.aliases.get(source.alias_name, tenant.workspace_id)
+                    alias = self.aliases.get(source.alias_name, tenant.workspace_id)
                 except DomainValidationError:
                     raise MaterialReadError("alias_unavailable") from None
                 if alias.digest != source.alias_digest:
@@ -129,7 +170,12 @@ class MaterialRunExecutor:
                         tenant=tenant,
                         batch=PreparedIngestionBatch((prepared,)),
                     )
-                    await self.materials.attach_document(tenant, item.id, document_id)
+                    await self.materials.attach_document(
+                        tenant,
+                        item.id,
+                        document_id,
+                        tuple((chunk.start_line, chunk.end_line) for chunk in prepared.chunks),
+                    )
                     document_count += 1
                     indexed_chunks += len(prepared.chunks)
             if document_count == 0:

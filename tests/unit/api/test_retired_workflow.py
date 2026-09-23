@@ -78,7 +78,12 @@ async def test_retired_routes_preserve_authentication_and_tenant_isolation(suffi
 async def test_production_has_no_mock_routes_or_unimplemented_v2_routes():
     app = create_app(Settings(log_level="ERROR"))
     paths = tuple(app.openapi()["paths"])
-    assert not any("mock" in path or path.startswith("/api/v2") for path in paths)
+    assert not any("mock" in path for path in paths)
+    assert all(
+        path.startswith("/api/v2/workspaces/{workspace_id}/")
+        for path in paths
+        if path.startswith("/api/v2")
+    )
     assert (
         await runs._request(app, "POST", "/internal/mock-portal/submissions", json={})
     ).status_code == 404
