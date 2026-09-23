@@ -99,6 +99,18 @@ test("saved session is recovered by list and URL without a new POST", async t =>
   assert.ok(h.calls.every(call => (call.method || "GET") === "GET"));
 });
 
+test("changing context aborts an outstanding first draft read", async t => {
+  const h = await loadUi(t);
+  h.route(() => new Promise(() => {}));
+  const loading = h.call("openResumeSession", "session-a");
+  await until(() => h.calls.length === 1);
+  const signal = h.calls[0].signal;
+  h.call("resetResumeGeneration");
+  assert.equal(signal.aborted, true);
+  await loading;
+  assert.equal(h.state.resumeSession, null);
+});
+
 test("coverage labels keep unchecked material separate from confirmed gap and render text safely", async t => {
   const h = await loadUi(t);
   const detail = resumeDetail();
@@ -392,6 +404,10 @@ async function loadUi(t, { randomUUID, confirm = () => true, historical = false 
     return elements.get(id);
   };
   element("run-mode").value = "research";
+  element("resume-job-pages").value = "1";
+  element("resume-job-model-calls").value = "6";
+  element("resume-job-tool-calls").value = "2";
+  element("resume-job-cost").value = "2";
   const clock = fakeClock();
   const calls = [];
   let route = () => { throw new Error("Unexpected fetch"); };

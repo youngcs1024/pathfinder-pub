@@ -313,6 +313,7 @@ async function loadMe() {
     const me = await apiFetch("/api/v1/me");
     if (generation !== state.contextGeneration) return;
     if (state.me?.user_id !== me.user_id) {
+      resetResumeGeneration();
       invalidateSubmission();
       resetProjection();
     }

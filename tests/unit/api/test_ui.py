@@ -31,16 +31,22 @@ async def test_root_and_local_static_assets_are_public_and_served() -> None:
 
     root = await _get(application, "/")
     javascript = await _get(application, "/static/pathfinder.js")
+    generation_javascript = await _get(application, "/static/resume_generation_ui.js")
     stylesheet = await _get(application, "/static/pathfinder.css")
 
     assert root.status_code == 200
     assert root.headers["content-type"].startswith("text/html")
     assert 'src="/static/pathfinder.js"' in root.text
+    assert 'src="/static/resume_generation_ui.js"' in root.text
     assert 'href="/static/pathfinder.css"' in root.text
     assert "http://" not in root.text
     assert "https://" not in root.text
     assert javascript.status_code == 200
     assert javascript.headers["content-type"].startswith(
+        ("text/javascript", "application/javascript")
+    )
+    assert generation_javascript.status_code == 200
+    assert generation_javascript.headers["content-type"].startswith(
         ("text/javascript", "application/javascript")
     )
     assert stylesheet.status_code == 200
@@ -57,7 +63,12 @@ async def test_static_requests_do_not_resolve_actor_or_execute_product_services(
     application.state.run_event_reader = sentinel
     application.state.approval_service = sentinel
 
-    for path in ("/", "/static/pathfinder.js", "/static/pathfinder.css"):
+    for path in (
+        "/",
+        "/static/pathfinder.js",
+        "/static/resume_generation_ui.js",
+        "/static/pathfinder.css",
+    ):
         response = await _get(application, path)
         assert response.status_code == 200
 
@@ -116,12 +127,15 @@ async def test_supabase_ui_config_exposes_only_trusted_browser_values() -> None:
 def test_packaged_static_files_exist_and_javascript_uses_safe_browser_contract() -> None:
     html_path = _STATIC_DIR / "index.html"
     javascript_path = _STATIC_DIR / "pathfinder.js"
+    generation_javascript_path = _STATIC_DIR / "resume_generation_ui.js"
     stylesheet_path = _STATIC_DIR / "pathfinder.css"
 
     assert html_path.is_file()
     assert javascript_path.is_file()
+    assert generation_javascript_path.is_file()
     assert stylesheet_path.is_file()
     source = javascript_path.read_text(encoding="utf-8")
+    generation_source = generation_javascript_path.read_text(encoding="utf-8")
     html = html_path.read_text(encoding="utf-8")
 
     for required in ("fetch", "Authorization", "Last-Event-ID", "AbortController"):
@@ -141,10 +155,15 @@ def test_packaged_static_files_exist_and_javascript_uses_safe_browser_contract()
         "console.",
     ):
         assert forbidden not in source
-    assert "access_token=" not in source
-    assert "refresh_token=" not in source
+        assert forbidden not in generation_source
+    for asset in (source, generation_source):
+        assert "access_token=" not in asset
+        assert "refresh_token=" not in asset
     assert '<script src="http' not in html
-    assert re.findall(r"<script\b[^>]*>", html) == ['<script src="/static/pathfinder.js" defer>']
+    assert re.findall(r"<script\b[^>]*>", html) == [
+        '<script src="/static/resume_generation_ui.js" defer>',
+        '<script src="/static/pathfinder.js" defer>',
+    ]
     assert re.findall(r"<link\b[^>]*rel=\"stylesheet\"[^>]*>", html) == [
         '<link rel="stylesheet" href="/static/pathfinder.css">'
     ]

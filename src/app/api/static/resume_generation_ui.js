@@ -23,6 +23,8 @@ function rememberResumeSession(sessionId) {
 
 function resetResumeGeneration() {
   state.resumeGeneration = (state.resumeGeneration || 0) + 1;
+  state.resumeRequestController?.abort();
+  state.resumeRequestController = new AbortController();
   state.resumeStreamController?.abort();
   state.resumeStreamController = null;
   state.resumeSessionId = null;
@@ -93,7 +95,7 @@ async function loadResumeSessions() {
   const generation = state.contextGeneration;
   const resumeGeneration = state.resumeGeneration;
   const workspaceId = state.workspace.workspace_id;
-  const sessions = await apiFetch(resumeBase());
+  const sessions = await apiFetch(resumeBase(), { signal: state.resumeRequestController.signal });
   if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId
       || resumeGeneration !== state.resumeGeneration) return;
   state.resumeSessions = sessions;
@@ -105,16 +107,17 @@ async function loadResumeSessions() {
 }
 
 async function refreshResumeDetail(sessionId, generation) {
-  const detail = await apiFetch(`${resumeBase()}/${sessionId}`);
+  const signal = state.resumeRequestController.signal;
+  const detail = await apiFetch(`${resumeBase()}/${sessionId}`, { signal });
   if (detail.session_id !== sessionId) throw new Error("Session identity mismatch");
   let version = null;
   let artifact = null;
   if (detail.current_version_id) {
-    version = await apiFetch(`${resumeBase()}/${sessionId}/versions/${detail.current_version_id}`);
+    version = await apiFetch(`${resumeBase()}/${sessionId}/versions/${detail.current_version_id}`, { signal });
     if (version.version_id !== detail.current_version_id || version.session_id !== sessionId) {
       throw new Error("Draft version identity mismatch");
     }
-    artifact = await apiFetch(`/api/v2/workspaces/${state.workspace.workspace_id}/artifacts/${version.artifact_id}`);
+    artifact = await apiFetch(`/api/v2/workspaces/${state.workspace.workspace_id}/artifacts/${version.artifact_id}`, { signal });
     if (artifact.artifact_id !== version.artifact_id) throw new Error("Artifact identity mismatch");
   }
   if (generation !== state.resumeGeneration || state.resumeSessionId !== sessionId) return;
@@ -350,6 +353,7 @@ async function sendResumeSubmission(submission) {
   try {
     const receipt = await apiFetch(resumeBase(), {
       method: "POST", headers: { "Idempotency-Key": submission.key }, body: submission.body,
+      signal: state.resumeRequestController.signal,
     });
     if (submission !== state.resumeSubmission) return;
     if (!receipt.session_id || !receipt.run_id) throw new Error("Invalid session receipt.");
@@ -379,7 +383,9 @@ async function sendResumeSubmission(submission) {
 async function cancelResumeSession() {
   const sessionId = state.resumeSessionId;
   if (!sessionId || state.resumeTerminal) return;
-  await apiFetch(`${resumeBase()}/${sessionId}/cancel`, { method: "POST" });
+  await apiFetch(`${resumeBase()}/${sessionId}/cancel`, {
+    method: "POST", signal: state.resumeRequestController.signal,
+  });
   await refreshResumeDetail(sessionId, state.resumeGeneration);
 }
 
@@ -478,9 +484,9 @@ async function downloadResumeTex() {
   const request = async (refreshed = false) => {
     const headers = new Headers();
     if (state.config.auth_mode === "supabase" && state.accessToken) headers.set("Authorization", `Bearer ${state.accessToken}`);
-    const response = await fetch(path, { headers });
+    const response = await fetch(path, { headers, signal: state.resumeRequestController.signal });
     if (response.status === 401 && !refreshed && state.config.auth_mode === "supabase"
-        && await refreshSession()) return request(true);
+        && await refreshSession(state.resumeRequestController.signal)) return request(true);
     if (!response.ok) throw new PathfinderProblem(await problemFromResponse(response));
     if (response.headers.get("x-content-sha256") !== artifact.tex_sha256) throw new Error("TeX digest mismatch.");
     return response.blob();
