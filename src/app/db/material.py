@@ -249,13 +249,13 @@ class _ImportWriter(ResumeCommandWriter):
                 input_json=run_input.model_dump(mode="json", round_trip=True),
                 limits_json={
                     "schema_version": 1,
-                    "max_model_calls": 100,
-                    "max_tool_calls": 0,
-                    "max_tool_results": 0,
+                    "max_model_calls": 120,
+                    "max_tool_calls": 8,
+                    "max_tool_results": 8,
                     "max_iterations": 200,
                 },
                 status="queued",
-                graph_version="pathfinder-resume-v1",
+                graph_version="pathfinder-resume-v2",
             )
         )
         await session.flush()
@@ -298,7 +298,7 @@ class _ImportWriter(ResumeCommandWriter):
                 payload={
                     "mode": "material_preparation",
                     "status": "queued",
-                    "graph_version": "pathfinder-resume-v1",
+                    "graph_version": "pathfinder-resume-v2",
                 },
             )
         )

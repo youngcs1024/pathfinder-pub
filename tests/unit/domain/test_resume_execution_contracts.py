@@ -26,7 +26,7 @@ class SyntheticPayload(BaseModel):
 def contract():
     return RunContractV1(
         RunMode.MATERIAL_PREPARATION,
-        "pathfinder-resume-v1",
+        "pathfinder-resume-v2",
         ResumeRunInputV1[SyntheticPayload],
         (ResumeRunOutputV1[SyntheticPayload],),
     )
@@ -46,7 +46,7 @@ def test_typed_resume_roundtrip_is_not_research_or_an_arbitrary_dictionary(contr
     registered = find_run_contract(EXECUTION_CONTRACTS, contract.graph_version, contract.mode)
     assert registered.input_model.__name__.startswith("MaterialPreparationRunInputV1")
     with pytest.raises(ValueError, match="unsupported"):
-        find_run_contract(EXECUTION_CONTRACTS, "pathfinder-resume-v2", contract.mode)
+        find_run_contract(EXECUTION_CONTRACTS, "pathfinder-resume-v1", contract.mode)
 
 
 @pytest.mark.parametrize(

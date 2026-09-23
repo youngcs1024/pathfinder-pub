@@ -44,6 +44,9 @@ def test_only_material_writes_and_explicitly_retired_legacy_routes_are_published
         "/api/v2/workspaces/{workspace_id}/projects",
         "/api/v2/workspaces/{workspace_id}/projects/{project_id}/material-sources",
         "/api/v2/workspaces/{workspace_id}/projects/{project_id}/imports",
+        "/api/v2/workspaces/{workspace_id}/projects/{project_id}/facts",
+        "/api/v2/workspaces/{workspace_id}/projects/{project_id}/facts/{fact_id}/versions",
+        "/api/v2/workspaces/{workspace_id}/projects/{project_id}/facts/{fact_id}/reviews",
     }
     assert all(
         "410" in spec["responses"]

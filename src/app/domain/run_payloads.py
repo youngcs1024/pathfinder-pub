@@ -173,16 +173,22 @@ LEGACY_READ_CONTRACTS = tuple(
     for version in range(1, 7)
     for mode in (RunMode.RESEARCH, RunMode.APPLICATION)
 )
-# No resume handlers exist in R1.1. A readable schema does not authorize execution.
+# The v1 material contract remains readable, but only the v2 extractor runs.
+MATERIAL_V1_READ_CONTRACT = RunContractV1(
+    RunMode.MATERIAL_PREPARATION,
+    "pathfinder-resume-v1",
+    MaterialPreparationRunInputV1,
+    (MaterialPreparationRunOutputV1,),
+)
 EXECUTION_CONTRACTS: tuple[RunContractV1, ...] = (
     RunContractV1(
         RunMode.MATERIAL_PREPARATION,
-        "pathfinder-resume-v1",
+        "pathfinder-resume-v2",
         MaterialPreparationRunInputV1,
         (MaterialPreparationRunOutputV1,),
     ),
 )
-READ_CONTRACTS = LEGACY_READ_CONTRACTS + EXECUTION_CONTRACTS
+READ_CONTRACTS = (*LEGACY_READ_CONTRACTS, MATERIAL_V1_READ_CONTRACT, *EXECUTION_CONTRACTS)
 
 
 def find_run_contract(

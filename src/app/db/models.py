@@ -5,6 +5,7 @@ from uuid import UUID
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -256,7 +257,8 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "graph_version IN ('pathfinder-research-v1', 'pathfinder-research-v2', "
             "'pathfinder-research-v3', 'pathfinder-research-v4', "
-            "'pathfinder-research-v5', 'pathfinder-research-v6', 'pathfinder-resume-v1')",
+            "'pathfinder-research-v5', 'pathfinder-research-v6', "
+            "'pathfinder-resume-v1', 'pathfinder-resume-v2')",
             name="graph_version",
         ),
         CheckConstraint(
@@ -559,6 +561,141 @@ class MaterialSnapshotFile(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class MaterialFactSet(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "material_fact_sets"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "project_id", "cache_digest", "extractor_digest"),
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["material_projects.workspace_id", "material_projects.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "import_id"],
+            ["material_imports.workspace_id", "material_imports.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("cache_digest ~ '^[0-9a-f]{64}$'", name="cache_digest"),
+        CheckConstraint("extractor_digest ~ '^[0-9a-f]{64}$'", name="extractor_digest"),
+        CheckConstraint("jsonb_typeof(issues_json) = 'array'", name="issues_json"),
+        Index("ix_material_fact_sets_workspace_project", "workspace_id", "project_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    project_id: Mapped[UUID] = mapped_column(nullable=False)
+    import_id: Mapped[UUID] = mapped_column(nullable=False)
+    cache_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    extractor_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    issues_json: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class MaterialFact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "material_facts"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "fact_set_id", "ordinal"),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_set_id"],
+            ["material_fact_sets.workspace_id", "material_fact_sets.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("ordinal >= 0 AND current_version > 0", name="version"),
+        Index("ix_material_facts_workspace_set", "workspace_id", "fact_set_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    fact_set_id: Mapped[UUID] = mapped_column(nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class MaterialFactVersion(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "material_fact_versions"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "fact_id", "version"),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_id"],
+            ["material_facts.workspace_id", "material_facts.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "created_by_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version > 0 AND char_length(claim) BETWEEN 1 AND 2000", name="claim"),
+        CheckConstraint(
+            "kind IN ('implementation', 'plan', 'experiment', 'personal_statement')", name="kind"
+        ),
+        CheckConstraint("review_status IN ('pending', 'confirmed', 'rejected')", name="review"),
+        CheckConstraint(
+            "jsonb_typeof(conditions_json) = 'object' AND jsonb_typeof(issues_json) = 'array'",
+            name="json",
+        ),
+        Index("ix_material_fact_versions_workspace_fact", "workspace_id", "fact_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    fact_id: Mapped[UUID] = mapped_column(nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    claim: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    conditions_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    review_status: Mapped[str] = mapped_column(Text, nullable=False)
+    issues_json: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    created_by_user_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class MaterialFactEvidence(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "material_fact_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "fact_version_id", "snapshot_file_id", "start_line", "end_line"
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_version_id"],
+            ["material_fact_versions.workspace_id", "material_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "snapshot_file_id"],
+            ["material_snapshot_files.workspace_id", "material_snapshot_files.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "start_line > 0 AND end_line >= start_line AND end_line - start_line < 80", name="lines"
+        ),
+        CheckConstraint("char_length(quote) BETWEEN 1 AND 4000", name="quote"),
+        Index("ix_material_fact_evidence_workspace_version", "workspace_id", "fact_version_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    fact_version_id: Mapped[UUID] = mapped_column(nullable=False)
+    snapshot_file_id: Mapped[UUID] = mapped_column(nullable=False)
+    start_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    quote: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class ResumeCommand(UUIDPrimaryKeyMixin, Base):

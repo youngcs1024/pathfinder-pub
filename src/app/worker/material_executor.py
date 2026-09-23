@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID
 
+from app.agents.material_facts import FactExtractionError, MaterialFactExtractor
 from app.domain.errors import DomainNotFoundError, DomainUnavailableError, DomainValidationError
+from app.domain.project_facts import FactEvidenceError, FactExtractionV1, MaterialRetrievalScope
 from app.domain.run_execution import (
     RunExecutionCancelledError,
     RunExecutionInvalidError,
@@ -29,6 +32,7 @@ from app.retrieval.documents import (
     DocumentIngestionInvariantError,
     DocumentIngestionService,
 )
+from app.tools.registry import ToolRegistryError
 from app.worker.contracts import RunExecutionResult
 
 MAX_INDEX_CHUNKS = 100
@@ -72,6 +76,25 @@ class MaterialExecutionPort(Protocol):
     ) -> str: ...
 
 
+class FactExecutionPort(Protocol):
+    async def existing_extraction(
+        self, tenant: TenantContext, project_id: UUID, import_id: UUID, extractor_digest: str
+    ) -> UUID | None: ...
+    async def retrieval_scope(
+        self, tenant: TenantContext, project_imports: tuple[tuple[UUID, UUID], ...]
+    ) -> MaterialRetrievalScope: ...
+    async def publish_extraction(
+        self,
+        tenant: TenantContext,
+        project_id: UUID,
+        import_id: UUID,
+        extractor_digest: str,
+        extraction: FactExtractionV1,
+        *,
+        complete: bool,
+    ) -> UUID: ...
+
+
 class MaterialRunExecutor:
     def __init__(
         self,
@@ -80,16 +103,24 @@ class MaterialRunExecutor:
         materials: MaterialExecutionPort,
         aliases: MaterialAliasRegistry,
         ingestion_factory,
+        facts: FactExecutionPort,
+        extractor_factory: Callable[
+            [TenantContext, UUID, MaterialRetrievalScope], MaterialFactExtractor
+        ],
+        extractor_digest: str,
     ) -> None:
         self.reader = reader
         self.materials = materials
         self.aliases = aliases
         self.ingestion_factory = ingestion_factory
+        self.facts = facts
+        self.extractor_factory = extractor_factory
+        self.extractor_digest = extractor_digest
 
     async def execute(
         self, run_id: UUID, tenant: TenantContext, graph_version: str
     ) -> RunExecutionResult:
-        if graph_version != "pathfinder-resume-v1":
+        if graph_version != "pathfinder-resume-v2":
             return RunExecutionResult(
                 status=RunStatus.FAILED, error_category="unknown_graph_version"
             )
@@ -185,6 +216,36 @@ class MaterialRunExecutor:
             await self.materials.record_import_cache_digest(
                 tenant, payload.import_id, payload.source_ids
             )
+            await self.reader.assert_execution_allowed(
+                run_id=run_id,
+                workspace_id=tenant.workspace_id,
+                actor_user_id=tenant.actor_user_id,
+                graph_version=graph_version,
+            )
+            cached = await self.facts.existing_extraction(
+                tenant, payload.project_id, payload.import_id, self.extractor_digest
+            )
+            if cached is None:
+                scope = await self.facts.retrieval_scope(
+                    tenant, ((payload.project_id, payload.import_id),)
+                )
+                extraction = await self.extractor_factory(tenant, run_id, scope).extract(
+                    list(scope.files)
+                )
+                await self.reader.assert_execution_allowed(
+                    run_id=run_id,
+                    workspace_id=tenant.workspace_id,
+                    actor_user_id=tenant.actor_user_id,
+                    graph_version=graph_version,
+                )
+                await self.facts.publish_extraction(
+                    tenant,
+                    payload.project_id,
+                    payload.import_id,
+                    self.extractor_digest,
+                    extraction,
+                    complete="offline_fake_no_semantic_extraction" not in extraction.questions,
+                )
             result = MaterialPreparationRunOutputV1(
                 payload=MaterialPreparationResultV1(
                     import_id=payload.import_id,
@@ -204,6 +265,10 @@ class MaterialRunExecutor:
             return RunExecutionResult(status=RunStatus.FAILED, error_category=error.category)
         except MaterialReadError as error:
             return RunExecutionResult(status=RunStatus.FAILED, error_category=error.code)
+        except (FactExtractionError, FactEvidenceError, ToolRegistryError, DomainValidationError):
+            return RunExecutionResult(
+                status=RunStatus.FAILED, error_category="fact_extraction_invalid"
+            )
         except DomainUnavailableError:
             return RunExecutionResult(
                 status=RunStatus.FAILED, error_category="database_unavailable", retryable=True

@@ -74,6 +74,31 @@
           <button id="material-view-import" type="button">View selected import</button>
           <p id="material-import-status" class="muted" aria-live="polite"></p>
           <div id="material-import-progress"></div>
+          <h3>Project facts</h3>
+          <p id="material-facts-status" class="muted" aria-live="polite"></p>
+          <div id="material-facts-list"></div>
+          <form id="material-fact-form">
+            <label>New fact or responsibility <textarea id="material-fact-claim" maxlength="2000" required></textarea></label>
+            <label>Nature <select id="material-fact-kind">
+              <option value="personal_statement">Personal statement</option>
+              <option value="implementation">Implementation</option>
+              <option value="plan">Plan</option>
+              <option value="experiment">Experiment</option>
+            </select></label>
+            <label>Environment <input id="material-fact-environment" maxlength="500"></label>
+            <label>Scope <input id="material-fact-scope" maxlength="500"></label>
+            <label>Metric basis <input id="material-fact-metric" maxlength="500"></label>
+            <label>Evidence (JSON array: snapshot_file_id, start_line, end_line, quote) <textarea id="material-fact-evidence">[]</textarea></label>
+            <button id="material-fact-add" type="submit">Add pending fact</button>
+          </form>
+          <button id="material-fact-retry" type="button" hidden>Retry same fact request</button>
+          <h3>Search confirmed facts</h3>
+          <div id="material-search-projects"></div>
+          <form id="material-fact-search-form">
+            <label>Search text <input id="material-fact-search-query" maxlength="200" required></label>
+            <button type="submit">Search</button>
+          </form>
+          <div id="material-search-results"></div>
         </section>
         <button id="retry-events" type="button" hidden>Resume event reads</button>
         <section id="run-panel" class="panel" hidden></section>

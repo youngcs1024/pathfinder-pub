@@ -19,6 +19,7 @@ from app.config import Settings
 from app.db.approvals import SqlAlchemyApprovalStore
 from app.db.events import SqlAlchemyRunEventReader
 from app.db.material import SqlAlchemyMaterialStore
+from app.db.project_facts import SqlAlchemyProjectFactStore
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.readiness import DatabaseReadinessProbe
 from app.db.runs import SqlAlchemyRunStore
@@ -27,6 +28,7 @@ from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.domain.approvals import ApprovalService
 from app.domain.material import MaterialService
+from app.domain.project_facts import ProjectFactService
 from app.domain.provisioning import ProvisioningService
 from app.domain.runs import RunService
 from app.domain.tenancy import TenantService
@@ -63,6 +65,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         material_service = MaterialService(
             SqlAlchemyMaterialStore(session_factory, material_aliases)
         )
+        project_fact_service = ProjectFactService(SqlAlchemyProjectFactStore(session_factory))
         application.state.database_engine = engine
         application.state.database_session_factory = session_factory
         application.state.readiness_probe = readiness_probe
@@ -73,6 +76,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.approval_service = approval_service
         application.state.material_aliases = material_aliases
         application.state.material_service = material_service
+        application.state.project_fact_service = project_fact_service
         yield
     finally:
         try:
@@ -90,6 +94,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
                 application.state.approval_service = None
                 application.state.material_aliases = None
                 application.state.material_service = None
+                application.state.project_fact_service = None
                 application.state.database_session_factory = None
                 application.state.database_engine = None
 

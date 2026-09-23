@@ -24,6 +24,9 @@ test("material import retry keeps the original key and source selection", async 
     if (url.endsWith("/imports/import-a")) {
       return json({ id: "import-a", project_id: "project-a", run_id: "run-a", status: "completed", error_category: null, snapshots: [] });
     }
+    if (url.endsWith("/projects/project-a/facts")) {
+      return json({ fact_set_id: null, import_id: null, complete: false, issues: [], facts: [] });
+    }
     throw new Error(`Unexpected fetch ${url}`);
   });
   await assert.rejects(h.call("submitMaterialImport"), /response lost/);
@@ -47,6 +50,49 @@ test("empty material aliases disable import setup", async t => {
   assert.match(h.element("materials-availability").textContent, /No material aliases/);
 });
 
+test("fact command retry keeps the same key and source text after response loss", async t => {
+  const h = await loadUi(t, { randomUUID: () => "22222222-2222-4222-8222-222222222222" });
+  h.state.materialProjectId = "project-a";
+  h.state.materialFacts = { fact_set_id: "set-a", import_id: "import-a", complete: false, issues: [], facts: [] };
+  h.element("material-fact-claim").value = "I prepared synthetic documentation";
+  h.element("material-fact-kind").value = "personal_statement";
+  let attempts = 0;
+  h.route((url, options) => {
+    if (url.endsWith("/projects/project-a/facts") && options.method === "POST") {
+      attempts += 1;
+      if (attempts === 1) throw new Error("response lost");
+      return json({ command_id: "command-a", resource_id: "fact-a", status: "completed", replayed: true }, 201);
+    }
+    if (url.endsWith("/projects/project-a/facts")) {
+      return json({ fact_set_id: "set-a", import_id: "import-a", complete: false, issues: [], facts: [] });
+    }
+    throw new Error(`Unexpected fetch ${url}`);
+  });
+  await assert.rejects(h.call("addMaterialFact"), /response lost/);
+  assert.equal(h.element("material-fact-claim").value, "I prepared synthetic documentation");
+  assert.equal(h.element("material-fact-retry").hidden, false);
+  await h.call("sendMaterialFactCommand", h.state.materialFactPending);
+  const requests = h.calls.filter(item => item.method === "POST" && item.url.endsWith("/projects/project-a/facts"));
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].headers.get("Idempotency-Key"), requests[1].headers.get("Idempotency-Key"));
+  assert.equal(requests[0].body, requests[1].body);
+});
+
+test("fact search sends the selected project ids only", async t => {
+  const h = await loadUi(t);
+  h.state.materialProjects = [{ id: "project-a", name: "A" }, { id: "project-b", name: "B" }];
+  h.state.materialProjectId = "project-a";
+  h.call("renderMaterials");
+  h.element("material-fact-search-query").value = "synthetic";
+  h.route((url) => {
+    assert.match(url, /project_ids=project-a/);
+    assert.match(url, /project_ids=project-b/);
+    return json([]);
+  });
+  await h.call("searchMaterialFacts");
+  assert.match(h.element("material-search-results").textContent, /No confirmed facts/);
+});
+
 class Element {
   constructor(tag = "div") {
     this.tagName = tag;
@@ -67,6 +113,15 @@ class Element {
       if (nested) return nested;
     }
     return null;
+  }
+  querySelectorAll(selector) {
+    if (selector !== "input:checked") return [];
+    const found = [];
+    for (const child of this.children) {
+      if (child.tagName === "input" && child.checked) found.push(child);
+      found.push(...child.querySelectorAll(selector));
+    }
+    return found;
   }
   addEventListener(type, callback) { this.listeners.set(type, callback); }
   click() { assert.ok(this.listeners.has("click")); this.listeners.get("click")(); }
@@ -158,7 +213,7 @@ async function loadUi(t, { randomUUID, confirm = () => true, historical = false 
     document: { getElementById: element, createElement: tag => new Element(tag) },
     window: { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, confirm },
     crypto: { randomUUID },
-    Headers, AbortController, DOMException, TextDecoder, Uint8Array, URL,
+    Headers, AbortController, DOMException, TextDecoder, Uint8Array, URL, URLSearchParams,
     fetch: async (url, options = {}) => {
       if (url === "/api/v1/ui-config") return json({ auth_mode: "supabase" });
       calls.push({ url, ...options });

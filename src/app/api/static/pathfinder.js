@@ -25,6 +25,8 @@ const state = {
   materialProjectSubmission: null,
   materialSourceSubmission: null,
   materialPollTimer: null,
+  materialFacts: null,
+  materialFactPending: null,
 };
 
 const byId = (id) => document.getElementById(id);
@@ -787,11 +789,18 @@ function resetMaterials() {
   state.materialSubmission = null;
   state.materialProjectSubmission = null;
   state.materialSourceSubmission = null;
+  state.materialFacts = null;
+  state.materialFactPending = null;
   clear(byId("material-project-select"));
   clear(byId("material-alias-select"));
   clear(byId("material-source-list"));
   clear(byId("material-import-history"));
   clear(byId("material-import-progress"));
+  clear(byId("material-facts-list"));
+  clear(byId("material-search-projects"));
+  clear(byId("material-search-results"));
+  byId("material-facts-status").textContent = "";
+  byId("material-fact-retry").hidden = true;
   byId("material-import-status").textContent = "";
   byId("material-retry-import").hidden = true;
   byId("material-refresh-import").hidden = true;
@@ -843,6 +852,192 @@ function renderMaterials() {
     history.append(option);
   }
   byId("material-view-import").disabled = !state.materialImports.length;
+  const searchProjects = byId("material-search-projects");
+  clear(searchProjects);
+  for (const project of state.materialProjects) {
+    const label = node("label");
+    const checkbox = node("input");
+    checkbox.type = "checkbox";
+    checkbox.value = project.id;
+    checkbox.checked = true;
+    label.append(checkbox, node("span", project.name));
+    searchProjects.append(label);
+  }
+  byId("material-fact-add").disabled = !state.materialFacts?.import_id;
+}
+
+function factCandidate(claim, kind, environment, scope, metricBasis, evidence = []) {
+  return {
+    claim, kind,
+    conditions: {
+      environment: environment || null,
+      scope: scope || null,
+      metric_basis: metricBasis || null,
+    },
+    evidence,
+  };
+}
+
+function renderMaterialFacts() {
+  const container = byId("material-facts-list");
+  clear(container);
+  const catalog = state.materialFacts;
+  byId("material-fact-add").disabled = !catalog?.import_id;
+  if (!catalog?.fact_set_id) {
+    byId("material-facts-status").textContent = "No fact list for the current completed import.";
+    return;
+  }
+  byId("material-facts-status").textContent = catalog.complete
+    ? `${catalog.facts.length} facts to review.`
+    : "Semantic extraction is incomplete in fake mode. Add and review facts explicitly.";
+  for (const fact of catalog.facts) {
+    const card = node("article", null, "source");
+    card.append(node("strong", `${fact.kind} · ${fact.review_status} · v${fact.version}`));
+    card.append(node("p", fact.claim));
+    const conditions = Object.entries(fact.conditions)
+      .filter(([, value]) => value).map(([key, value]) => `${key}: ${value}`);
+    if (conditions.length) card.append(node("p", conditions.join(" · ")));
+    for (const evidence of fact.evidence) {
+      card.append(node("p", `${evidence.path || evidence.snapshot_file_id}:${evidence.start_line}-${evidence.end_line} · ${evidence.quote}`));
+    }
+    for (const issue of fact.issues) card.append(node("p", `Needs review: ${issue.code}`));
+    const attest = node("input");
+    attest.type = "checkbox";
+    const attestLabel = node("label");
+    attestLabel.append(attest, node("span", "I attest this personal statement"));
+    if (fact.kind === "personal_statement") card.append(attestLabel);
+    const confirm = node("button", "Confirm");
+    confirm.type = "button";
+    confirm.addEventListener("click", () => reviewMaterialFact(fact, "confirm", attest.checked).catch(reportInterfaceFailure));
+    const reject = node("button", "Reject");
+    reject.type = "button";
+    reject.addEventListener("click", () => reviewMaterialFact(fact, "reject", false).catch(reportInterfaceFailure));
+    card.append(confirm, reject);
+    const edit = node("textarea");
+    edit.value = fact.claim;
+    edit.maxLength = 2000;
+    const editEnvironment = node("input");
+    editEnvironment.value = fact.conditions.environment || "";
+    editEnvironment.maxLength = 500;
+    const editScope = node("input");
+    editScope.value = fact.conditions.scope || "";
+    editScope.maxLength = 500;
+    const editMetric = node("input");
+    editMetric.value = fact.conditions.metric_basis || "";
+    editMetric.maxLength = 500;
+    const editEvidence = node("textarea");
+    editEvidence.value = JSON.stringify(fact.evidence.map(({ snapshot_file_id, start_line, end_line, quote }) => ({ snapshot_file_id, start_line, end_line, quote })), null, 2);
+    for (const [label, field] of [["Corrected claim", edit], ["Environment", editEnvironment],
+      ["Scope", editScope], ["Metric basis", editMetric], ["Evidence JSON", editEvidence]]) {
+      const wrapper = node("label", label);
+      wrapper.append(field);
+      card.append(wrapper);
+    }
+    const save = node("button", "Save corrected version");
+    save.type = "button";
+    save.addEventListener("click", () => Promise.resolve().then(() => reviseMaterialFact(fact, factCandidate(
+      edit.value, fact.kind, editEnvironment.value, editScope.value, editMetric.value,
+      parseFactEvidence(editEvidence.value),
+    ))).catch(reportInterfaceFailure));
+    card.append(save);
+    container.append(card);
+  }
+}
+
+async function loadMaterialFacts() {
+  if (!state.workspace || !state.materialProjectId) return;
+  const generation = state.contextGeneration;
+  const projectId = state.materialProjectId;
+  const workspaceId = state.workspace.workspace_id;
+  const result = await apiFetch(`/api/v2/workspaces/${workspaceId}/projects/${projectId}/facts`);
+  if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId
+      || state.materialProjectId !== projectId) return;
+  state.materialFacts = result;
+  renderMaterialFacts();
+}
+
+async function sendMaterialFactCommand(pending) {
+  if (state.materialFactPending !== pending || state.workspace?.workspace_id !== pending.workspaceId) return;
+  try {
+    await apiFetch(pending.path, {
+      method: "POST", headers: { "Idempotency-Key": pending.key }, body: pending.body,
+    });
+    if (state.materialFactPending !== pending) return;
+    state.materialFactPending = null;
+    byId("material-fact-retry").hidden = true;
+    await loadMaterialFacts();
+    hideProblem();
+  } catch (error) {
+    if (state.materialFactPending === pending) {
+      const conflict = error.problem?.status === 409;
+      byId("material-fact-retry").hidden = conflict;
+      if (conflict) state.materialFactPending = null;
+      byId("material-facts-status").textContent = error.problem?.status === 409
+        ? "The fact changed. Your edit remains on this page; refresh before submitting a new version."
+        : "The response was not confirmed. Retry uses the same key and original fact request.";
+    }
+    throw error;
+  }
+}
+
+function queueMaterialFact(path, body) {
+  if (!state.workspace || state.materialFactPending) return Promise.resolve();
+  const pending = { workspaceId: state.workspace.workspace_id, path, body, key: crypto.randomUUID() };
+  state.materialFactPending = pending;
+  return sendMaterialFactCommand(pending);
+}
+
+function parseFactEvidence(value) {
+  const parsed = JSON.parse(value || "[]");
+  if (!Array.isArray(parsed)) throw new Error("Evidence must be a JSON array.");
+  return parsed;
+}
+
+async function addMaterialFact() {
+  if (!state.materialFacts?.import_id || !state.materialProjectId) return;
+  const body = {
+    import_id: state.materialFacts.import_id,
+    candidate: factCandidate(
+      byId("material-fact-claim").value,
+      byId("material-fact-kind").value,
+      byId("material-fact-environment").value,
+      byId("material-fact-scope").value,
+      byId("material-fact-metric").value,
+      parseFactEvidence(byId("material-fact-evidence").value),
+    ),
+  };
+  await queueMaterialFact(`${materialBase()}/projects/${state.materialProjectId}/facts`, body);
+  if (!state.materialFactPending) byId("material-fact-form").reset();
+}
+
+function reviewMaterialFact(fact, decision, attested) {
+  return queueMaterialFact(
+    `${materialBase()}/projects/${state.materialProjectId}/facts/${fact.id}/reviews`,
+    { import_id: state.materialFacts.import_id, expected_version: fact.version, decision, attested },
+  );
+}
+
+function reviseMaterialFact(fact, candidate) {
+  return queueMaterialFact(
+    `${materialBase()}/projects/${state.materialProjectId}/facts/${fact.id}/versions`,
+    { import_id: state.materialFacts.import_id, expected_version: fact.version,
+      candidate },
+  );
+}
+
+async function searchMaterialFacts() {
+  if (!state.workspace) return;
+  const selected = Array.from(byId("material-search-projects").querySelectorAll("input:checked"))
+    .map(item => item.value);
+  const query = byId("material-fact-search-query").value;
+  const params = new URLSearchParams();
+  for (const id of selected) params.append("project_ids", id);
+  params.set("query", query);
+  const results = await apiFetch(`${materialBase()}/facts/search?${params}`);
+  const container = byId("material-search-results");
+  clear(container);
+  for (const item of results) container.append(node("p", `${item.project_id} · ${item.kind}: ${item.claim}`));
+  if (!results.length) container.append(node("p", "No confirmed facts found."));
 }
 
 async function loadMaterials() {
@@ -867,6 +1062,7 @@ async function loadMaterials() {
     : [];
   if (generation !== state.contextGeneration || state.workspace?.workspace_id !== workspaceId) return;
   renderMaterials();
+  await loadMaterialFacts();
 }
 
 async function createMaterialProject() {
@@ -942,6 +1138,7 @@ async function refreshMaterialImport() {
     });
     renderMaterials();
   }
+  if (progress.status === "completed") await loadMaterialFacts();
 }
 
 async function sendMaterialImport(submission) {
@@ -1082,6 +1279,17 @@ byId("material-view-import").addEventListener("click", () => {
     accepted: { import_id: importId },
   };
   refreshMaterialImport().catch(reportInterfaceFailure);
+});
+byId("material-fact-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  addMaterialFact().catch(reportInterfaceFailure);
+});
+byId("material-fact-retry").addEventListener("click", () => {
+  if (state.materialFactPending) sendMaterialFactCommand(state.materialFactPending).catch(reportInterfaceFailure);
+});
+byId("material-fact-search-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  searchMaterialFacts().catch(reportInterfaceFailure);
 });
 renderSubmissionControls();
 updateResumeRequirement();

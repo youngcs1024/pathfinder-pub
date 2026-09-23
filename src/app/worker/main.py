@@ -6,18 +6,22 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from random import Random
+from time import monotonic
 from uuid import uuid4
 
+from app.agents.material_facts import PROMPT_VERSION, MaterialFactExtractor
 from app.config import Settings
 from app.db.documents import SqlAlchemyDocumentRepository
 from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.llm_invocations import SqlAlchemyInvocationRecorder
 from app.db.material import SqlAlchemyMaterialStore
+from app.db.project_facts import SqlAlchemyProjectFactStore, extractor_identity
 from app.db.readiness import DatabaseReadinessProbe
 from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.runtime_policy import DatabaseComponent, DatabasePoolPolicy
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
+from app.db.tool_invocations import SqlAlchemyToolInvocationRecorder
 from app.domain.tenancy import TenantService
 from app.llm.factory import LLMFactory
 from app.llm.fake import FakeChatModel, FakeEmbeddingModel
@@ -25,12 +29,19 @@ from app.llm.invocations import LLMInvocationContext
 from app.llm.qwen_adapters import create_qwen_adapters
 from app.material.aliases import load_aliases
 from app.obs.logging import configure_logging
-from app.retrieval.documents import DocumentIngestionService
+from app.retrieval.documents import DocumentIngestionService, DocumentRetrievalService
+from app.tools.contracts import ToolRunContext
+from app.tools.material_retrieval import MATERIAL_POLICY, create_material_registry
 from app.worker.backoff import ExponentialBackoff
 from app.worker.dispatcher import RunExecutorDispatcher
 from app.worker.material_executor import MaterialRunExecutor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WORKER_READY_PATH, WorkerRuntimeSettings
+
+
+class _NoCancellation:
+    def is_cancelled(self) -> bool:
+        return False
 
 
 def _clear_worker_ready_marker(path: Path) -> None:
@@ -75,6 +86,7 @@ async def run_worker(settings: Settings | None = None) -> None:
         reader = SqlAlchemyRunExecutionReader(sessions)
         aliases = load_aliases(resolved_settings.material_aliases_file)
         materials = SqlAlchemyMaterialStore(sessions, aliases)
+        facts = SqlAlchemyProjectFactStore(sessions)
         if resolved_settings.llm_mode == "qwen":
             if (
                 resolved_settings.qwen_api_key is None
@@ -107,6 +119,10 @@ async def run_worker(settings: Settings | None = None) -> None:
             reader=reader,
             materials=materials,
             aliases=aliases,
+            facts=facts,
+            extractor_digest=extractor_identity(
+                PROMPT_VERSION, f"{provider}:qwen3.6-flash-2026-04-16"
+            ),
             ingestion_factory=lambda tenant, run_id: DocumentIngestionService(
                 repository=document_repository,
                 embedding=llm.create_embedding_model(
@@ -115,6 +131,42 @@ async def run_worker(settings: Settings | None = None) -> None:
                         actor_user_id=tenant.actor_user_id,
                         run_id=run_id,
                     )
+                ),
+            ),
+            extractor_factory=lambda tenant, run_id, scope: MaterialFactExtractor(
+                model=llm.create_chat_model(
+                    LLMInvocationContext(
+                        workspace_id=tenant.workspace_id,
+                        actor_user_id=tenant.actor_user_id,
+                        run_id=run_id,
+                    )
+                ),
+                tools=create_material_registry(
+                    scope=scope,
+                    service=DocumentRetrievalService(
+                        repository=document_repository,
+                        embedding=llm.create_embedding_model(
+                            LLMInvocationContext(
+                                workspace_id=tenant.workspace_id,
+                                actor_user_id=tenant.actor_user_id,
+                                run_id=run_id,
+                            )
+                        ),
+                    ),
+                    tenant=tenant,
+                    recorder=SqlAlchemyToolInvocationRecorder(sessions),
+                ).bind(
+                    policy_name=MATERIAL_POLICY,
+                    context=ToolRunContext(
+                        workspace_id=tenant.workspace_id,
+                        actor_user_id=tenant.actor_user_id,
+                        run_id=run_id,
+                        action_intent_id=None,
+                        approval_request_id=None,
+                        trusted_target=None,
+                        deadline=monotonic() + 120,
+                        cancellation=_NoCancellation(),
+                    ),
                 ),
             ),
         )
@@ -128,7 +180,7 @@ async def run_worker(settings: Settings | None = None) -> None:
             worker_id=f"pathfinder-worker-{uuid4()}",
             store=SqlAlchemyWorkerJobStore(sessions, ExponentialBackoff(runtime, Random())),
             tenant_service=TenantService(SqlAlchemyTenantResolver(sessions)),
-            executor=RunExecutorDispatcher({"pathfinder-resume-v1": material_executor}),
+            executor=RunExecutorDispatcher({"pathfinder-resume-v2": material_executor}),
             settings=runtime,
             unsupported_work_guard=reader.has_unsupported_pending_work,
         )
