@@ -388,6 +388,8 @@ async def test_publication_crash_windows_and_late_owner(rig, monkeypatch, mode, 
             )
         ).all()
         assert len(events) == 1
+        assert "canary@example.test" not in repr([event.payload for event in events])
+        assert "Built a synthetic service" not in repr([event.payload for event in events])
 
 
 @pytest.mark.parametrize("boundary", ["before_execute", "before_publish"])
