@@ -125,7 +125,7 @@ async function refreshResumeDetail(sessionId, generation) {
     if (artifact.artifact_id !== version.artifact_id) throw new Error("Artifact identity mismatch");
   }
   let questions = [], userFacts = [], feedback = [];
-  if (detail.current_version_id || (detail.initial_run_id && detail.run_id !== detail.initial_run_id)) {
+  if (detail.initial_run_id || detail.current_version_id || detail.result?.questions?.length) {
     [questions, userFacts, feedback] = await Promise.all([
       apiFetch(`${resumeBase()}/${sessionId}/questions`, { signal }),
       apiFetch(`${resumeBase()}/${sessionId}/user-facts`, { signal }),

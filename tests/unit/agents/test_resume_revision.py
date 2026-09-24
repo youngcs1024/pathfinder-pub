@@ -15,6 +15,7 @@ from app.domain.resume_profile import ResumePreferencesV1
 from app.domain.resume_revision import (
     ContentFeedbackV1,
     PatchV1,
+    PreferenceFeedbackV1,
     RevisionInputs,
     UserFactInputV1,
     apply_scoped_patches,
@@ -179,3 +180,70 @@ async def test_model_patch_repairs_once_then_keeps_original_on_invalid_scope() -
     assert candidate.correction_count == 1
     assert len(repairs) == 1
     assert candidate.questions == ("revision_conflicts_with_scope_facts_or_locks",)
+
+
+def test_preference_scope_selects_versioned_override_or_global_profile() -> None:
+    import json
+
+    for scope, expected in (
+        ("round", "JobPreferenceOverrideV1"),
+        ("session", "JobPreferenceOverrideV1"),
+        ("global", "ResumePreferencesV1"),
+    ):
+        data = {
+            "kind": "preference",
+            "expected_session_revision": 2,
+            "base_version_id": str(uuid4()),
+            "scope": scope,
+            "preferences": {"page_target": 2},
+        }
+        if scope == "global":
+            data["expected_global_preference_version"] = 1
+        request = PreferenceFeedbackV1.model_validate_json(json.dumps(data))
+        assert type(request.preferences).__name__ == expected
+
+
+@pytest.mark.asyncio
+async def test_non_target_draft_lock_does_not_block_scoped_edit() -> None:
+    profile = _content()
+    assert profile is not None
+    project = profile.projects[0]
+    generated_bullet_id = uuid4()
+    current_project = project.model_copy(
+        update={"bullet_ids": (project.bullet_ids[0], generated_bullet_id)}
+    )
+    current = profile.model_copy(update={"projects": (current_project,)})
+    fact_id = uuid4()
+    request = ContentFeedbackV1(
+        expected_session_revision=2,
+        base_version_id=uuid4(),
+        target_item_ids=(project.bullet_ids[0],),
+        patches=(_patch(current, fact_id),),
+    )
+    inputs = RevisionInputs(
+        session_id=uuid4(),
+        run_id=uuid4(),
+        feedback_id=uuid4(),
+        base_version_id=request.base_version_id,
+        base_content=current,
+        profile_content=profile,
+        preferences=ResumePreferencesV1(locked_item_ids=(generated_bullet_id,)),
+        target_item_ids=request.target_item_ids,
+        request=request,
+        permitted_fact_ids=frozenset({fact_id}),
+        fact_claims=((fact_id, "Built 12 synthetic jobs", "implementation", {}),),
+        instruction=None,
+    )
+
+    async def allowed():
+        return True
+
+    graph = ResumeRevisionGraph(
+        model=ScriptedFakeChatModel([ChatModelResult(content='{"patches":[]}')]),
+        spend_allowed=allowed,
+        reserve_repair=allowed,
+    )
+    candidate = await graph.generate(inputs)
+    assert candidate.content is not None
+    assert candidate.content.projects[0].bullet_ids[1] == generated_bullet_id
+    assert candidate.content.projects[0].bullets[1] == current.projects[0].bullets[1]

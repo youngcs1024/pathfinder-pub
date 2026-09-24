@@ -14,7 +14,6 @@ from app.domain.errors import DomainValidationError
 from app.domain.resume_profile import (
     check_model_input_privacy,
     hard_constraint_issues,
-    require_locked_items_unchanged,
 )
 from app.domain.resume_revision import (
     AnswerFeedbackV1,
@@ -144,9 +143,11 @@ class ResumeRevisionGraph:
                         inputs.permitted_fact_ids,
                         {key: (claim, kind) for key, claim, kind, _ in inputs.fact_claims},
                     )
-                    require_locked_items_unchanged(
-                        inputs.profile_content, content, inputs.preferences
-                    )
+                    if (
+                        content.display_name != inputs.profile_content.display_name
+                        or content.contact != inputs.profile_content.contact
+                    ):
+                        raise DomainValidationError("protected personal fields changed")
                     diff, impact = summary.changes, summary.impact
                 except DomainValidationError:
                     if request.instruction and await self.reserve_repair():
@@ -163,9 +164,11 @@ class ResumeRevisionGraph:
                                 inputs.permitted_fact_ids,
                                 {key: (claim, kind) for key, claim, kind, _ in inputs.fact_claims},
                             )
-                            require_locked_items_unchanged(
-                                inputs.profile_content, content, inputs.preferences
-                            )
+                            if (
+                                content.display_name != inputs.profile_content.display_name
+                                or content.contact != inputs.profile_content.contact
+                            ):
+                                raise DomainValidationError("protected personal fields changed")
                             diff, impact = summary.changes, summary.impact
                         except DomainValidationError:
                             questions = ("revision_conflicts_with_scope_facts_or_locks",)

@@ -2032,7 +2032,12 @@ class ResumeSessionPreferenceVersion(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "resume_session_preference_versions"
     __table_args__ = (
         UniqueConstraint("workspace_id", "id"),
-        UniqueConstraint("workspace_id", "session_id", "version"),
+        UniqueConstraint(
+            "workspace_id",
+            "session_id",
+            "version",
+            name="uq_resume_session_preference_versions_workspace_id_session_id_v",
+        ),
         ForeignKeyConstraint(
             ["workspace_id", "session_id"],
             ["resume_sessions.workspace_id", "resume_sessions.id"],

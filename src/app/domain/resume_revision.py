@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from app.domain.errors import DomainValidationError
 from app.domain.resume_profile import (
@@ -118,6 +118,14 @@ class PreferenceFeedbackV1(RevisionModel):
     max_model_calls: int = Field(default=6, ge=1, le=12)
     max_tool_calls: int = Field(default=2, ge=0, le=8)
     max_cost_cny: Decimal = Field(default=Decimal("2"), gt=0, max_digits=12, decimal_places=6)
+
+    @field_validator("preferences", mode="before")
+    @classmethod
+    def parse_scope_preferences(cls, value: object, info: ValidationInfo):
+        schema = (
+            ResumePreferencesV1 if info.data.get("scope") == "global" else JobPreferenceOverrideV1
+        )
+        return schema.model_validate(value)
 
     @model_validator(mode="after")
     def global_precondition(self) -> PreferenceFeedbackV1:

@@ -398,6 +398,10 @@ async def test_scripted_fake_publishes_downloadable_tex(
         ).replayed
         with pytest.raises(DomainConflictError):
             await revisions.command(tenant, created.receipt.resource_id, feedback, uuid4())
+        fixed_revision_inputs = await revisions.revision_inputs(
+            tenant, accepted.receipt.resource_id
+        )
+        assert fact_version_id in fixed_revision_inputs.permitted_fact_ids
         revision_executor = RevisionRunExecutor(
             reader=reader,
             revisions=revisions,
@@ -426,7 +430,7 @@ async def test_scripted_fake_publishes_downloadable_tex(
         assert await revision_runner.run_once(asyncio.Event())
         revised_detail = await store.get_session(tenant, created.receipt.resource_id)
         assert revised_detail["run_id"] == accepted.receipt.run_id
-        assert revised_detail["run_status"] == "completed"
+        assert revised_detail["run_status"] == "completed", revised_detail["error_category"]
         assert revised_detail["current_version_id"] != base_id
         revised = await store.get_version(
             tenant, created.receipt.resource_id, revised_detail["current_version_id"]

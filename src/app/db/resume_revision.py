@@ -58,7 +58,6 @@ from app.domain.resume_profile import (
     ResumePreferencesV1,
     effective_preferences,
     hard_constraint_issues,
-    require_locked_items_unchanged,
 )
 from app.domain.resume_revision import (
     AnswerFeedbackV1,
@@ -385,12 +384,18 @@ class _FeedbackWriter(ResumeCommandWriter):
             else:
                 assert isinstance(payload.preferences, JobPreferenceOverrideV1)
                 if payload.scope == "session":
-                    _, _, locks = await _current_preferences(db, row)
+                    _, current_override, locks = await _current_preferences(db, row)
+                    merged_override = JobPreferenceOverrideV1.model_validate(
+                        {
+                            **current_override.model_dump(exclude_unset=True),
+                            **payload.preferences.model_dump(exclude_unset=True),
+                        }
+                    )
                     await self._save_preferences(
                         db,
                         tenant,
                         row,
-                        payload.preferences,
+                        merged_override,
                         locks,
                     )
                 if row.current_version_id is not None:
@@ -1123,7 +1128,11 @@ class ResumeRevisionPublisher:
                 raise DomainValidationError("revision candidate differs from scoped patch")
         elif candidate.content != base_content or candidate.patches:
             raise DomainValidationError("preference revision changed content without a patch")
-        require_locked_items_unchanged(profile_content, candidate.content, preferences)
+        if (
+            candidate.content.display_name != profile_content.display_name
+            or candidate.content.contact != profile_content.contact
+        ):
+            raise DomainValidationError("protected personal fields changed")
         if hard_constraint_issues(candidate.content, preferences):
             raise DomainValidationError("revision violates hard constraints")
         artifact_id = await self.artifacts.stage(

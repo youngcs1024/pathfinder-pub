@@ -37,6 +37,10 @@ test("first draft retry retains key, JD and budget after an uncertain response",
     }
     if (url.endsWith("/resume-sessions")) return json([{ session_id: "session-a", job_label: "synthetic job",
       run_status: "completed", created_at: "2026-09-23T00:00:00Z" }]);
+    if (url.endsWith("/session-a/questions")) return json([{
+      id: "question-a", text: "Need facts", source_run_id: "run-a", version_id: null,
+    }]);
+    if (url.endsWith("/session-a/user-facts") || url.endsWith("/session-a/feedback")) return json([]);
     if (url.endsWith("/session-a")) return json(resumeDetail("completed",
       { outcome: "needs_input", questions: ["Need facts"] }));
     throw new Error(`Unexpected fetch ${url}`);
@@ -55,6 +59,7 @@ test("first draft retry retains key, JD and budget after an uncertain response",
   assert.equal(body.override.page_target, 2);
   assert.equal(body.budget.max_cost_cny, "2");
   assert.match(h.element("resume-job-draft").textContent, /No draft yet/);
+  assert.equal(h.element("resume-feedback-question").children[0].value, "question-a");
 });
 
 test("R5.1 feedback conflict keeps inputs and prevents blind retry", async t => {
