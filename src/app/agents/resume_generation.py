@@ -227,6 +227,7 @@ class ResumeGenerationGraph:
                 )
             )
             for call in response.tool_calls:
+                check_model_input_privacy(inputs.profile_content, call.arguments)
                 self.tools.validate_call(call)
                 result = await self.tools.execute(call)
                 messages.append(ChatMessage(role="tool", tool_call_id=call.call_id, content=result))

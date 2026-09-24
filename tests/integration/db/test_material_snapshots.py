@@ -254,7 +254,10 @@ async def test_code_and_independent_document_keep_provenance_and_refresh(
         second_progress = await store.get_import(tenant, project["id"], second.receipt.resource_id)
         assert second_progress["status"] == "completed"
         assert second_progress["cache_digest"] != progress["cache_digest"]
-        assert (await facts.current_facts(tenant, project["id"]))["facts"] == []
+        refreshed = await facts.current_facts(tenant, project["id"])
+        assert refreshed["facts"] == []
+        assert refreshed["fact_set_id"] != catalog["fact_set_id"]
+        assert refreshed["import_id"] == second.receipt.resource_id
         assert (await facts.search_confirmed(tenant, (project["id"],), "synthetic")) == []
         old_by_source = {
             item["source_id"]: item["manifest_digest"] for item in progress["snapshots"]
@@ -381,5 +384,44 @@ async def test_multi_project_scope_requires_each_exact_project_import_pair(
         assert len({item.id for item in scope.files}) == 2
         with pytest.raises(DomainNotFoundError):
             await facts.retrieval_scope(tenant, ((pairs[0][0], pairs[1][1]),))
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("has_snapshot", [False, True])
+async def test_removed_source_alias_cannot_resume_import(
+    migrated_database_url: str, tmp_path: Path, has_snapshot: bool
+) -> None:
+    engine = create_database_engine(SecretStr(migrated_database_url))
+    sessions = create_session_factory(engine)
+    try:
+        identity = await ProvisioningService(
+            SqlAlchemyProvisioningStore(sessions)
+        ).provision_personal_workspace("r62-source-revoked")
+        tenant = TenantContext(identity.workspace_id, identity.user_id, identity.role)
+        aliases, _ = _fixture_aliases(tmp_path, tenant.workspace_id)
+        store = SqlAlchemyMaterialStore(sessions, aliases)
+        project = await store.create_project(tenant, "Revoked source", uuid4())
+        source = await store.create_source(tenant, project["id"], "notes", uuid4())
+        accepted = await store.submit_import(tenant, project["id"], (source["id"],), uuid4())
+        fixed_id = None
+        if has_snapshot:
+            fixed_id = await store.persist_snapshot(
+                tenant,
+                accepted.receipt.resource_id,
+                source["id"],
+                read_alias(aliases.get("notes", tenant.workspace_id)),
+            )
+        store.aliases = MaterialAliasRegistry(())
+        assert await _runner(sessions, store).run_once(asyncio.Event())
+        async with sessions() as db:
+            run = await db.get(Run, accepted.receipt.run_id)
+            assert run.status == "failed"
+            assert run.error_category == "alias_unavailable"
+        assert (await SqlAlchemyProjectFactStore(sessions).current_facts(tenant, project["id"]))[
+            "fact_set_id"
+        ] is None
+        if fixed_id is not None:
+            assert (await store.snapshot_files(tenant, fixed_id))[0].content
     finally:
         await engine.dispose()

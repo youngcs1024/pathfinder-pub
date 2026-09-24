@@ -259,6 +259,81 @@ test("confirmation conflict preserves key and selected version", async t => {
   assert.match(h.element("resume-confirm-status").textContent, /Refresh/);
 });
 
+test("late confirmation cannot refresh or overwrite a newly selected session", async t => {
+  const h = await loadUi(t, { randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+  h.state.resumeSessionId = "session-a";
+  h.state.resumeSession = { ...resumeDetail(), current_version_id: "version-a", revision: 2 };
+  h.state.resumeVersion = { version_id: "version-a", session_id: "session-a" };
+  h.state.resumeArtifact = { artifact_id: "artifact-a", tex_sha256: "a".repeat(64) };
+  const pending = deferred();
+  h.route((url, options) => options.method === "POST" ? pending.promise
+    : json({ ...resumeDetail(), session_id: "session-b" }));
+  const confirming = h.call("confirmResumeVersion");
+  await until(() => h.calls.length === 1);
+  await h.call("openResumeSession", "session-b");
+  const reads = h.calls.length;
+  pending.resolve(json({ version_id: "version-a", tex_sha256: "a".repeat(64) }));
+  await confirming;
+  assert.equal(h.calls.length, reads);
+  assert.equal(h.state.resumeSession.session_id, "session-b");
+  assert.equal(h.state.resumeConfirmationSubmission, null);
+});
+
+test("confirmation response loss retries the same version, digest and key", async t => {
+  const h = await loadUi(t, { randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+  h.state.resumeSession = { ...resumeDetail(), current_version_id: "version-a", revision: 2 };
+  h.state.resumeVersion = { version_id: "version-a", session_id: "session-a" };
+  h.state.resumeArtifact = { artifact_id: "artifact-a", tex_sha256: "a".repeat(64) };
+  h.route(() => { throw new Error("response lost"); });
+  await assert.rejects(h.call("confirmResumeVersion"), /response lost/);
+  h.state.resumeSession.revision = 3;
+  await assert.rejects(h.call("confirmResumeVersion"), /response lost/);
+  assert.equal(h.calls[0].body, h.calls[1].body);
+  assert.equal(h.calls[0].headers.get("Idempotency-Key"), h.calls[1].headers.get("Idempotency-Key"));
+});
+
+for (const fault of ["version", "digest", "selection"]) {
+  test(`download fails closed after ${fault} changes`, async t => {
+    const h = await loadUi(t);
+    h.state.resumeVersion = { version_id: "version-a", session_id: "session-a", version: 1 };
+    h.state.resumeArtifact = { artifact_id: "artifact-a", tex_sha256: "a".repeat(64) };
+    const pending = deferred();
+    h.route(() => pending.promise);
+    const downloading = h.call("downloadResumeTex");
+    await until(() => h.calls.length === 1);
+    if (fault === "selection") h.state.resumeVersion = { version_id: "version-b" };
+    pending.resolve(new Response("synthetic tex", { headers: {
+      "X-Content-SHA256": (fault === "digest" ? "b" : "a").repeat(64),
+      "X-Resume-Version-ID": fault === "version" ? "version-b" : "version-a",
+    } }));
+    if (fault === "selection") await downloading;
+    else await assert.rejects(downloading, /mismatch/);
+    assert.equal(h.created.filter(item => item.tagName === "a").length, 0);
+  });
+}
+
+for (const action of ["cancelResumeSession", "changeResumeLock", "reviewResumeFact"]) {
+  test(`late ${action} response cannot reopen the previous job`, async t => {
+    const h = await loadUi(t, { randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+    h.state.resumeSessionId = "session-a";
+    h.state.resumeSession = { ...resumeDetail("running"), current_version_id: "version-a", revision: 2 };
+    h.state.resumeTerminal = false;
+    const pending = deferred();
+    h.route((url, options) => options.method === "POST" ? pending.promise
+      : json({ ...resumeDetail(), session_id: "session-b" }));
+    const request = action === "changeResumeLock" ? h.call(action, "bullet-a", true)
+      : action === "reviewResumeFact" ? h.call(action, { fact_version_id: "fact-a" }, "confirm")
+      : h.call(action);
+    await until(() => h.calls.length === 1);
+    await h.call("openResumeSession", "session-b");
+    const count = h.calls.length;
+    pending.resolve(json({ status: "completed" }));
+    await request;
+    assert.equal(h.calls.length, count);
+    assert.equal(h.state.resumeSessionId, "session-b");
+  });
+}
+
 test("resume preview and import retry preserve the exact source and key", async t => {
   const h = await loadUi(t, { randomUUID: () => "33333333-3333-4333-8333-333333333333" });
   h.element("resume-profile-file").files = [{ name: "synthetic.tex", text: async () => "PRIVATE-SYNTHETIC-CANARY" }];

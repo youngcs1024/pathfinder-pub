@@ -179,7 +179,10 @@ async function openResumeSession(sessionId) {
   state.resumeGeneration += 1;
   state.resumeStreamController?.abort();
   state.resumeStreamController = null;
-  if (state.resumeSessionId !== sessionId) state.resumeSelectedVersionId = null;
+  if (state.resumeSessionId !== sessionId) {
+    state.resumeSelectedVersionId = null;
+    state.resumeConfirmationSubmission = null;
+  }
   state.resumeSessionId = sessionId;
   state.resumeSession = null;
   state.resumeVersion = null;
@@ -458,12 +461,14 @@ async function sendResumeSubmission(submission) {
 }
 
 async function cancelResumeSession() {
+  const generation = state.resumeGeneration;
   const sessionId = state.resumeSessionId;
   if (!sessionId || state.resumeTerminal) return;
   await apiFetch(`${resumeBase()}/${sessionId}/cancel`, {
     method: "POST", signal: state.resumeRequestController.signal,
   });
-  await refreshResumeDetail(sessionId, state.resumeGeneration);
+  if (generation !== state.resumeGeneration || state.resumeSessionId !== sessionId) return;
+  await refreshResumeDetail(sessionId, generation);
 }
 
 async function fetchResumeEventStream(url, signal, refreshed = false) {
@@ -554,6 +559,7 @@ async function streamResumeEvents(sessionId, generation) {
 }
 
 async function confirmResumeVersion() {
+  const generation = state.resumeGeneration;
   const detail = state.resumeSession;
   const version = state.resumeVersion;
   const artifact = state.resumeArtifact;
@@ -577,12 +583,12 @@ async function confirmResumeVersion() {
     if (result.version_id !== submission.versionId || result.tex_sha256 !== submission.body.tex_sha256) {
       throw new Error("Confirmation identity mismatch.");
     }
-    if (state.resumeConfirmationSubmission !== submission) return;
+    if (generation !== state.resumeGeneration || state.resumeConfirmationSubmission !== submission) return;
     state.resumeConfirmationSubmission = null;
     byId("resume-confirm-status").textContent = "Selected version confirmed.";
     await refreshResumeDetail(detail.session_id, state.resumeGeneration);
   } catch (error) {
-    if (state.resumeConfirmationSubmission !== submission) return;
+    if (generation !== state.resumeGeneration || state.resumeConfirmationSubmission !== submission) return;
     submission.conflict = error.problem?.status === 409;
     byId("resume-confirm-status").textContent = submission.conflict
       ? "Confirmation conflict. Refresh and review this version before trying again."
@@ -814,6 +820,7 @@ async function sendResumeFeedback(submission) {
 }
 
 async function reviewResumeFact(fact, decision) {
+  const generation = state.resumeGeneration;
   const detail = state.resumeSession;
   if (!detail) return;
   await apiFetch(`${resumeBase()}/${detail.session_id}/user-facts/${fact.fact_version_id}/reviews`, {
@@ -822,10 +829,12 @@ async function reviewResumeFact(fact, decision) {
       fact_version_id: fact.fact_version_id, decision, attested: decision === "confirm" },
     signal: state.resumeRequestController.signal,
   });
+  if (generation !== state.resumeGeneration || state.resumeSessionId !== detail.session_id) return;
   await openResumeSession(detail.session_id);
 }
 
 async function changeResumeLock(itemId, locked) {
+  const generation = state.resumeGeneration;
   const detail = state.resumeSession;
   if (!detail?.current_version_id) return;
   await apiFetch(`${resumeBase()}/${detail.session_id}/locks`, {
@@ -833,6 +842,7 @@ async function changeResumeLock(itemId, locked) {
     body: { expected_session_revision: detail.revision, base_version_id: detail.current_version_id,
       item_id: itemId, locked }, signal: state.resumeRequestController.signal,
   });
+  if (generation !== state.resumeGeneration || state.resumeSessionId !== detail.session_id) return;
   await openResumeSession(detail.session_id);
 }
 
