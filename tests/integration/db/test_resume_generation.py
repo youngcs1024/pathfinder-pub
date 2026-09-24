@@ -41,10 +41,12 @@ from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.domain.errors import DomainConflictError, DomainInvariantError, DomainNotFoundError
+from app.domain.job_inputs import ProvidedJobInputAdapter
 from app.domain.project_facts import CandidateFactV1, FactEvidenceV1
 from app.domain.provisioning import ProvisioningService
 from app.domain.resume_confirmation import ConfirmVersionV1, VersionSummaryV1
 from app.domain.resume_generation import GenerationBudgetV1, JobInputV1, SessionCreateV1
+from app.domain.resume_profile import JobPreferenceOverrideV1
 from app.domain.resume_revision import (
     ContentFeedbackV1,
     FactFeedbackV1,
@@ -66,6 +68,7 @@ from app.worker.revision_executor import RevisionRunExecutor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
 from tests.integration.db.test_material_snapshots import _fixture_aliases, _runner
+from tests.resume_extensions import alternate_kwargs
 
 pytestmark = pytest.mark.integration
 SOURCE = Path(__file__).resolve().parents[2] / "fixtures/resume/synthetic_main.tex"
@@ -98,7 +101,14 @@ async def test_create_replay_scope_and_cancel(migrated_database_url: str) -> Non
         project = await SqlAlchemyMaterialStore(sessions, MaterialAliasRegistry(())).create_project(
             tenant, "Synthetic", uuid4()
         )
-        store = SqlAlchemyResumeGenerationStore(sessions)
+        adapter_calls = []
+
+        class RecordingInput(ProvidedJobInputAdapter):
+            def snapshot(self, value):
+                adapter_calls.append(value.digest)
+                return super().snapshot(value)
+
+        store = SqlAlchemyResumeGenerationStore(sessions, job_input_adapter=RecordingInput())
         request = SessionCreateV1(
             profile_version_id=profile["version_id"],
             preference_version=1,
@@ -112,6 +122,7 @@ async def test_create_replay_scope_and_cancel(migrated_database_url: str) -> Non
         created = await store.create(tenant, request, key)
         replay = await store.create(tenant, request, key)
         assert replay.replayed and replay.receipt == created.receipt
+        assert adapter_calls == [request.job.digest]
         assert created.receipt.resource_id is not None
         detail = await store.get_session(tenant, created.receipt.resource_id)
         SessionDetailResponse.model_validate(detail)
@@ -160,8 +171,9 @@ async def test_create_replay_scope_and_cancel(migrated_database_url: str) -> Non
         await engine.dispose()
 
 
+@pytest.mark.parametrize("alternate_template", [False, True], ids=["fixed", "alternate"])
 async def test_scripted_fake_publishes_downloadable_tex(
-    migrated_database_url: str, tmp_path: Path
+    migrated_database_url: str, tmp_path: Path, alternate_template: bool
 ) -> None:
     engine = create_database_engine(SecretStr(migrated_database_url))
     sessions = create_session_factory(engine)
@@ -276,6 +288,25 @@ async def test_scripted_fake_publishes_downloadable_tex(
             uuid4(),
         )
         assert (await store.execution_inputs(tenant, created.receipt.resource_id)).facts
+        # A test-only batch is just independent handles over the single-job service.
+        child_requests = {}
+        children = {}
+        for name, calls in (("sibling", 3), ("budget", 1), ("cancelled", 3)):
+            child_requests[name] = SessionCreateV1(
+                profile_version_id=profile["version_id"],
+                preference_version=1,
+                project_ids=(project["id"],),
+                job=JobInputV1(source="paste", text="Build a synthetic service\n" + name),
+                override=JobPreferenceOverrideV1(page_target=2, writing_advice=name),
+                budget=GenerationBudgetV1(
+                    max_model_calls=calls, max_tool_calls=0, max_cost_cny=Decimal("0.5")
+                ),
+            )
+            child_key = uuid4()
+            child = await store.create(tenant, child_requests[name], child_key)
+            assert (await store.create(tenant, child_requests[name], child_key)).replayed
+            children[name] = child.receipt.resource_id
+        await store.cancel(tenant, children["cancelled"])
         script = ScriptedFakeChatModel(
             [
                 ChatModelResult(
@@ -309,6 +340,24 @@ async def test_scripted_fake_publishes_downloadable_tex(
                     )
                 ),
             ]
+            * 2
+            + [
+                ChatModelResult(
+                    content=json.dumps(
+                        {
+                            "requirements": [
+                                {
+                                    "kind": "explicit",
+                                    "start": 0,
+                                    "end": 25,
+                                    "quote": "Build a synthetic service",
+                                }
+                            ],
+                            "questions": [],
+                        }
+                    )
+                )
+            ]
         )
         factory = LLMFactory(
             recorder=SqlAlchemyInvocationRecorder(sessions),
@@ -329,6 +378,7 @@ async def test_scripted_fake_publishes_downloadable_tex(
             sessions,
             expected_source_sha256=source_hash,
             expected_preamble_sha256=preamble_hash,
+            **(alternate_kwargs() if alternate_template else {}),
         )
         runner = WorkerRunner(
             worker_id="generation-test",
@@ -352,6 +402,31 @@ async def test_scripted_fake_publishes_downloadable_tex(
         detail = await store.get_session(tenant, created.receipt.resource_id)
         assert detail["run_status"] == "completed", detail["error_category"]
         assert detail["result"].outcome == "draft"
+        assert await runner.run_once(asyncio.Event())
+        sibling = await store.get_session(tenant, children["sibling"])
+        assert sibling["run_status"] == "completed"
+        assert sibling["current_version_id"] != detail["current_version_id"]
+        assert await runner.run_once(asyncio.Event())
+        states = {
+            name: await store.get_session(tenant, handle) for name, handle in children.items()
+        }
+        assert {name: state["run_status"] for name, state in states.items()} == {
+            "sibling": "completed",
+            "budget": "failed",
+            "cancelled": "cancelled",
+        }
+        assert states["budget"]["current_version_id"] is None
+        assert states["budget"]["error_category"] == "generation_budget_exhausted"
+        assert not await store.spend_allowed(tenant, children["budget"])
+        assert await store.spend_allowed(tenant, children["sibling"])
+        assert (await store.get_session(tenant, created.receipt.resource_id))[
+            "current_version_id"
+        ] == detail["current_version_id"]
+        for name in children:
+            assert states[name]["job"]["text"] == child_requests[name].job.text
+            assert states[name]["budget"] == child_requests[name].budget
+        with pytest.raises(DomainNotFoundError):
+            await store.get_version(tenant, children["sibling"], detail["current_version_id"])
         version = await store.get_version(
             tenant, created.receipt.resource_id, detail["current_version_id"]
         )
@@ -641,6 +716,22 @@ async def test_scripted_fake_publishes_downloadable_tex(
         assert (await revisions.list_user_facts(tenant, created.receipt.resource_id))[-1][
             "review_status"
         ] == "confirmed"
+        sibling_history = await confirmations.list_versions(tenant, children["sibling"])
+        assert len(sibling_history) == 1 and sibling_history[0]["confirmation"] is None
+        assert await revisions.list_feedback(tenant, children["sibling"]) == []
+        assert await revisions.list_user_facts(tenant, children["sibling"]) == []
+        sibling_after = await store.get_session(tenant, children["sibling"])
+        assert sibling_after["current_version_id"] == sibling["current_version_id"]
+        assert sibling_after["locked_item_ids"] == []
+        sibling_inputs = await store.execution_inputs(tenant, children["sibling"])
+        assert sibling_inputs.preferences.page_target == 2
+        assert sibling_inputs.preferences.writing_advice == "sibling"
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.download(tenant, children["sibling"], base_id)
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.confirm(
+                tenant, children["sibling"], base_id, first_request, uuid4()
+            )
         foreign = await provisioning.provision_personal_workspace("r52-foreign")
         outsider = await tenancy.resolve_tenant(
             workspace_id=foreign.workspace_id, actor_user_id=foreign.user_id
@@ -668,6 +759,8 @@ async def test_scripted_fake_publishes_downloadable_tex(
                 )
                 .values(revoked_at=func.now())
             )
+        with pytest.raises(DomainNotFoundError):
+            await store.create(tenant, child_requests["sibling"], uuid4())
         with pytest.raises(DomainNotFoundError):
             await confirmations.list_versions(tenant, session_id)
         with pytest.raises(DomainNotFoundError):

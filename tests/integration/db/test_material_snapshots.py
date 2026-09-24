@@ -78,7 +78,7 @@ def _fixture_aliases(tmp_path: Path, workspace_id):
     ), docs
 
 
-def _runner(sessions, store):
+def _runner(sessions, store, *, source_reader=read_alias):
     factory = LLMFactory(
         recorder=SqlAlchemyInvocationRecorder(sessions),
         chat_adapter=FakeChatModel(),
@@ -90,6 +90,7 @@ def _runner(sessions, store):
     facts = SqlAlchemyProjectFactStore(sessions)
     executor = MaterialRunExecutor(
         reader=reader,
+        source_reader=source_reader,
         materials=store,
         aliases=store.aliases,
         facts=facts,

@@ -7,6 +7,7 @@ import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from app.material.aliases import MaterialAlias, safe_relative_path
 
@@ -193,6 +194,59 @@ def _read_regular(root: Path, relative: str) -> bytes:
             os.close(fd)
     except OSError:
         raise MaterialReadError("file_unavailable") from None
+
+
+class SourceReader(Protocol):
+    def __call__(self, alias: MaterialAlias) -> MaterialRead: ...
+
+
+def validate_material_read(alias: MaterialAlias, result: MaterialRead) -> MaterialRead:
+    """Validate injected readers before ingestion; partial reads cannot publish facts."""
+    if result.authorized_paths != alias.paths:
+        raise MaterialReadError("unauthorized_scope")
+    if result.omitted_files:
+        raise MaterialReadError("partial_read")
+    if not result.files:
+        raise MaterialReadError("no_files")
+    if len(result.files) > MAX_SNAPSHOT_FILES:
+        raise MaterialReadError("too_many_files")
+    if sum(len(item.content) for item in result.files) > MAX_SNAPSHOT_BYTES:
+        raise MaterialReadError("snapshot_too_large")
+    seen: set[str] = set()
+    for item in result.files:
+        _validate_name(item.path)
+        if item.path in seen or not any(
+            item.path == path
+            or (alias.kind == "git" and item.path.startswith(path.rstrip("/") + "/"))
+            for path in alias.paths
+        ):
+            raise MaterialReadError("unauthorized_scope")
+        seen.add(item.path)
+        if _bounded_content(item.path, item.content) != item:
+            raise MaterialReadError("content_identity_invalid")
+    if any(
+        not any(
+            item.path == path
+            or (alias.kind == "git" and item.path.startswith(path.rstrip("/") + "/"))
+            for item in result.files
+        )
+        for path in alias.paths
+    ):
+        raise MaterialReadError("partial_read")
+    if alias.kind == "git" and result.source_revision != alias.commit:
+        raise MaterialReadError("source_revision_changed")
+    manifest = "".join(f"{item.path}:{item.digest}\n" for item in result.files)
+    if (
+        alias.kind == "file"
+        and result.source_revision != hashlib.sha256(manifest.encode()).hexdigest()
+    ):
+        raise MaterialReadError("source_revision_changed")
+    expected = hashlib.sha256(
+        (alias.digest + result.source_revision + manifest).encode()
+    ).hexdigest()
+    if result.digest != expected:
+        raise MaterialReadError("content_identity_invalid")
+    return result
 
 
 def read_alias(alias: MaterialAlias) -> MaterialRead:

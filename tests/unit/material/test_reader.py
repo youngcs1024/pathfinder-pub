@@ -110,3 +110,57 @@ def test_snapshot_limits_are_enforced_during_read(tmp_path: Path, monkeypatch) -
     monkeypatch.setattr(reader, "MAX_SNAPSHOT_BYTES", 4)
     with pytest.raises(MaterialReadError, match="snapshot_too_large"):
         read_alias(alias)
+
+
+def test_injected_reader_results_validate_scope_revision_and_complete_bytes(tmp_path: Path):
+    from dataclasses import replace
+
+    from app.material.reader import validate_material_read
+
+    (tmp_path / "notes.md").write_text("Synthetic evidence\n")
+    alias = MaterialAlias("notes", "file", tmp_path, ("notes.md",), (uuid4(),))
+    result = read_alias(alias)
+    assert validate_material_read(alias, result) == result
+    for changed, code in (
+        (replace(result, omitted_files=("notes.md",)), "partial_read"),
+        (replace(result, authorized_paths=("other.md",)), "unauthorized_scope"),
+        (replace(result, source_revision="changed"), "source_revision_changed"),
+        (replace(result, digest="0" * 64), "content_identity_invalid"),
+        (
+            replace(result, files=(replace(result.files[0], digest="0" * 64),)),
+            "content_identity_invalid",
+        ),
+        (replace(result, files=(replace(result.files[0], path="other.md"),)), "unauthorized_scope"),
+    ):
+        with pytest.raises(MaterialReadError, match=code):
+            validate_material_read(alias, changed)
+
+
+def test_reader_reports_unavailable_format_and_mid_read_change(tmp_path: Path, monkeypatch):
+    from types import SimpleNamespace
+
+    alias = MaterialAlias("notes", "file", tmp_path, ("notes.md",), (uuid4(),))
+    with pytest.raises(MaterialReadError, match="file_unavailable"):
+        read_alias(alias)
+    (tmp_path / "notes.md").write_bytes(b"\xff")
+    with pytest.raises(MaterialReadError, match="invalid_utf8"):
+        read_alias(alias)
+    (tmp_path / "notes.md").write_text("Synthetic")
+    original = reader.os.fstat
+    counter = 0
+
+    def changed(fd):
+        nonlocal counter
+        stat = original(fd)
+        counter += 1
+        return SimpleNamespace(
+            st_dev=stat.st_dev,
+            st_ino=stat.st_ino,
+            st_mtime_ns=stat.st_mtime_ns + counter,
+            st_size=stat.st_size,
+            st_mode=stat.st_mode,
+        )
+
+    monkeypatch.setattr(reader.os, "fstat", changed)
+    with pytest.raises(MaterialReadError, match="file_changed_during_read"):
+        read_alias(alias)

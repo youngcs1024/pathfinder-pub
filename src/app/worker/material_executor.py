@@ -25,7 +25,14 @@ from app.domain.tenancy import TenantContext
 from app.llm.factory import LLMAccountingError, LLMProviderError
 from app.material.aliases import MaterialAliasRegistry
 from app.material.chunking import prepare_material_file
-from app.material.reader import MaterialFile, MaterialRead, MaterialReadError, read_alias
+from app.material.reader import (
+    MaterialFile,
+    MaterialRead,
+    MaterialReadError,
+    SourceReader,
+    read_alias,
+    validate_material_read,
+)
 from app.retrieval.chunking import PreparedIngestionBatch
 from app.retrieval.documents import (
     DocumentIngestionAuthorizationError,
@@ -108,7 +115,9 @@ class MaterialRunExecutor:
             [TenantContext, UUID, MaterialRetrievalScope], MaterialFactExtractor
         ],
         extractor_digest: str,
+        source_reader: SourceReader = read_alias,
     ) -> None:
+        self.source_reader = source_reader
         self.reader = reader
         self.materials = materials
         self.aliases = aliases
@@ -159,7 +168,9 @@ class MaterialRunExecutor:
                     tenant, payload.import_id, source_id
                 )
                 if snapshot_id is None:
-                    material = await asyncio.to_thread(read_alias, alias)
+                    material = validate_material_read(
+                        alias, await asyncio.to_thread(self.source_reader, alias)
+                    )
                     snapshot_id = await self.materials.persist_snapshot(
                         tenant, payload.import_id, source_id, material
                     )

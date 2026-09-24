@@ -17,6 +17,7 @@ from app.domain.resume_profile import (
     hard_constraint_issues,
     require_locked_items_unchanged,
 )
+from app.domain.resume_templates import TemplateManifest, TemplateRenderer, TemplateRenderResult
 from app.resume.template_import import (
     FIXED_PREAMBLE_SHA256,
     FIXED_SOURCE_SHA256,
@@ -155,12 +156,7 @@ def render_resume_tex(
     preferences: ResumePreferencesV1,
 ) -> RenderedTex:
     """Render text only; callers own authorization and artifact transactions."""
-    try:
-        profile_content = ResumeContentV1.model_validate(profile_content.model_dump(mode="json"))
-        content = ResumeContentV1.model_validate(content.model_dump(mode="json"))
-        preferences = ResumePreferencesV1.model_validate(preferences.model_dump(mode="json"))
-    except ValidationError:
-        raise DomainValidationError("resume render input is invalid") from None
+    validate_render_content(profile_content, content, preferences)
     if identity.commit != TEMPLATE_COMMIT:
         raise DomainValidationError("resume template version is unsupported")
     if hashlib.sha256(source_bytes).hexdigest() != identity.source_sha256:
@@ -179,19 +175,6 @@ def render_resume_tex(
     )
     if not preview.complete:
         raise DomainValidationError("resume template structure is unsupported")
-    require_locked_items_unchanged(profile_content, content, preferences)
-    if hard_constraint_issues(content, preferences):
-        raise DomainValidationError("resume content violates a hard constraint")
-    all_ids = [
-        content.display_name_id,
-        *(item.id for item in content.contact),
-        *(item.id for item in content.education),
-        *(item.id for item in content.projects),
-        *(item.id for item in content.skills),
-        *(item_id for project in content.projects for item_id in project.bullet_ids),
-    ]
-    if len(all_ids) != len(set(all_ids)):
-        raise DomainValidationError("resume item identities are duplicated")
     sections = re.findall(r"\\section\{([^{}\\\n]+)\}", source.split(r"\begin{document}", 1)[1])
     color = re.search(r"\\LARGE\\bfseries\\color\{([A-Za-z]+)\}", source)
     if len(sections) != 3 or color is None:
@@ -229,3 +212,95 @@ def render_resume_tex(
         config_sha256=_digest({"section_order": preferences.section_order}),
         identity=identity,
     )
+
+
+def validate_render_content(
+    profile_content: ResumeContentV1,
+    content: ResumeContentV1,
+    preferences: ResumePreferencesV1,
+) -> None:
+    try:
+        profile_content = ResumeContentV1.model_validate(profile_content.model_dump(mode="json"))
+        content = ResumeContentV1.model_validate(content.model_dump(mode="json"))
+        preferences = ResumePreferencesV1.model_validate(preferences.model_dump(mode="json"))
+    except ValidationError:
+        raise DomainValidationError("resume render input is invalid") from None
+    require_locked_items_unchanged(profile_content, content, preferences)
+    if hard_constraint_issues(content, preferences):
+        raise DomainValidationError("resume content violates a hard constraint")
+    if any(not project.bullets for project in content.projects):
+        raise DomainValidationError("resume project needs at least one bullet")
+    all_ids = [
+        content.display_name_id,
+        *(item.id for item in content.contact),
+        *(item.id for item in content.education),
+        *(item.id for item in content.projects),
+        *(item.id for item in content.skills),
+        *(item_id for project in content.projects for item_id in project.bullet_ids),
+    ]
+    if len(all_ids) != len(set(all_ids)):
+        raise DomainValidationError("resume item identities are duplicated")
+
+
+class FixedTemplateRenderer:
+    def render(
+        self,
+        *,
+        source_bytes: bytes,
+        manifest: TemplateManifest,
+        profile_content: ResumeContentV1,
+        content: ResumeContentV1,
+        preferences: ResumePreferencesV1,
+    ) -> TemplateRenderResult:
+        if manifest.renderer_version != RENDERER_VERSION:
+            raise DomainValidationError("resume renderer version is unsupported")
+        result = render_resume_tex(
+            source_bytes=source_bytes,
+            identity=TemplateIdentity(
+                manifest.commit, manifest.source_sha256, manifest.preamble_sha256
+            ),
+            profile_content=profile_content,
+            content=content,
+            preferences=preferences,
+        )
+        return TemplateRenderResult(
+            result.tex_bytes,
+            result.tex_sha256,
+            result.content_sha256,
+            result.config_sha256,
+            manifest,
+        )
+
+
+def render_with_template(
+    renderer: TemplateRenderer,
+    *,
+    source_bytes: bytes,
+    manifest: TemplateManifest,
+    profile_content: ResumeContentV1,
+    content: ResumeContentV1,
+    preferences: ResumePreferencesV1,
+) -> TemplateRenderResult:
+    validate_render_content(profile_content, content, preferences)
+    if hashlib.sha256(source_bytes).hexdigest() != manifest.source_sha256:
+        raise DomainValidationError("resume template source digest is invalid")
+    preamble, separator, _ = source_bytes.partition(b"\\begin{document}")
+    if not separator or hashlib.sha256(preamble).hexdigest() != manifest.preamble_sha256:
+        raise DomainValidationError("resume template preamble is invalid")
+    result = renderer.render(
+        source_bytes=source_bytes,
+        manifest=manifest,
+        profile_content=profile_content,
+        content=content,
+        preferences=preferences,
+    )
+    if (
+        result.manifest != manifest
+        or not result.tex_bytes
+        or len(result.tex_bytes) > MAX_TEX_BYTES
+        or hashlib.sha256(result.tex_bytes).hexdigest() != result.tex_sha256
+        or result.content_sha256 != _digest(content.model_dump(mode="json"))
+        or result.config_sha256 != _digest({"section_order": preferences.section_order})
+    ):
+        raise DomainValidationError("resume renderer result identity is invalid")
+    return result

@@ -15,9 +15,15 @@ from app.db.session import AsyncSessionFactory, database_session
 from app.domain.errors import DomainInvariantError, DomainNotFoundError, DomainValidationError
 from app.domain.resume_artifacts import TexArtifactInfoV1
 from app.domain.resume_profile import ResumeContentV1, ResumePreferencesV1
+from app.domain.resume_templates import TemplateManifest, TemplateRenderer
 from app.domain.tenancy import TenantContext
 from app.resume.template_import import FIXED_PREAMBLE_SHA256, FIXED_SOURCE_SHA256, TEMPLATE_COMMIT
-from app.resume.template_render import RENDERER_VERSION, TemplateIdentity, render_resume_tex
+from app.resume.template_render import (
+    RENDERER_VERSION,
+    FixedTemplateRenderer,
+    TemplateIdentity,
+    render_with_template,
+)
 
 
 class SqlAlchemyResumeArtifactStore:
@@ -27,7 +33,20 @@ class SqlAlchemyResumeArtifactStore:
         *,
         expected_source_sha256: str = FIXED_SOURCE_SHA256,
         expected_preamble_sha256: str = FIXED_PREAMBLE_SHA256,
+        renderer: TemplateRenderer | None = None,
+        template_manifest: TemplateManifest | None = None,
+        template_source: bytes | None = None,
     ) -> None:
+        if (template_manifest is None) != (template_source is None):
+            raise ValueError("template manifest and source must be supplied together")
+        self._renderer = renderer if renderer is not None else FixedTemplateRenderer()
+        self._manifest = template_manifest or TemplateManifest(
+            TEMPLATE_COMMIT,
+            expected_source_sha256,
+            expected_preamble_sha256,
+            RENDERER_VERSION,
+        )
+        self._template_source = template_source
         self._sessions = session_factory
         self._identity = TemplateIdentity(
             source_sha256=expected_source_sha256,
@@ -68,9 +87,12 @@ class SqlAlchemyResumeArtifactStore:
         ):
             raise DomainValidationError("resume template identity is unsupported")
         profile_content = ResumeContentV1.model_validate(version.content_json)
-        rendered = render_resume_tex(
-            source_bytes=source.source_bytes,
-            identity=self._identity,
+        rendered = render_with_template(
+            self._renderer,
+            source_bytes=source.source_bytes
+            if self._template_source is None
+            else self._template_source,
+            manifest=self._manifest,
             profile_content=profile_content,
             content=content,
             preferences=preferences,
@@ -78,10 +100,10 @@ class SqlAlchemyResumeArtifactStore:
         identity = {
             "workspace_id": tenant.workspace_id,
             "profile_version_id": version.id,
-            "template_source_sha256": rendered.identity.source_sha256,
+            "template_source_sha256": rendered.manifest.source_sha256,
             "content_sha256": rendered.content_sha256,
             "config_sha256": rendered.config_sha256,
-            "renderer_version": RENDERER_VERSION,
+            "renderer_version": self._manifest.renderer_version,
         }
         artifact_id = uuid4()
         statement = (
@@ -89,8 +111,8 @@ class SqlAlchemyResumeArtifactStore:
             .values(
                 id=artifact_id,
                 created_by_user_id=tenant.actor_user_id,
-                template_commit=rendered.identity.commit,
-                preamble_sha256=rendered.identity.preamble_sha256,
+                template_commit=rendered.manifest.commit,
+                preamble_sha256=rendered.manifest.preamble_sha256,
                 tex_sha256=rendered.tex_sha256,
                 tex_bytes=rendered.tex_bytes,
                 **identity,
@@ -105,18 +127,18 @@ class SqlAlchemyResumeArtifactStore:
             select(ResumeTexArtifact).where(
                 ResumeTexArtifact.workspace_id == tenant.workspace_id,
                 ResumeTexArtifact.profile_version_id == version.id,
-                ResumeTexArtifact.template_source_sha256 == rendered.identity.source_sha256,
+                ResumeTexArtifact.template_source_sha256 == rendered.manifest.source_sha256,
                 ResumeTexArtifact.content_sha256 == rendered.content_sha256,
                 ResumeTexArtifact.config_sha256 == rendered.config_sha256,
-                ResumeTexArtifact.renderer_version == RENDERER_VERSION,
+                ResumeTexArtifact.renderer_version == self._manifest.renderer_version,
             )
         )
         if (
             existing is None
             or existing.tex_sha256 != rendered.tex_sha256
             or existing.tex_bytes != rendered.tex_bytes
-            or existing.preamble_sha256 != rendered.identity.preamble_sha256
-            or existing.template_commit != rendered.identity.commit
+            or existing.preamble_sha256 != rendered.manifest.preamble_sha256
+            or existing.template_commit != rendered.manifest.commit
         ):
             raise DomainInvariantError("resume artifact identity is inconsistent")
         return existing.id
@@ -152,10 +174,10 @@ class SqlAlchemyResumeArtifactStore:
             source is None
             or source.template_commit != TEMPLATE_COMMIT
             or source.source_sha256 != self._identity.source_sha256
-            or artifact.template_commit != source.template_commit
-            or artifact.template_source_sha256 != source.source_sha256
-            or artifact.preamble_sha256 != self._identity.preamble_sha256
-            or artifact.renderer_version != RENDERER_VERSION
+            or artifact.template_commit != self._manifest.commit
+            or artifact.template_source_sha256 != self._manifest.source_sha256
+            or artifact.preamble_sha256 != self._manifest.preamble_sha256
+            or artifact.renderer_version != self._manifest.renderer_version
             or not artifact.tex_bytes
             or len(artifact.tex_bytes) > 512 * 1024
             or hashlib.sha256(artifact.tex_bytes).hexdigest() != artifact.tex_sha256
@@ -175,6 +197,7 @@ class SqlAlchemyResumeArtifactStore:
                 renderer_version=artifact.renderer_version,
                 tex_sha256=artifact.tex_sha256,
                 byte_count=len(artifact.tex_bytes),
+                compile=self._manifest.compile,
             )
 
     async def get_bytes(self, tenant: TenantContext, artifact_id: UUID) -> tuple[bytes, str]:

@@ -21,6 +21,7 @@ from app.domain.errors import DomainInvariantError, DomainNotFoundError
 from app.domain.provisioning import ProvisioningService
 from app.domain.resume_profile import ResumeContentV1, ResumePreferencesV1
 from app.domain.tenancy import TenantService
+from tests.resume_extensions import ALTERNATE_MANIFEST, alternate_kwargs
 
 pytestmark = pytest.mark.integration
 SOURCE = Path(__file__).resolve().parents[2] / "fixtures/resume/synthetic_main.tex"
@@ -97,6 +98,37 @@ async def test_artifact_transaction_replay_scope_revocation_and_digest(
         assert info.byte_count == len(payload)
         assert info.template_source_sha256 == source_sha
         assert payload.startswith(preamble.encode())
+        alternate_options = alternate_kwargs()
+        alternate = SqlAlchemyResumeArtifactStore(
+            sessions,
+            expected_source_sha256=source_sha,
+            expected_preamble_sha256=preamble_sha,
+            **alternate_options,
+        )
+        async with sessions.begin() as session:
+            alternate_id = await alternate.stage(
+                session,
+                tenant,
+                profile_version_id=detail["version_id"],
+                content=content,
+                preferences=ResumePreferencesV1(),
+            )
+        assert alternate_id != artifact_id
+        alternate_info = await alternate.get_info(tenant, alternate_id)
+        assert alternate_info.template_source_sha256 == ALTERNATE_MANIFEST.source_sha256
+        assert alternate_info.compile.packages == ("fontspec",)
+        calls_before = alternate_options["renderer"].calls
+        alternate_bytes, alternate_digest = await alternate.get_bytes(tenant, alternate_id)
+        assert alternate_options["renderer"].calls == calls_before
+        assert alternate_digest == hashlib.sha256(alternate_bytes).hexdigest()
+        assert alternate_bytes != payload
+        with pytest.raises(DomainInvariantError):
+            await artifacts.get_bytes(tenant, alternate_id)
+        with pytest.raises(DomainInvariantError):
+            await alternate.get_bytes(tenant, artifact_id)
+        with pytest.raises(DomainNotFoundError):
+            await alternate.get_bytes(other, alternate_id)
+        assert await artifacts.get_bytes(tenant, artifact_id) == (payload, digest)
         with pytest.raises(DomainNotFoundError):
             await artifacts.get_info(other, artifact_id)
         with pytest.raises(DomainNotFoundError):

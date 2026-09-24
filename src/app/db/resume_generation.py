@@ -49,6 +49,7 @@ from app.db.resume_commands import ResumeCommandWriter, SqlAlchemyResumeCommandS
 from app.db.runs import SqlAlchemyRunStore
 from app.db.session import AsyncSessionFactory, database_session
 from app.domain.errors import DomainInvariantError, DomainNotFoundError, DomainValidationError
+from app.domain.job_inputs import JobInputAdapter, ProvidedJobInputAdapter
 from app.domain.project_facts import MaterialRetrievalScope, ScopedMaterialFile
 from app.domain.provisioning import WorkspaceRole
 from app.domain.resume_commands import CommandReceiptV1, ResumeCommandRequest
@@ -203,6 +204,9 @@ async def _preference_number(session: AsyncSession, row: ResumeSession) -> int:
 class _CreateWriter(ResumeCommandWriter):
     supported_kinds = frozenset({"resume_session_create"})
 
+    def __init__(self, job_input_adapter: JobInputAdapter) -> None:
+        self.job_input_adapter = job_input_adapter
+
     async def authorize_and_lock(
         self, session: AsyncSession, tenant: TenantContext, request: ResumeCommandRequest
     ):
@@ -233,16 +237,23 @@ class _CreateWriter(ResumeCommandWriter):
         _, preference, _, _ = await _profile_inputs(
             session, tenant, payload.profile_version_id, payload.preference_version
         )
+        job_snapshot = self.job_input_adapter.snapshot(payload.job).require_complete()
+        if (
+            job_snapshot.source != payload.job.source
+            or job_snapshot.text != payload.job.text
+            or job_snapshot.sha256 != payload.job.digest
+        ):
+            raise DomainValidationError("provided job adapter changed the fixed input")
         snapshot_id, session_id, run_id = uuid4(), uuid4(), uuid4()
         conversation_id, message_id = uuid4(), uuid4()
         session.add(
             JobSnapshot(
                 id=snapshot_id,
                 workspace_id=tenant.workspace_id,
-                source=payload.job.source,
+                source=job_snapshot.source,
                 filename=payload.job.filename,
-                jd_text=payload.job.text,
-                jd_sha256=payload.job.digest,
+                jd_text=job_snapshot.text,
+                jd_sha256=job_snapshot.sha256,
             )
         )
         session.add(
@@ -429,7 +440,10 @@ class _CreateWriter(ResumeCommandWriter):
 
 
 class SqlAlchemyResumeGenerationStore:
-    def __init__(self, sessions: AsyncSessionFactory) -> None:
+    def __init__(
+        self, sessions: AsyncSessionFactory, *, job_input_adapter: JobInputAdapter | None = None
+    ) -> None:
+        self.job_input_adapter = job_input_adapter or ProvidedJobInputAdapter()
         self.sessions = sessions
         self.commands = SqlAlchemyResumeCommandStore(sessions)
         self.runs = SqlAlchemyRunStore(sessions)
@@ -444,7 +458,7 @@ class SqlAlchemyResumeGenerationStore:
                 payload_version=1,
                 payload=request,
             ),
-            writer=_CreateWriter(),
+            writer=_CreateWriter(self.job_input_adapter),
         )
 
     async def list_sessions(self, tenant: TenantContext):
