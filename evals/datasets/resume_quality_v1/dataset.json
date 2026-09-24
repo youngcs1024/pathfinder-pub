@@ -1,0 +1,64 @@
+{
+  "artifact_kind": "resume_quality_dataset_v1",
+  "material_kind": "synthetic",
+  "facts": [
+    "Built a synthetic service",
+    "Implemented a synthetic parser with explicit error handling"
+  ],
+  "cases": [
+    {
+      "case_id": "backend_a",
+      "relationship": "close",
+      "jd": "Build a synthetic service. Maintain API documentation.",
+      "supported_requirements": [
+        {
+          "requirement_id": "supported_core",
+          "quote": "Build a synthetic service",
+          "fact_indexes": [
+            0
+          ]
+        }
+      ],
+      "revisions": [
+        "Clarify the selected bullet without adding a new fact.",
+        "Refine the project summary while preserving the locked bullet."
+      ]
+    },
+    {
+      "case_id": "backend_b",
+      "relationship": "close",
+      "jd": "Build a synthetic service. Maintain API error handling.",
+      "supported_requirements": [
+        {
+          "requirement_id": "supported_core",
+          "quote": "Build a synthetic service",
+          "fact_indexes": [
+            0
+          ]
+        }
+      ],
+      "revisions": [
+        "Clarify the selected bullet without adding a new fact.",
+        "Refine the project summary while preserving the locked bullet."
+      ]
+    },
+    {
+      "case_id": "parser_c",
+      "relationship": "different",
+      "jd": "Implement a synthetic parser. Explain parser error handling.",
+      "supported_requirements": [
+        {
+          "requirement_id": "supported_core",
+          "quote": "Implement a synthetic parser",
+          "fact_indexes": [
+            1
+          ]
+        }
+      ],
+      "revisions": [
+        "Clarify the selected bullet without adding a new fact.",
+        "Refine the project summary while preserving the locked bullet."
+      ]
+    }
+  ]
+}
