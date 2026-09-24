@@ -7,6 +7,7 @@ from app.api.routes.material import router as material_router
 from app.api.routes.me import router as me_router
 from app.api.routes.project_facts import router as project_facts_router
 from app.api.routes.resume_artifacts import router as resume_artifacts_router
+from app.api.routes.resume_confirmation import router as resume_confirmation_router
 from app.api.routes.resume_generation import router as resume_generation_router
 from app.api.routes.resume_profiles import router as resume_profiles_router
 from app.api.routes.resume_revision import router as resume_revision_router
@@ -22,6 +23,7 @@ api_router.include_router(project_facts_router)
 api_router.include_router(resume_profiles_router)
 api_router.include_router(resume_artifacts_router)
 api_router.include_router(resume_generation_router)
+api_router.include_router(resume_confirmation_router)
 api_router.include_router(resume_revision_router)
 api_router.include_router(runs_router)
 api_router.include_router(events_router)

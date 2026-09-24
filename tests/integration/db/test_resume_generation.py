@@ -22,19 +22,28 @@ from app.api.schemas.resume_generation import (
 from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.llm_invocations import SqlAlchemyInvocationRecorder
 from app.db.material import SqlAlchemyMaterialStore
-from app.db.models import MaterialSnapshotFile, ResumeSession, RunJob, WorkspaceMembership
+from app.db.models import (
+    MaterialSnapshotFile,
+    ResumeSession,
+    ResumeTexArtifact,
+    ResumeVersion,
+    RunJob,
+    WorkspaceMembership,
+)
 from app.db.project_facts import SqlAlchemyProjectFactStore
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.resume_artifacts import SqlAlchemyResumeArtifactStore
+from app.db.resume_confirmation import SqlAlchemyResumeConfirmationStore
 from app.db.resume_generation import ResumeGenerationPublisher, SqlAlchemyResumeGenerationStore
 from app.db.resume_profiles import ClaimReviewV1, ItemReviewV1, SqlAlchemyResumeProfileStore
 from app.db.resume_revision import ResumeRevisionPublisher, SqlAlchemyResumeRevisionStore
 from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
-from app.domain.errors import DomainConflictError, DomainNotFoundError
+from app.domain.errors import DomainConflictError, DomainInvariantError, DomainNotFoundError
 from app.domain.project_facts import CandidateFactV1, FactEvidenceV1
 from app.domain.provisioning import ProvisioningService
+from app.domain.resume_confirmation import ConfirmVersionV1, VersionSummaryV1
 from app.domain.resume_generation import GenerationBudgetV1, JobInputV1, SessionCreateV1
 from app.domain.resume_revision import (
     ContentFeedbackV1,
@@ -372,9 +381,56 @@ async def test_scripted_fake_publishes_downloadable_tex(
             == "Built a synthetic service"
         )
         assert version["validation"]["retrieval_config_version"].startswith("sha256:")
-        payload, _ = await artifacts.get_bytes(tenant, version["artifact_id"])
+        payload, digest = await artifacts.get_bytes(tenant, version["artifact_id"])
         assert b"Built a synthetic service" in payload
         assert b"canary@example.test" in payload
+        confirmations = SqlAlchemyResumeConfirmationStore(sessions, artifacts)
+        session_id = created.receipt.resource_id
+        history = await confirmations.list_versions(tenant, session_id)
+        assert len(history) == 1
+        VersionSummaryV1.model_validate(history[0])
+        assert history[0]["confirmation"] is None
+        first_request = ConfirmVersionV1(
+            version_id=version["version_id"],
+            expected_session_revision=detail["revision"],
+            expected_current_version_id=detail["current_version_id"],
+            artifact_id=version["artifact_id"],
+            tex_sha256=digest,
+            attested=True,
+        )
+        with pytest.raises(DomainConflictError):
+            await confirmations.confirm(
+                tenant,
+                session_id,
+                version["version_id"],
+                first_request.model_copy(update={"attested": False}),
+                uuid4(),
+            )
+        with pytest.raises(DomainConflictError):
+            await confirmations.confirm(
+                tenant,
+                session_id,
+                version["version_id"],
+                first_request.model_copy(update={"tex_sha256": "0" * 64}),
+                uuid4(),
+            )
+        first_key = uuid4()
+        first_confirmation = await confirmations.confirm(
+            tenant, session_id, version["version_id"], first_request, first_key
+        )
+        assert (
+            await confirmations.confirm(
+                tenant, session_id, version["version_id"], first_request, first_key
+            )
+        )["replayed"]
+        assert first_confirmation["tex_sha256"] == digest
+        assert (await confirmations.download(tenant, session_id, version["version_id"])) == (
+            payload,
+            digest,
+            1,
+            True,
+        )
+        detail = await store.get_session(tenant, session_id)
         revisions = SqlAlchemyResumeRevisionStore(sessions)
         bullet_id = UUID(version["content"]["projects"][0]["bullet_ids"][0])
         base_id = detail["current_version_id"]
@@ -438,6 +494,20 @@ async def test_scripted_fake_publishes_downloadable_tex(
         assert revised["parent_version_id"] == base_id
         assert revised["content"]["projects"][0]["bullets"][0]["text"] == patch.text
         assert revised["diff"][0]["item_id"] == str(bullet_id)
+        history = await confirmations.list_versions(tenant, session_id)
+        assert [item["version"] for item in history] == [2, 1]
+        assert history[0]["confirmation"] is None
+        assert history[1]["confirmation"].confirmation_id == first_confirmation["confirmation_id"]
+        assert (await confirmations.download(tenant, session_id, base_id)) == (
+            payload,
+            digest,
+            1,
+            True,
+        )
+        with pytest.raises(DomainConflictError):
+            await confirmations.confirm(
+                tenant, session_id, revised["version_id"], first_request, uuid4()
+            )
         assert (await store.get_version(tenant, created.receipt.resource_id, base_id))[
             "content"
         ] == version["content"]
@@ -477,6 +547,84 @@ async def test_scripted_fake_publishes_downloadable_tex(
         pending = (await revisions.list_user_facts(tenant, created.receipt.resource_id))[-1]
         assert pending["review_status"] == "pending"
         fact_detail = await store.get_session(tenant, created.receipt.resource_id)
+        correction = await revisions.command(
+            tenant,
+            session_id,
+            FactFeedbackV1(
+                expected_session_revision=fact_detail["revision"],
+                base_version_id=fact_detail["current_version_id"],
+                fact=UserFactInputV1(
+                    project_id=project["id"],
+                    scope="session",
+                    claim="Corrected synthetic service claim",
+                    kind="personal_statement",
+                    supersedes_material_version_id=fact_version_id,
+                ),
+            ),
+            uuid4(),
+        )
+        assert correction.receipt.status == "completed"
+        fact_detail = await store.get_session(tenant, session_id)
+        second_request = ConfirmVersionV1(
+            version_id=revised["version_id"],
+            expected_session_revision=fact_detail["revision"],
+            expected_current_version_id=fact_detail["current_version_id"],
+            artifact_id=revised["artifact_id"],
+            tex_sha256=(await artifacts.get_info(tenant, revised["artifact_id"])).tex_sha256,
+            attested=True,
+        )
+        with pytest.raises(DomainConflictError, match="under correction"):
+            await confirmations.confirm(
+                tenant, session_id, revised["version_id"], second_request, uuid4()
+            )
+        correction_version_id = correction.receipt.resource_id
+        # The feedback receipt identifies the feedback command; its normalized result
+        # identifies the pending user fact version that must be reviewed.
+        correction_feedback = next(
+            item
+            for item in await revisions.list_feedback(tenant, session_id)
+            if item["feedback_id"] == correction_version_id
+        )
+        corrected_fact_version_id = UUID(correction_feedback["normalized"]["fact_version_id"])
+        rejected = await revisions.command(
+            tenant,
+            session_id,
+            FactReviewV1(
+                expected_session_revision=fact_detail["revision"],
+                base_version_id=fact_detail["current_version_id"],
+                fact_version_id=corrected_fact_version_id,
+                decision="reject",
+            ),
+            uuid4(),
+        )
+        assert rejected.receipt.status == "completed"
+        fact_detail = await store.get_session(tenant, session_id)
+        second_request = second_request.model_copy(
+            update={"expected_session_revision": fact_detail["revision"]}
+        )
+        async with sessions.begin() as db:
+            validation = dict(revised["validation"])
+            await db.execute(
+                update(ResumeVersion)
+                .where(ResumeVersion.id == revised["version_id"])
+                .values(validation_json={**validation, "questions": ["unresolved fact question"]})
+            )
+        with pytest.raises(DomainConflictError):
+            await confirmations.confirm(
+                tenant, session_id, revised["version_id"], second_request, uuid4()
+            )
+        async with sessions.begin() as db:
+            await db.execute(
+                update(ResumeVersion)
+                .where(ResumeVersion.id == revised["version_id"])
+                .values(validation_json=validation)
+            )
+        second_confirmation = await confirmations.confirm(
+            tenant, session_id, revised["version_id"], second_request, uuid4()
+        )
+        assert second_confirmation["version_id"] == revised["version_id"]
+        assert (await confirmations.download(tenant, session_id, revised["version_id"]))[3]
+        fact_detail = await store.get_session(tenant, created.receipt.resource_id)
         reviewed = await revisions.command(
             tenant,
             created.receipt.resource_id,
@@ -493,5 +641,38 @@ async def test_scripted_fake_publishes_downloadable_tex(
         assert (await revisions.list_user_facts(tenant, created.receipt.resource_id))[-1][
             "review_status"
         ] == "confirmed"
+        foreign = await provisioning.provision_personal_workspace("r52-foreign")
+        outsider = await tenancy.resolve_tenant(
+            workspace_id=foreign.workspace_id, actor_user_id=foreign.user_id
+        )
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.list_versions(outsider, session_id)
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.download(outsider, session_id, base_id)
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.confirm(outsider, session_id, base_id, first_request, first_key)
+        async with sessions.begin() as db:
+            await db.execute(
+                update(ResumeTexArtifact)
+                .where(ResumeTexArtifact.id == revised["artifact_id"])
+                .values(tex_bytes=b"corrupt")
+            )
+        with pytest.raises(DomainInvariantError):
+            await confirmations.download(tenant, session_id, revised["version_id"])
+        async with sessions.begin() as db:
+            await db.execute(
+                update(WorkspaceMembership)
+                .where(
+                    WorkspaceMembership.workspace_id == tenant.workspace_id,
+                    WorkspaceMembership.user_id == tenant.actor_user_id,
+                )
+                .values(revoked_at=func.now())
+            )
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.list_versions(tenant, session_id)
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.download(tenant, session_id, base_id)
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.confirm(tenant, session_id, base_id, first_request, first_key)
     finally:
         await engine.dispose()

@@ -185,15 +185,78 @@ test("TeX download uses authenticated bytes and fixed artifact digest", async t 
   const h = await loadUi(t);
   h.state.config = { auth_mode: "supabase" };
   h.state.accessToken = "synthetic-token";
-  h.state.resumeVersion = { version_id: "version-a" };
+  h.state.resumeVersion = { version_id: "version-a", session_id: "session-a", version: 1 };
   h.state.resumeArtifact = { artifact_id: "artifact-a", tex_sha256: "a".repeat(64) };
-  h.route((_url, options) => {
+  h.route((url, options) => {
+    assert.match(url, /session-a\/versions\/version-a\/download$/);
     assert.equal(options.headers.get("Authorization"), "Bearer synthetic-token");
-    return new Response("synthetic tex", { headers: { "X-Content-SHA256": "a".repeat(64) } });
+    return new Response("synthetic tex", { headers: {
+      "X-Content-SHA256": "a".repeat(64), "X-Resume-Version-ID": "version-a",
+    } });
   });
   await h.call("downloadResumeTex");
-  assert.equal(h.created.find(item => item.tagName === "a").download, "resume-version-a.tex");
+  assert.equal(h.created.find(item => item.tagName === "a").download, "resume-v1-draft.tex");
   assert.equal(h.calls.length, 1);
+});
+
+test("history selection keeps old content read only and downloads selected bytes", async t => {
+  const h = await loadUi(t);
+  h.state.resumeSessionId = "session-a";
+  const detail = { ...resumeDetail(), current_version_id: "version-b", revision: 4 };
+  const versions = [
+    { version_id: "version-b", session_id: "session-a", version: 2,
+      artifact_id: "artifact-b", tex_sha256: "b".repeat(64), created_at: "2026-09-23", confirmation: null },
+    { version_id: "version-a", session_id: "session-a", version: 1,
+      artifact_id: "artifact-a", tex_sha256: "a".repeat(64), created_at: "2026-09-22",
+      confirmation: { confirmation_id: "confirmation-a", confirmed_at: "2026-09-22",
+        confirmed_by_user_id: "actor-a" } },
+  ];
+  h.state.resumeSelectedVersionId = "version-a";
+  h.route(url => {
+    if (url.endsWith("/session-a/versions")) return json(versions);
+    if (url.endsWith("/session-a/versions/version-a")) return json({
+      version_id: "version-a", session_id: "session-a", version: 1, artifact_id: "artifact-a",
+      content: { display_name: "Old text", education: [], projects: [], skills: [] },
+      validation: { questions: [] }, coverage: [], facts: [], diff: [], impact: [],
+    });
+    if (url.endsWith("/session-a/versions/version-b")) return json({
+      version_id: "version-b", session_id: "session-a", version: 2, artifact_id: "artifact-b",
+      content: { display_name: "Current text", education: [], projects: [], skills: [] },
+      validation: { questions: [] }, coverage: [], facts: [], diff: [], impact: [],
+    });
+    if (url.endsWith("/artifacts/artifact-a")) return json({
+      artifact_id: "artifact-a", tex_sha256: "a".repeat(64), compile: { instructions: [] },
+    });
+    if (url.endsWith("/session-a/questions") || url.endsWith("/session-a/user-facts")
+        || url.endsWith("/session-a/feedback")) return json([]);
+    if (url.endsWith("/session-a")) return json(detail);
+    throw new Error(`Unexpected fetch ${url}`);
+  });
+  await h.call("refreshResumeDetail", "session-a", h.state.resumeGeneration);
+  assert.equal(h.state.resumeVersion.version_id, "version-a");
+  assert.match(h.element("resume-job-draft").textContent, /Old text/);
+  assert.equal(h.element("resume-revision-panel").hidden, true);
+  assert.match(h.element("resume-job-delivery").textContent, /confirmed/);
+  assert.equal(h.element("resume-version-history").children.length, 2);
+});
+
+test("confirmation conflict preserves key and selected version", async t => {
+  const h = await loadUi(t, { randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+  h.state.resumeSession = { ...resumeDetail(), current_version_id: "version-b", revision: 4 };
+  h.state.resumeVersion = { version_id: "version-a", session_id: "session-a" };
+  h.state.resumeArtifact = { artifact_id: "artifact-a", tex_sha256: "a".repeat(64) };
+  h.route(() => failure(409));
+  await assert.rejects(h.call("confirmResumeVersion"));
+  assert.equal(h.calls.length, 1);
+  assert.deepEqual(JSON.parse(h.calls[0].body), {
+    version_id: "version-a", expected_session_revision: 4, expected_current_version_id: "version-b",
+    artifact_id: "artifact-a", tex_sha256: "a".repeat(64), attested: true,
+  });
+  await h.call("confirmResumeVersion");
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.state.resumeConfirmationSubmission.conflict, true);
+  assert.equal(h.state.resumeSelectedVersionId, null);
+  assert.match(h.element("resume-confirm-status").textContent, /Refresh/);
 });
 
 test("resume preview and import retry preserve the exact source and key", async t => {

@@ -1090,6 +1090,51 @@ class ResumeVersion(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ResumeConfirmation(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_confirmations"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "session_id", "version_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "session_id"],
+            ["resume_sessions.workspace_id", "resume_sessions.id"],
+            ondelete="RESTRICT",
+            name="fk_resume_confirmations_session",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "version_id"],
+            ["resume_versions.workspace_id", "resume_versions.id"],
+            ondelete="RESTRICT",
+            name="fk_resume_confirmations_version",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "artifact_id"],
+            ["resume_tex_artifacts.workspace_id", "resume_tex_artifacts.id"],
+            ondelete="RESTRICT",
+            name="fk_resume_confirmations_artifact",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "confirmed_by_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+            name="fk_resume_confirmations_actor",
+        ),
+        CheckConstraint("tex_sha256 ~ '^[0-9a-f]{64}$'", name="tex_sha256"),
+        Index("ix_resume_confirmations_workspace_session", "workspace_id", "session_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_resume_confirmations_workspace")
+    )
+    session_id: Mapped[UUID] = mapped_column(nullable=False)
+    version_id: Mapped[UUID] = mapped_column(nullable=False)
+    artifact_id: Mapped[UUID] = mapped_column(nullable=False)
+    tex_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    confirmed_by_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    confirmed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class RequirementCoverage(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "requirement_coverage"
     __table_args__ = (

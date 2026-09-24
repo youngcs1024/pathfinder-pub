@@ -23,6 +23,7 @@ function rememberResumeSession(sessionId) {
 
 function resetResumeGeneration() {
   state.resumeGeneration = (state.resumeGeneration || 0) + 1;
+  state.resumeReadSequence = 0;
   state.resumeRequestController?.abort();
   state.resumeRequestController = new AbortController();
   state.resumeStreamController?.abort();
@@ -30,7 +31,11 @@ function resetResumeGeneration() {
   state.resumeSessionId = null;
   state.resumeSession = null;
   state.resumeVersion = null;
+  state.resumeCurrentVersion = null;
+  state.resumeSelectedVersionId = null;
+  state.resumeVersions = [];
   state.resumeArtifact = null;
+  state.resumeConfirmationSubmission = null;
   state.resumeQuestions = [];
   state.resumeUserFacts = [];
   state.resumeFeedbackHistory = [];
@@ -43,10 +48,12 @@ function resetResumeGeneration() {
   state.resumeLastEventId = 0;
   state.resumeTerminal = false;
   for (const id of ["resume-job-progress", "resume-job-questions", "resume-job-draft",
-    "resume-job-coverage", "resume-job-delivery", "resume-job-history", "resume-job-projects"]) {
+    "resume-job-coverage", "resume-job-delivery", "resume-job-history", "resume-version-history",
+    "resume-job-projects"]) {
     clear(byId(id));
   }
   byId("resume-job-status").textContent = "";
+  byId("resume-confirm-status").textContent = "";
   byId("resume-job-retry").hidden = true;
   byId("resume-job-new").hidden = true;
   byId("resume-job-file-preview").textContent = "";
@@ -111,18 +118,38 @@ async function loadResumeSessions() {
 }
 
 async function refreshResumeDetail(sessionId, generation) {
+  state.resumeReadSequence = (state.resumeReadSequence || 0) + 1;
+  const readSequence = state.resumeReadSequence;
   const signal = state.resumeRequestController.signal;
   const detail = await apiFetch(`${resumeBase()}/${sessionId}`, { signal });
   if (detail.session_id !== sessionId) throw new Error("Session identity mismatch");
   let version = null;
+  let currentVersion = null;
   let artifact = null;
+  let versions = [];
   if (detail.current_version_id) {
-    version = await apiFetch(`${resumeBase()}/${sessionId}/versions/${detail.current_version_id}`, { signal });
-    if (version.version_id !== detail.current_version_id || version.session_id !== sessionId) {
-      throw new Error("Draft version identity mismatch");
+    versions = await apiFetch(`${resumeBase()}/${sessionId}/versions`, { signal });
+    if (!Array.isArray(versions) || !versions.some(item =>
+      item.version_id === detail.current_version_id && item.session_id === sessionId)) {
+      throw new Error("Version history identity mismatch");
     }
-    artifact = await apiFetch(`/api/v2/workspaces/${state.workspace.workspace_id}/artifacts/${version.artifact_id}`, { signal });
-    if (artifact.artifact_id !== version.artifact_id) throw new Error("Artifact identity mismatch");
+    const selectedId = versions.some(item => item.version_id === state.resumeSelectedVersionId)
+      ? state.resumeSelectedVersionId : detail.current_version_id;
+    currentVersion = await apiFetch(
+      `${resumeBase()}/${sessionId}/versions/${detail.current_version_id}`, { signal });
+    version = selectedId === detail.current_version_id ? currentVersion
+      : await apiFetch(`${resumeBase()}/${sessionId}/versions/${selectedId}`, { signal });
+    if (currentVersion.version_id !== detail.current_version_id
+        || currentVersion.session_id !== sessionId
+        || version.version_id !== selectedId || version.session_id !== sessionId) {
+      throw new Error("Resume version identity mismatch");
+    }
+    artifact = await apiFetch(
+      `/api/v2/workspaces/${state.workspace.workspace_id}/artifacts/${version.artifact_id}`, { signal });
+    const summary = versions.find(item => item.version_id === selectedId);
+    if (artifact.artifact_id !== version.artifact_id || artifact.tex_sha256 !== summary.tex_sha256) {
+      throw new Error("Artifact identity mismatch");
+    }
   }
   let questions = [], userFacts = [], feedback = [];
   if (detail.initial_run_id || detail.current_version_id || detail.result?.questions?.length) {
@@ -132,12 +159,16 @@ async function refreshResumeDetail(sessionId, generation) {
       apiFetch(`${resumeBase()}/${sessionId}/feedback`, { signal }),
     ]);
   }
-  if (generation !== state.resumeGeneration || state.resumeSessionId !== sessionId) return;
+  if (generation !== state.resumeGeneration || state.resumeSessionId !== sessionId
+      || readSequence !== state.resumeReadSequence) return;
   state.resumeQuestions = questions;
   state.resumeUserFacts = userFacts;
   state.resumeFeedbackHistory = feedback;
   state.resumeSession = detail;
   state.resumeVersion = version;
+  state.resumeCurrentVersion = currentVersion;
+  state.resumeSelectedVersionId = version?.version_id || null;
+  state.resumeVersions = versions;
   state.resumeArtifact = artifact;
   state.resumeTerminal = RESUME_TERMINAL.has(detail.run_status);
   renderResumeSession();
@@ -148,9 +179,12 @@ async function openResumeSession(sessionId) {
   state.resumeGeneration += 1;
   state.resumeStreamController?.abort();
   state.resumeStreamController = null;
+  if (state.resumeSessionId !== sessionId) state.resumeSelectedVersionId = null;
   state.resumeSessionId = sessionId;
   state.resumeSession = null;
   state.resumeVersion = null;
+  state.resumeCurrentVersion = null;
+  state.resumeVersions = [];
   state.resumeArtifact = null;
   state.resumeQuestions = [];
   state.resumeUserFacts = [];
@@ -211,6 +245,16 @@ function renderResumeSession() {
   const detail = state.resumeSession;
   if (!detail) return;
   const version = state.resumeVersion;
+  const versions = byId("resume-version-history");
+  clear(versions);
+  for (const item of state.resumeVersions || []) {
+    const label = `Version ${item.version} · ${item.confirmation ? "confirmed" : "draft"} · ${item.created_at}`;
+    const option = node("option", label);
+    option.value = item.version_id;
+    versions.append(option);
+  }
+  if (version) versions.value = version.version_id;
+  versions.disabled = !(state.resumeVersions || []).length;
   const progress = byId("resume-job-progress");
   clear(progress);
   progress.append(node("h3", "Job progress"), node("p", `Run: ${detail.run_status}`));
@@ -230,7 +274,7 @@ function renderResumeSession() {
   }
   const questions = byId("resume-job-questions");
   clear(questions);
-  const allQuestions = detail.result?.questions || version?.validation?.questions || [];
+  const allQuestions = version?.validation?.questions || detail.result?.questions || [];
   questions.append(node("h3", "Questions and review"));
   for (const question of allQuestions) questions.append(node("p", question));
   if (!allQuestions.length) questions.append(node("p", "No open question was recorded for this run."));
@@ -282,11 +326,24 @@ function renderResumeSession() {
   const delivery = byId("resume-job-delivery");
   clear(delivery);
   delivery.append(node("h3", "Delivery and confirmation"));
-  delivery.append(node("p", version ? "Unconfirmed draft" : "No draft to confirm"));
+  const summary = (state.resumeVersions || []).find(item => item.version_id === version?.version_id);
+  delivery.append(node("p", version
+    ? `Version ${version.version}: ${summary?.confirmation ? "confirmed" : "unconfirmed draft"}`
+    : "No draft to confirm"));
   if (version && state.resumeArtifact) {
     delivery.append(node("p", `TeX SHA-256: ${state.resumeArtifact.tex_sha256}`));
     for (const instruction of state.resumeArtifact.compile.instructions) delivery.append(node("p", instruction));
-    const download = node("button", "Download this draft .tex");
+    if (summary?.confirmation) {
+      delivery.append(node("p", `Confirmed at ${summary.confirmation.confirmed_at} by ${summary.confirmation.confirmed_by_user_id}.`));
+    } else {
+      delivery.append(node("p", "Confirming attests that you reviewed this version's content, facts and evidence. Check the compiled layout separately."));
+      const confirm = node("button", "I reviewed this version · Confirm");
+      confirm.type = "button";
+      confirm.disabled = !state.resumeTerminal;
+      confirm.addEventListener("click", () => confirmResumeVersion().catch(reportInterfaceFailure));
+      delivery.append(confirm);
+    }
+    const download = node("button", `Download version ${version.version} .tex`);
     download.type = "button";
     download.addEventListener("click", () => downloadResumeTex().catch(reportInterfaceFailure));
     delivery.append(download);
@@ -496,11 +553,49 @@ async function streamResumeEvents(sessionId, generation) {
   }
 }
 
+async function confirmResumeVersion() {
+  const detail = state.resumeSession;
+  const version = state.resumeVersion;
+  const artifact = state.resumeArtifact;
+  if (!detail || !version || !artifact) return;
+  const prior = state.resumeConfirmationSubmission;
+  const submission = prior && prior.sessionId === detail.session_id
+    && prior.versionId === version.version_id && !prior.conflict ? prior
+    : { key: crypto.randomUUID(), sessionId: detail.session_id, versionId: version.version_id,
+      body: { version_id: version.version_id, expected_session_revision: detail.revision,
+        expected_current_version_id: detail.current_version_id, artifact_id: artifact.artifact_id,
+        tex_sha256: artifact.tex_sha256, attested: true }, conflict: false };
+  if (prior?.conflict && prior.sessionId === detail.session_id
+      && prior.versionId === version.version_id) return;
+  state.resumeConfirmationSubmission = submission;
+  byId("resume-confirm-status").textContent = "Confirming the selected version…";
+  try {
+    const result = await apiFetch(
+      `${resumeBase()}/${submission.sessionId}/versions/${submission.versionId}/confirm`,
+      { method: "POST", headers: { "Idempotency-Key": submission.key },
+        body: submission.body, signal: state.resumeRequestController.signal });
+    if (result.version_id !== submission.versionId || result.tex_sha256 !== submission.body.tex_sha256) {
+      throw new Error("Confirmation identity mismatch.");
+    }
+    if (state.resumeConfirmationSubmission !== submission) return;
+    state.resumeConfirmationSubmission = null;
+    byId("resume-confirm-status").textContent = "Selected version confirmed.";
+    await refreshResumeDetail(detail.session_id, state.resumeGeneration);
+  } catch (error) {
+    if (state.resumeConfirmationSubmission !== submission) return;
+    submission.conflict = error.problem?.status === 409;
+    byId("resume-confirm-status").textContent = submission.conflict
+      ? "Confirmation conflict. Refresh and review this version before trying again."
+      : "Confirmation response uncertain. Retry uses the same request key.";
+    throw error;
+  }
+}
+
 async function downloadResumeTex() {
   const artifact = state.resumeArtifact;
   const version = state.resumeVersion;
   if (!artifact || !version || !state.workspace) return;
-  const path = `/api/v2/workspaces/${state.workspace.workspace_id}/artifacts/${artifact.artifact_id}/download`;
+  const path = `${resumeBase()}/${version.session_id}/versions/${version.version_id}/download`;
   const request = async (refreshed = false) => {
     const headers = new Headers();
     if (state.config.auth_mode === "supabase" && state.accessToken) headers.set("Authorization", `Bearer ${state.accessToken}`);
@@ -508,7 +603,10 @@ async function downloadResumeTex() {
     if (response.status === 401 && !refreshed && state.config.auth_mode === "supabase"
         && await refreshSession(state.resumeRequestController.signal)) return request(true);
     if (!response.ok) throw new PathfinderProblem(await problemFromResponse(response));
-    if (response.headers.get("x-content-sha256") !== artifact.tex_sha256) throw new Error("TeX digest mismatch.");
+    if (response.headers.get("x-content-sha256") !== artifact.tex_sha256
+        || response.headers.get("x-resume-version-id") !== version.version_id) {
+      throw new Error("TeX version or digest mismatch.");
+    }
     return response.blob();
   };
   const blob = await request();
@@ -516,7 +614,9 @@ async function downloadResumeTex() {
   const url = URL.createObjectURL(blob);
   const link = node("a");
   link.href = url;
-  link.download = `resume-${version.version_id}.tex`;
+  const confirmed = (state.resumeVersions || []).some(item =>
+    item.version_id === version.version_id && item.confirmation);
+  link.download = `resume-v${version.version}-${confirmed ? "confirmed" : "draft"}.tex`;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
@@ -537,10 +637,16 @@ function initializeResumeGeneration() {
     byId("resume-job-retry").hidden = true;
     renderResumeGenerationSetup();
   });
+  byId("resume-version-history").addEventListener("change", event => {
+    state.resumeConfirmationSubmission = null;
+    state.resumeSelectedVersionId = event.target.value;
+    refreshResumeDetail(state.resumeSessionId, state.resumeGeneration).catch(reportInterfaceFailure);
+  });
   byId("resume-job-history").addEventListener("change", event => {
     openResumeSession(event.target.value).catch(reportInterfaceFailure);
   });
   byId("resume-job-refresh").addEventListener("click", () => {
+    if (state.resumeConfirmationSubmission?.conflict) state.resumeConfirmationSubmission = null;
     loadResumeSessions().catch(reportInterfaceFailure);
   });
   initializeResumeRevision();
@@ -576,8 +682,12 @@ function revisionSelect(id, entries) {
 
 function renderResumeRevision() {
   const detail = state.resumeSession;
-  const version = state.resumeVersion;
+  const version = state.resumeCurrentVersion || state.resumeVersion;
   if (!detail) return;
+  const historical = Boolean(state.resumeVersion && detail.current_version_id
+    && state.resumeVersion.version_id !== detail.current_version_id);
+  byId("resume-revision-panel").hidden = historical;
+  if (historical) return;
   revisionSelect("resume-feedback-target", resumeRevisionItems(version?.content));
   revisionSelect("resume-feedback-fact-ref", (version?.facts || []).map(fact =>
     [fact.version_id, `${fact.claim} (${fact.source})`]));
