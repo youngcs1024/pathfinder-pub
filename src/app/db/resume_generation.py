@@ -23,15 +23,21 @@ from app.db.models import (
     Message,
     RequirementCoverage,
     RequirementCoverageFact,
+    RequirementCoverageUserFact,
     ResumeClaimReview,
     ResumePreferenceVersion,
     ResumeProfile,
     ResumeProfileVersion,
     ResumeSession,
     ResumeSessionFact,
+    ResumeSessionPreferenceVersion,
     ResumeSessionProject,
+    ResumeSessionUserFact,
     ResumeSourceClaim,
+    ResumeUserFact,
+    ResumeUserFactVersion,
     ResumeVersion,
+    ResumeVersionFact,
     Run,
     RunEvent,
     RunJob,
@@ -300,6 +306,7 @@ class _CreateWriter(ResumeCommandWriter):
                 preference_version_id=preference.id,
                 job_snapshot_id=snapshot_id,
                 run_id=run_id,
+                latest_run_id=run_id,
                 current_version_id=None,
                 revision=0,
                 repair_count=0,
@@ -350,6 +357,48 @@ class _CreateWriter(ResumeCommandWriter):
                 )
                 for value in rows
             )
+        global_user_facts = (
+            (
+                await session.execute(
+                    select(ResumeUserFactVersion.id)
+                    .join(
+                        ResumeUserFact,
+                        (ResumeUserFact.workspace_id == ResumeUserFactVersion.workspace_id)
+                        & (ResumeUserFact.id == ResumeUserFactVersion.fact_id),
+                    )
+                    .where(
+                        ResumeUserFact.workspace_id == tenant.workspace_id,
+                        ResumeUserFact.project_id.in_(payload.project_ids),
+                        ResumeUserFact.scope_session_id.is_(None),
+                        ResumeUserFactVersion.version == ResumeUserFact.current_version,
+                        ResumeUserFactVersion.review_status == "confirmed",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        session.add_all(
+            ResumeSessionUserFact(
+                id=uuid4(),
+                workspace_id=tenant.workspace_id,
+                session_id=session_id,
+                fact_version_id=value,
+            )
+            for value in global_user_facts
+        )
+        session.add(
+            ResumeSessionPreferenceVersion(
+                id=uuid4(),
+                workspace_id=tenant.workspace_id,
+                session_id=session_id,
+                version=1,
+                preferences_json={
+                    "override": payload.override.model_dump(mode="json", exclude_unset=True),
+                    "locked_item_ids": [],
+                },
+            )
+        )
         sequence = await session.scalar(
             update(Run)
             .where(Run.workspace_id == tenant.workspace_id, Run.id == run_id)
@@ -412,7 +461,7 @@ class SqlAlchemyResumeGenerationStore:
                 .join(
                     Run,
                     (Run.workspace_id == ResumeSession.workspace_id)
-                    & (Run.id == ResumeSession.run_id),
+                    & (Run.id == ResumeSession.latest_run_id),
                 )
                 .join(
                     JobSnapshot,
@@ -440,7 +489,7 @@ class SqlAlchemyResumeGenerationStore:
                     result.append(
                         {
                             "session_id": row.id,
-                            "run_id": row.run_id,
+                            "run_id": row.latest_run_id,
                             "run_status": run_status,
                             "current_version_id": row.current_version_id,
                             "created_at": row.created_at,
@@ -463,7 +512,7 @@ class SqlAlchemyResumeGenerationStore:
             run = await db.scalar(
                 select(Run).where(
                     Run.workspace_id == tenant.workspace_id,
-                    Run.id == row.run_id,
+                    Run.id == row.latest_run_id,
                 )
             )
             requirements = (
@@ -488,9 +537,10 @@ class SqlAlchemyResumeGenerationStore:
                     .order_by(ResumeSessionProject.project_id)
                 )
             ).all()
-            return {
+            detail = {
                 "session_id": row.id,
-                "run_id": row.run_id,
+                "run_id": row.latest_run_id,
+                "initial_run_id": row.run_id,
                 "run_status": run.status,
                 "error_category": run.error_category,
                 "result": (
@@ -505,7 +555,18 @@ class SqlAlchemyResumeGenerationStore:
                 "profile_version_id": row.profile_version_id,
                 "preference_version": await _preference_number(db, row),
                 "project_ids": project_ids,
-                "override": row.override_json,
+                "session_preferences": (
+                    await db.scalar(
+                        select(ResumeSessionPreferenceVersion.preferences_json)
+                        .where(
+                            ResumeSessionPreferenceVersion.workspace_id == tenant.workspace_id,
+                            ResumeSessionPreferenceVersion.session_id == row.id,
+                        )
+                        .order_by(ResumeSessionPreferenceVersion.version.desc())
+                        .limit(1)
+                    )
+                    or {"override": row.override_json, "locked_item_ids": []}
+                ),
                 "budget": GenerationBudgetV1.model_validate_json(json.dumps(row.budget_json)),
                 "job": {
                     "source": snapshot.source,
@@ -526,6 +587,10 @@ class SqlAlchemyResumeGenerationStore:
                     for value in requirements
                 ],
             }
+            session_preferences = detail.pop("session_preferences")
+            detail["override"] = session_preferences["override"]
+            detail["locked_item_ids"] = session_preferences.get("locked_item_ids", [])
+            return detail
 
     async def get_version(self, tenant: TenantContext, session_id: UUID, version_id: UUID):
         async with database_session(self.sessions) as db:
@@ -557,17 +622,43 @@ class SqlAlchemyResumeGenerationStore:
                         )
                     )
                 ).all()
+                user_fact_ids = (
+                    await db.scalars(
+                        select(RequirementCoverageUserFact.fact_version_id).where(
+                            RequirementCoverageUserFact.workspace_id == tenant.workspace_id,
+                            RequirementCoverageUserFact.coverage_id == item.id,
+                        )
+                    )
+                ).all()
                 result.append(
                     {
                         "requirement_id": item.requirement_id,
                         "support": item.support,
                         "verification": item.verification,
                         "reason": item.reason,
-                        "fact_version_ids": fact_ids,
+                        "fact_version_ids": fact_ids + user_fact_ids,
                         "item_ids": item.item_ids_json,
                     }
                 )
             facts = []
+            version_links = (
+                await db.scalars(
+                    select(ResumeVersionFact).where(
+                        ResumeVersionFact.workspace_id == tenant.workspace_id,
+                        ResumeVersionFact.version_id == version_id,
+                    )
+                )
+            ).all()
+            material_ids = [
+                item.material_fact_version_id
+                for item in version_links
+                if item.material_fact_version_id is not None
+            ]
+            user_ids = [
+                item.user_fact_version_id
+                for item in version_links
+                if item.user_fact_version_id is not None
+            ]
             bound = (
                 await db.execute(
                     select(ResumeSessionFact, MaterialFactVersion)
@@ -579,6 +670,7 @@ class SqlAlchemyResumeGenerationStore:
                     .where(
                         ResumeSessionFact.workspace_id == tenant.workspace_id,
                         ResumeSessionFact.session_id == session_id,
+                        ResumeSessionFact.fact_version_id.in_(material_ids),
                     )
                     .order_by(ResumeSessionFact.project_id, ResumeSessionFact.fact_version_id)
                 )
@@ -615,6 +707,8 @@ class SqlAlchemyResumeGenerationStore:
                         "claim": fact.claim,
                         "kind": fact.kind,
                         "conditions": fact.conditions_json,
+                        "source": "material_snapshot",
+                        "attested_at": None,
                         "evidence": [
                             {
                                 "snapshot_file_id": evidence.snapshot_file_id,
@@ -628,11 +722,42 @@ class SqlAlchemyResumeGenerationStore:
                         ],
                     }
                 )
+            user_bound = (
+                await db.execute(
+                    select(ResumeUserFact, ResumeUserFactVersion)
+                    .join(
+                        ResumeUserFactVersion,
+                        (ResumeUserFactVersion.workspace_id == ResumeUserFact.workspace_id)
+                        & (ResumeUserFactVersion.fact_id == ResumeUserFact.id),
+                    )
+                    .where(
+                        ResumeUserFact.workspace_id == tenant.workspace_id,
+                        ResumeUserFactVersion.id.in_(user_ids),
+                    )
+                )
+            ).all()
+            facts.extend(
+                {
+                    "version_id": version.id,
+                    "project_id": user_fact.project_id,
+                    "claim": version.claim,
+                    "kind": version.kind,
+                    "conditions": version.conditions_json,
+                    "source": "user_attestation",
+                    "attested_at": version.attested_at,
+                    "evidence": [],
+                }
+                for user_fact, version in user_bound
+            )
             return {
                 "version_id": row.id,
                 "session_id": session_id,
                 "version": row.version,
                 "artifact_id": row.artifact_id,
+                "parent_version_id": row.parent_version_id,
+                "feedback_id": row.feedback_id,
+                "diff": row.diff_json,
+                "impact": row.impact_json,
                 "content": row.content_json,
                 "validation": row.validation_json,
                 "coverage": result,
@@ -642,7 +767,7 @@ class SqlAlchemyResumeGenerationStore:
     async def cancel(self, tenant: TenantContext, session_id: UUID):
         async with database_session(self.sessions) as db:
             row = await _session(db, tenant, session_id)
-            run_id = row.run_id
+            run_id = row.latest_run_id
         return await self.runs.cancel_run(
             tenant=tenant, run_id=run_id, allow_other_creator=tenant.role is WorkspaceRole.ADMIN
         )
@@ -678,6 +803,36 @@ class SqlAlchemyResumeGenerationStore:
                     )
                 )
             ).all()
+            user_linked = (
+                await db.execute(
+                    select(ResumeUserFact, ResumeUserFactVersion)
+                    .join(
+                        ResumeUserFactVersion,
+                        (ResumeUserFactVersion.workspace_id == ResumeUserFact.workspace_id)
+                        & (ResumeUserFactVersion.fact_id == ResumeUserFact.id),
+                    )
+                    .join(
+                        ResumeSessionUserFact,
+                        (ResumeSessionUserFact.workspace_id == ResumeUserFactVersion.workspace_id)
+                        & (ResumeSessionUserFact.fact_version_id == ResumeUserFactVersion.id),
+                    )
+                    .where(
+                        ResumeSessionUserFact.workspace_id == tenant.workspace_id,
+                        ResumeSessionUserFact.session_id == session_id,
+                        ResumeUserFactVersion.review_status == "confirmed",
+                    )
+                )
+            ).all()
+            superseded_material = {
+                fact.supersedes_material_version_id
+                for fact, _ in user_linked
+                if fact.supersedes_material_version_id is not None
+            }
+            superseded_user = {
+                fact.supersedes_user_version_id
+                for fact, _ in user_linked
+                if fact.supersedes_user_version_id is not None
+            }
             facts = tuple(
                 FixedFact(
                     version_id=version.id,
@@ -687,6 +842,17 @@ class SqlAlchemyResumeGenerationStore:
                     conditions=version.conditions_json,
                 )
                 for link, version in linked
+                if version.id not in superseded_material
+            ) + tuple(
+                FixedFact(
+                    version_id=version.id,
+                    project_id=fact.project_id,
+                    claim=version.claim,
+                    kind=version.kind,
+                    conditions=version.conditions_json,
+                )
+                for fact, version in user_linked
+                if version.id not in superseded_user
             )
             source_import_id = await db.scalar(
                 select(ResumeProfileVersion.source_import_id).where(
@@ -861,7 +1027,23 @@ class ResumeGenerationPublisher:
                 )
             )
         ).all()
-        permitted_facts = {item.fact_version_id for item in facts}
+        material_ids = {item.fact_version_id for item in facts}
+        user_ids = set(
+            (
+                await db.scalars(
+                    select(ResumeSessionUserFact.fact_version_id).where(
+                        ResumeSessionUserFact.workspace_id == tenant.workspace_id,
+                        ResumeSessionUserFact.session_id == row.id,
+                    )
+                )
+            ).all()
+        )
+        from app.db.resume_revision import _bound_facts
+
+        active_material, active_user, _ = await _bound_facts(db, tenant, row.id)
+        material_ids &= active_material
+        user_ids &= active_user
+        permitted_facts = material_ids | user_ids
         if len(candidate.coverage) != len(candidate.requirements):
             raise DomainValidationError("generation coverage is incomplete")
         if {item.requirement_ordinal for item in candidate.coverage} != set(
@@ -962,6 +1144,26 @@ class ResumeGenerationPublisher:
             )
         )
         await db.flush()
+        db.add_all(
+            ResumeVersionFact(
+                id=uuid4(),
+                workspace_id=tenant.workspace_id,
+                version_id=version_id,
+                material_fact_version_id=value,
+                user_fact_version_id=None,
+            )
+            for value in material_ids
+        )
+        db.add_all(
+            ResumeVersionFact(
+                id=uuid4(),
+                workspace_id=tenant.workspace_id,
+                version_id=version_id,
+                material_fact_version_id=None,
+                user_fact_version_id=value,
+            )
+            for value in user_ids
+        )
         for item in candidate.coverage:
             coverage_id = uuid4()
             db.add(
@@ -984,6 +1186,17 @@ class ResumeGenerationPublisher:
                     fact_version_id=value,
                 )
                 for value in item.fact_version_ids
+                if value in material_ids
+            )
+            db.add_all(
+                RequirementCoverageUserFact(
+                    id=uuid4(),
+                    workspace_id=tenant.workspace_id,
+                    coverage_id=coverage_id,
+                    fact_version_id=value,
+                )
+                for value in item.fact_version_ids
+                if value in user_ids
             )
         row.current_version_id = version_id
         row.revision += 1

@@ -162,6 +162,37 @@
           <section id="resume-job-draft"></section>
           <section id="resume-job-coverage"></section>
           <section id="resume-job-delivery"></section>
+          <section id="resume-revision-panel">
+            <h3>Revise this draft</h3>
+            <p class="muted">Feedback uses the displayed session revision and version. A conflict keeps your inputs so you can review them after refreshing.</p>
+            <form id="resume-feedback-form">
+              <label>Feedback type <select id="resume-feedback-kind">
+                <option value="content">Local content</option><option value="answer">Answer a question</option>
+                <option value="fact">Add or correct a fact</option><option value="preference">Adjust preferences</option>
+              </select></label>
+              <label>Target item <select id="resume-feedback-target"></select></label>
+              <label>Operation <select id="resume-feedback-operation"><option value="instruction">Describe edit</option><option value="replace_text">Replace text</option><option value="remove">Remove item</option><option value="move">Move item</option></select></label>
+              <label>Field <select id="resume-feedback-field"><option value="bullet">Bullet</option><option value="title">Title</option><option value="summary">Summary</option><option value="period">Period</option><option value="institution">Institution</option><option value="qualification">Qualification</option><option value="label">Skill label</option></select></label>
+              <label>Feedback or replacement text <textarea id="resume-feedback-text" maxlength="2000"></textarea></label>
+              <label>Confirmed fact reference <select id="resume-feedback-fact-ref"></select></label>
+              <label>Move position <input id="resume-feedback-position" type="number" min="0" value="0"></label>
+              <label>Open question <select id="resume-feedback-question"></select></label>
+              <label>Project <select id="resume-feedback-project"></select></label>
+              <label>Fact scope <select id="resume-feedback-scope"><option value="session">Only this session</option><option value="project">Project fact library</option></select></label>
+              <label>Fact kind <select id="resume-feedback-fact-kind"><option value="implementation">Implemented</option><option value="experiment">Experiment</option><option value="plan">Plan</option><option value="personal_statement">Personal statement</option></select></label>
+              <label>Measurement environment <input id="resume-feedback-environment" maxlength="500"></label>
+              <label>Measurement scope <input id="resume-feedback-metric-scope" maxlength="500"></label>
+              <label>Metric basis <input id="resume-feedback-metric-basis" maxlength="500"></label>
+              <label>Preference scope <select id="resume-feedback-pref-scope"><option value="round">This revision</option><option value="session">This job</option><option value="global">Global profile</option></select></label>
+              <label>Page target <select id="resume-feedback-pages"><option value="1">One page</option><option value="2">Two pages</option></select></label>
+              <button type="submit">Save feedback</button>
+              <button id="resume-feedback-retry" type="button" hidden>Retry same request</button>
+            </form>
+            <p id="resume-feedback-status" aria-live="polite"></p>
+            <div id="resume-revision-diff"></div>
+            <div id="resume-revision-facts"></div>
+            <div id="resume-revision-locks"></div>
+          </section>
         </section>
         <button id="retry-events" type="button" hidden>Resume event reads</button>
         <section id="run-panel" class="panel" hidden></section>

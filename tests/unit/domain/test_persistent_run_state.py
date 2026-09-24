@@ -61,7 +61,9 @@ def test_persistent_state_enum_values_are_exact() -> None:
 
 def test_graph_and_event_versions_are_fixed() -> None:
     assert CURRENT_GRAPH_VERSION == "pathfinder-research-v6"
-    assert SUPPORTED_GRAPH_VERSIONS == frozenset({"pathfinder-resume-v2", "pathfinder-resume-v3"})
+    assert SUPPORTED_GRAPH_VERSIONS == frozenset(
+        {"pathfinder-resume-v2", "pathfinder-resume-v3", "pathfinder-resume-v4"}
+    )
     assert CURRENT_RUN_EVENT_VERSION == 1
     assert _value_set(RunEventType) == {
         "run.created",

@@ -93,6 +93,12 @@ class FakeChatModel:
                 content=content, usage=ModelUsage(input_tokens=0, output_tokens=0)
             )
 
+        if metadata.get("task") == "resume_revision":
+            return ChatModelResult(
+                content='{"patches":[]}',
+                usage=ModelUsage(input_tokens=0, output_tokens=0),
+            )
+
         return _DIRECT_CHAT_RESULT.model_copy(deep=True)
 
 

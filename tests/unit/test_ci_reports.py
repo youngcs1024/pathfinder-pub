@@ -29,7 +29,7 @@ def restore_packet():
         "stage": "complete",
         "elapsed_ms": 1234,
         "old_revision": "0014_gate6_action_recovery",
-        "revision": "0023_r41_resume_generation",
+        "revision": "0024_r51_resume_revision",
         "graph": "pathfinder-research-v6",
         "postgres_image": "pgvector/pgvector:0.8.5-pg16",
         "postgres_image_id": "sha256:" + "a" * 64,

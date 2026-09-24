@@ -17,6 +17,7 @@ from app.db.models import (
     WorkspaceMembership,
 )
 from app.db.resume_generation import ResumeGenerationPublisher
+from app.db.resume_revision import ResumeRevisionPublisher
 from app.db.session import AsyncSessionFactory, transaction
 from app.domain.action_execution import ActionExecutionIdentity
 from app.domain.actions import validate_exact_approval_binding
@@ -34,6 +35,7 @@ from app.domain.run_payloads import (
     EXECUTION_CONTRACTS,
     LEGACY_RUN_MODES,
     ResumeGenerationCandidateOutputV1,
+    ResumeRevisionCandidateOutputV1,
     RunContractV1,
     RunOutput,
     find_run_contract,
@@ -184,6 +186,7 @@ class SqlAlchemyWorkerJobStore:
         *,
         execution_contracts: tuple[RunContractV1, ...] = EXECUTION_CONTRACTS,
         generation_publisher: ResumeGenerationPublisher | None = None,
+        revision_publisher: ResumeRevisionPublisher | None = None,
     ) -> None:
         if (
             isinstance(action_recovery_max_attempts, bool)
@@ -197,6 +200,7 @@ class SqlAlchemyWorkerJobStore:
         self._retry_delay = retry_delay
         self._action_recovery_max_attempts = action_recovery_max_attempts
         self._generation_publisher = generation_publisher
+        self._revision_publisher = revision_publisher
 
     def _executable_run_predicate(self):
         return (
@@ -584,12 +588,21 @@ class SqlAlchemyWorkerJobStore:
                 return True
             if run.status != RunStatus.RUNNING.value:
                 raise DomainInvariantError("completed job run is not running")
-            if isinstance(result, ResumeGenerationCandidateOutputV1):
-                if (
-                    self._generation_publisher is None
-                    or run.mode != RunMode.RESUME_GENERATION.value
-                ):
-                    raise DomainInvariantError("generation publisher is unavailable")
+            if isinstance(
+                result, ResumeGenerationCandidateOutputV1 | ResumeRevisionCandidateOutputV1
+            ):
+                publisher = (
+                    self._generation_publisher
+                    if isinstance(result, ResumeGenerationCandidateOutputV1)
+                    else self._revision_publisher
+                )
+                expected_mode = (
+                    RunMode.RESUME_GENERATION.value
+                    if isinstance(result, ResumeGenerationCandidateOutputV1)
+                    else RunMode.RESUME_REVISION.value
+                )
+                if publisher is None or run.mode != expected_mode:
+                    raise DomainInvariantError("resume publisher is unavailable")
                 membership = await session.scalar(
                     select(WorkspaceMembership)
                     .where(
@@ -602,7 +615,7 @@ class SqlAlchemyWorkerJobStore:
                 if membership is None:
                     _mark_run_cancelled(session, run=run, reason="authorization_revoked", now=now)
                     return True
-                result = await self._generation_publisher.publish(
+                result = await publisher.publish(
                     session,
                     TenantContext(
                         job.workspace_id,

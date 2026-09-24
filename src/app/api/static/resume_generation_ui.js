@@ -31,6 +31,10 @@ function resetResumeGeneration() {
   state.resumeSession = null;
   state.resumeVersion = null;
   state.resumeArtifact = null;
+  state.resumeQuestions = [];
+  state.resumeUserFacts = [];
+  state.resumeFeedbackHistory = [];
+  state.resumeFeedbackSubmission = null;
   state.resumeSessions = [];
   state.resumeSubmission = null;
   state.resumeSubmitting = false;
@@ -120,7 +124,18 @@ async function refreshResumeDetail(sessionId, generation) {
     artifact = await apiFetch(`/api/v2/workspaces/${state.workspace.workspace_id}/artifacts/${version.artifact_id}`, { signal });
     if (artifact.artifact_id !== version.artifact_id) throw new Error("Artifact identity mismatch");
   }
+  let questions = [], userFacts = [], feedback = [];
+  if (detail.current_version_id || (detail.initial_run_id && detail.run_id !== detail.initial_run_id)) {
+    [questions, userFacts, feedback] = await Promise.all([
+      apiFetch(`${resumeBase()}/${sessionId}/questions`, { signal }),
+      apiFetch(`${resumeBase()}/${sessionId}/user-facts`, { signal }),
+      apiFetch(`${resumeBase()}/${sessionId}/feedback`, { signal }),
+    ]);
+  }
   if (generation !== state.resumeGeneration || state.resumeSessionId !== sessionId) return;
+  state.resumeQuestions = questions;
+  state.resumeUserFacts = userFacts;
+  state.resumeFeedbackHistory = feedback;
   state.resumeSession = detail;
   state.resumeVersion = version;
   state.resumeArtifact = artifact;
@@ -137,6 +152,10 @@ async function openResumeSession(sessionId) {
   state.resumeSession = null;
   state.resumeVersion = null;
   state.resumeArtifact = null;
+  state.resumeQuestions = [];
+  state.resumeUserFacts = [];
+  state.resumeFeedbackHistory = [];
+  state.resumeFeedbackSubmission = null;
   state.resumeLastEventId = 0;
   state.resumeTerminal = false;
   const generation = state.resumeGeneration;
@@ -211,7 +230,7 @@ function renderResumeSession() {
   }
   const questions = byId("resume-job-questions");
   clear(questions);
-  const allQuestions = version?.validation?.questions || detail.result?.questions || [];
+  const allQuestions = detail.result?.questions || version?.validation?.questions || [];
   questions.append(node("h3", "Questions and review"));
   for (const question of allQuestions) questions.append(node("p", question));
   if (!allQuestions.length) questions.append(node("p", "No open question was recorded for this run."));
@@ -272,6 +291,7 @@ function renderResumeSession() {
     download.addEventListener("click", () => downloadResumeTex().catch(reportInterfaceFailure));
     delivery.append(download);
   }
+  renderResumeRevision();
 }
 
 async function readJobInput() {
@@ -523,7 +543,202 @@ function initializeResumeGeneration() {
   byId("resume-job-refresh").addEventListener("click", () => {
     loadResumeSessions().catch(reportInterfaceFailure);
   });
+  initializeResumeRevision();
   byId("resume-job-file").addEventListener("change", () => {
     byId("resume-job-file-preview").textContent = byId("resume-job-file").files?.[0]?.name || "";
   });
+}
+
+function resumeRevisionItems(content) {
+  const items = [];
+  if (!content) return items;
+  for (const project of content.projects || []) {
+    items.push([project.id, `Project: ${project.title.text}`]);
+    (project.bullet_ids || []).forEach((id, index) =>
+      items.push([id, `Bullet: ${project.bullets[index]?.text || id}`]));
+  }
+  for (const item of content.education || []) items.push([item.id, `Education: ${item.institution.text}`]);
+  for (const item of content.skills || []) items.push([item.id, `Skill: ${item.label}`]);
+  return items;
+}
+
+function revisionSelect(id, entries) {
+  const element = byId(id);
+  const selected = element.value;
+  clear(element);
+  for (const [value, label] of entries) {
+    const option = node("option", label);
+    option.value = value;
+    element.append(option);
+  }
+  if (entries.some(([value]) => value === selected)) element.value = selected;
+}
+
+function renderResumeRevision() {
+  const detail = state.resumeSession;
+  const version = state.resumeVersion;
+  if (!detail) return;
+  revisionSelect("resume-feedback-target", resumeRevisionItems(version?.content));
+  revisionSelect("resume-feedback-fact-ref", (version?.facts || []).map(fact =>
+    [fact.version_id, `${fact.claim} (${fact.source})`]));
+  revisionSelect("resume-feedback-question", (state.resumeQuestions || []).map(question =>
+    [question.id, question.text]));
+  revisionSelect("resume-feedback-project", (detail.project_ids || []).map(id =>
+    [id, state.materialProjects.find(project => project.id === id)?.name || id]));
+  const diff = byId("resume-revision-diff");
+  clear(diff);
+  diff.append(node("h4", `Version ${version?.version || "pending"} · session revision ${detail.revision}`));
+  if (version?.parent_version_id) diff.append(node("p", `Previous version: ${version.parent_version_id}`));
+  for (const change of version?.diff || []) {
+    diff.append(node("p", `${change.operation} · ${change.item_id}${change.field ? ` · ${change.field}` : ""}`));
+  }
+  for (const impact of version?.impact || []) diff.append(node("p", impact));
+  for (const item of state.resumeFeedbackHistory || []) {
+    if (item.run_id && item.run_status !== "completed") {
+      diff.append(node("p", `Feedback ${item.kind}: ${item.run_status}`));
+    }
+    for (const question of item.questions || []) diff.append(node("p", question));
+  }
+  const facts = byId("resume-revision-facts");
+  clear(facts);
+  facts.append(node("h4", "User provided facts"));
+  for (const fact of state.resumeUserFacts || []) {
+    const card = node("article", null, "evidence");
+    card.append(node("p", `${fact.claim} · ${fact.scope} · ${fact.review_status}`));
+    card.append(node("pre", JSON.stringify(fact.conditions, null, 2)));
+    if (fact.review_status === "pending") {
+      for (const decision of ["confirm", "reject"]) {
+        const button = node("button", decision === "confirm" ? "I verify this fact" : "Reject fact");
+        button.type = "button";
+        button.addEventListener("click", () => reviewResumeFact(fact, decision).catch(reportInterfaceFailure));
+        card.append(button);
+      }
+    }
+    facts.append(card);
+  }
+  const locks = byId("resume-revision-locks");
+  clear(locks);
+  locks.append(node("h4", "Content locks"));
+  for (const [id, label] of resumeRevisionItems(version?.content)) {
+    const locked = (detail.locked_item_ids || []).includes(id);
+    const button = node("button", `${locked ? "Unlock" : "Lock"}: ${label}`);
+    button.type = "button";
+    button.addEventListener("click", () => changeResumeLock(id, !locked).catch(reportInterfaceFailure));
+    locks.append(button);
+  }
+}
+
+function resumeFeedbackBody() {
+  const detail = state.resumeSession;
+  if (!detail) throw new Error("Open a saved job first.");
+  const base = { expected_session_revision: detail.revision, base_version_id: detail.current_version_id };
+  const kind = byId("resume-feedback-kind").value;
+  const text = byId("resume-feedback-text").value.trim();
+  if (kind === "content") {
+    if (!detail.current_version_id) throw new Error("A draft version is required for content edits.");
+    const itemId = byId("resume-feedback-target").value;
+    if (!itemId) throw new Error("Choose a target item.");
+    const operation = byId("resume-feedback-operation").value;
+    if (operation === "instruction") {
+      if (!text) throw new Error("Describe the requested local edit.");
+      return { ...base, kind, target_item_ids: [itemId], instruction: text };
+    }
+    const patch = { operation, item_id: itemId };
+    if (operation === "replace_text") {
+      if (!text || !byId("resume-feedback-fact-ref").value) throw new Error("Provide text and a confirmed fact reference.");
+      patch.field = byId("resume-feedback-field").value;
+      patch.text = text;
+      patch.fact_version_ids = [byId("resume-feedback-fact-ref").value];
+    } else if (operation === "move") patch.position = Number(byId("resume-feedback-position").value);
+    return { ...base, kind, target_item_ids: [itemId], patches: [patch] };
+  }
+  if (kind === "answer") {
+    if (!byId("resume-feedback-question").value || !text) throw new Error("Choose a question and enter an answer.");
+    return { ...base, kind, question_id: byId("resume-feedback-question").value, answer: text };
+  }
+  if (kind === "fact") {
+    if (!text) throw new Error("Enter the fact to verify.");
+    return { ...base, kind, fact: {
+      project_id: byId("resume-feedback-project").value,
+      scope: byId("resume-feedback-scope").value,
+      kind: byId("resume-feedback-fact-kind").value,
+      claim: text,
+      environment: byId("resume-feedback-environment").value || null,
+      fact_scope: byId("resume-feedback-metric-scope").value || null,
+      metric_basis: byId("resume-feedback-metric-basis").value || null,
+    } };
+  }
+  const scope = byId("resume-feedback-pref-scope").value;
+  const page_target = Number(byId("resume-feedback-pages").value);
+  if (scope === "global") {
+    if (!state.resumeProfile?.preferences) throw new Error("Read the current profile first.");
+    return { ...base, kind, scope, preferences: { ...state.resumeProfile.preferences, page_target },
+      expected_global_preference_version: state.resumeProfile.preference_version };
+  }
+  return { ...base, kind, scope, preferences: { page_target } };
+}
+
+async function sendResumeFeedback(submission) {
+  if (!submission || submission !== state.resumeFeedbackSubmission || submission.conflict
+      || submission.actorId !== state.me?.user_id || submission.workspaceId !== state.workspace?.workspace_id) return;
+  byId("resume-feedback-retry").hidden = true;
+  byId("resume-feedback-status").textContent = "Saving feedback…";
+  try {
+    await apiFetch(`${resumeBase()}/${submission.sessionId}/feedback`, {
+      method: "POST", headers: { "Idempotency-Key": submission.key }, body: submission.body,
+      signal: state.resumeRequestController.signal,
+    });
+    if (submission !== state.resumeFeedbackSubmission) return;
+    state.resumeFeedbackSubmission = null;
+    byId("resume-feedback-status").textContent = "Feedback saved. Reading its progress…";
+    await openResumeSession(submission.sessionId);
+  } catch (error) {
+    if (submission !== state.resumeFeedbackSubmission) return;
+    submission.conflict = error.problem?.status === 409;
+    byId("resume-feedback-retry").hidden = submission.conflict;
+    byId("resume-feedback-status").textContent = submission.conflict
+      ? "Session changed. Your inputs remain. Refresh the job, review, then submit a new request."
+      : "Response uncertain. Retry uses the same key and saved feedback.";
+    throw error;
+  }
+}
+
+async function reviewResumeFact(fact, decision) {
+  const detail = state.resumeSession;
+  if (!detail) return;
+  await apiFetch(`${resumeBase()}/${detail.session_id}/user-facts/${fact.fact_version_id}/reviews`, {
+    method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+    body: { expected_session_revision: detail.revision, base_version_id: detail.current_version_id,
+      fact_version_id: fact.fact_version_id, decision, attested: decision === "confirm" },
+    signal: state.resumeRequestController.signal,
+  });
+  await openResumeSession(detail.session_id);
+}
+
+async function changeResumeLock(itemId, locked) {
+  const detail = state.resumeSession;
+  if (!detail?.current_version_id) return;
+  await apiFetch(`${resumeBase()}/${detail.session_id}/locks`, {
+    method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+    body: { expected_session_revision: detail.revision, base_version_id: detail.current_version_id,
+      item_id: itemId, locked }, signal: state.resumeRequestController.signal,
+  });
+  await openResumeSession(detail.session_id);
+}
+
+function initializeResumeRevision() {
+  byId("resume-feedback-form").addEventListener("submit", event => {
+    event.preventDefault();
+    try {
+      const body = resumeFeedbackBody();
+      const submission = { key: crypto.randomUUID(), body, sessionId: state.resumeSession.session_id,
+        actorId: state.me.user_id, workspaceId: state.workspace.workspace_id, conflict: false };
+      state.resumeFeedbackSubmission = submission;
+      sendResumeFeedback(submission).catch(reportInterfaceFailure);
+    } catch (error) {
+      byId("resume-feedback-status").textContent = error.message;
+    }
+  });
+  byId("resume-feedback-retry").addEventListener("click", () =>
+    sendResumeFeedback(state.resumeFeedbackSubmission).catch(reportInterfaceFailure));
 }

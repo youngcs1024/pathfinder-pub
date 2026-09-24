@@ -57,6 +57,34 @@ test("first draft retry retains key, JD and budget after an uncertain response",
   assert.match(h.element("resume-job-draft").textContent, /No draft yet/);
 });
 
+test("R5.1 feedback conflict keeps inputs and prevents blind retry", async t => {
+  const h = await loadUi(t, { randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" });
+  h.state.resumeSession = { ...resumeDetail(), revision: 3, current_version_id: "version-a" };
+  h.state.resumeSessionId = "session-a";
+  h.state.resumeVersion = { content: { projects: [{ id: "project-item-a",
+    title: { text: "Synthetic" }, bullet_ids: ["bullet-a"], bullets: [{ text: "Built a service" }] }],
+    education: [], skills: [] }, facts: [] };
+  h.call("renderResumeRevision");
+  h.element("resume-feedback-kind").value = "content";
+  h.element("resume-feedback-operation").value = "instruction";
+  h.element("resume-feedback-target").value = "bullet-a";
+  h.element("resume-feedback-text").value = "Clarify the service work";
+  const body = h.call("resumeFeedbackBody");
+  assert.equal(body.expected_session_revision, 3);
+  assert.equal(body.base_version_id, "version-a");
+  assert.deepEqual(body.target_item_ids, ["bullet-a"]);
+  const submission = { key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", body,
+    sessionId: "session-a", actorId: "actor-a", workspaceId: "workspace-a", conflict: false };
+  h.state.resumeFeedbackSubmission = submission;
+  h.route(() => failure(409));
+  await assert.rejects(h.call("sendResumeFeedback", submission));
+  h.element("resume-feedback-text").value = "Keep these words";
+  await h.call("sendResumeFeedback", submission);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.element("resume-feedback-text").value, "Keep these words");
+  assert.equal(h.element("resume-feedback-retry").hidden, true);
+});
+
 test("JD upload rejects invalid UTF-8 and oversized content before POST", async t => {
   const h = await loadUi(t);
   h.element("resume-job-file").files = [{ name: "job.txt", arrayBuffer: async () => Uint8Array.of(255).buffer }];

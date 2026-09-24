@@ -17,7 +17,7 @@ from tests.integration.support import alembic_config, connect_database
 pytestmark = pytest.mark.integration
 
 OLD_HEAD = "0014_gate6_action_recovery"
-NEW_HEAD = "0023_r41_resume_generation"
+NEW_HEAD = "0024_r51_resume_revision"
 IDENTITY_COLUMNS = {"client_request_id", "create_request_digest", "create_request_version"}
 
 

@@ -258,7 +258,8 @@ class Run(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "graph_version IN ('pathfinder-research-v1', 'pathfinder-research-v2', "
             "'pathfinder-research-v3', 'pathfinder-research-v4', "
             "'pathfinder-research-v5', 'pathfinder-research-v6', "
-            "'pathfinder-resume-v1', 'pathfinder-resume-v2', 'pathfinder-resume-v3')",
+            "'pathfinder-resume-v1', 'pathfinder-resume-v2', 'pathfinder-resume-v3', "
+            "'pathfinder-resume-v4')",
             name="graph_version",
         ),
         CheckConstraint(
@@ -928,6 +929,11 @@ class ResumeSession(UUIDPrimaryKeyMixin, Base):
             ["workspace_id", "run_id"], ["runs.workspace_id", "runs.id"], ondelete="RESTRICT"
         ),
         ForeignKeyConstraint(
+            ["workspace_id", "latest_run_id"],
+            ["runs.workspace_id", "runs.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["workspace_id", "current_version_id"],
             ["resume_versions.workspace_id", "resume_versions.id"],
             ondelete="RESTRICT",
@@ -945,6 +951,7 @@ class ResumeSession(UUIDPrimaryKeyMixin, Base):
     preference_version_id: Mapped[UUID] = mapped_column(nullable=False)
     job_snapshot_id: Mapped[UUID] = mapped_column(nullable=False)
     run_id: Mapped[UUID] = mapped_column(nullable=False)
+    latest_run_id: Mapped[UUID] = mapped_column(nullable=False)
     current_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
     revision: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
@@ -1045,19 +1052,40 @@ class ResumeVersion(UUIDPrimaryKeyMixin, Base):
             ["resume_tex_artifacts.workspace_id", "resume_tex_artifacts.id"],
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["workspace_id", "parent_version_id"],
+            ["resume_versions.workspace_id", "resume_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "feedback_id"],
+            ["resume_feedback.workspace_id", "resume_feedback.id"],
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
         CheckConstraint("version >= 1 AND jsonb_typeof(content_json) = 'object'", name="content"),
         CheckConstraint("jsonb_typeof(validation_json) = 'object'", name="validation"),
+        CheckConstraint("jsonb_typeof(diff_json) = 'array'", name="diff"),
+        CheckConstraint("jsonb_typeof(impact_json) = 'array'", name="impact"),
         Index("ix_resume_versions_workspace_session", "workspace_id", "session_id"),
     )
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
     session_id: Mapped[UUID] = mapped_column(nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     artifact_id: Mapped[UUID] = mapped_column(nullable=False)
+    parent_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    feedback_id: Mapped[UUID | None] = mapped_column(nullable=True)
     content_json: Mapped[dict[str, object]] = mapped_column(
         JSONB(none_as_null=True), nullable=False
     )
     validation_json: Mapped[dict[str, object]] = mapped_column(
         JSONB(none_as_null=True), nullable=False
+    )
+    diff_json: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False, server_default=text("'[]'::jsonb")
+    )
+    impact_json: Mapped[list[str]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False, server_default=text("'[]'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -1206,6 +1234,7 @@ class ResumeClaimFactLink(UUIDPrimaryKeyMixin, Base):
 class ResumeCommand(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "resume_commands"
     __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
         CheckConstraint("kind ~ '^[a-z][a-z0-9_]{0,63}$'", name="kind"),
         CheckConstraint("digest_version = 1", name="digest_version"),
         CheckConstraint("request_digest ~ '^[0-9a-f]{64}$'", name="request_digest"),
@@ -1944,3 +1973,246 @@ class LLMInvocation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     latency_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     error_category: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ResumeFeedback(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_feedback"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "command_id"),
+        UniqueConstraint("workspace_id", "run_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "session_id"],
+            ["resume_sessions.workspace_id", "resume_sessions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "run_id"], ["runs.workspace_id", "runs.id"], ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "base_version_id"],
+            ["resume_versions.workspace_id", "resume_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "target_version_id"],
+            ["resume_versions.workspace_id", "resume_versions.id"],
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
+        CheckConstraint(
+            "kind IN ('answer','fact','preference','content','lock','fact_review')", name="kind"
+        ),
+        CheckConstraint("jsonb_typeof(request_json) = 'object'", name="request"),
+        CheckConstraint("jsonb_typeof(normalized_json) = 'object'", name="normalized"),
+        CheckConstraint("jsonb_typeof(questions_json) = 'array'", name="questions"),
+        CheckConstraint("repair_count BETWEEN 0 AND 1", name="repair"),
+        Index("ix_resume_feedback_workspace_session", "workspace_id", "session_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    session_id: Mapped[UUID] = mapped_column(nullable=False)
+    command_id: Mapped[UUID] = mapped_column(nullable=False)
+    run_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    base_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    target_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    request_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    normalized_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    questions_json: Mapped[list[str]] = mapped_column(JSONB(none_as_null=True), nullable=False)
+    repair_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResumeSessionPreferenceVersion(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_session_preference_versions"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "session_id", "version"),
+        ForeignKeyConstraint(
+            ["workspace_id", "session_id"],
+            ["resume_sessions.workspace_id", "resume_sessions.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version >= 1 AND jsonb_typeof(preferences_json) = 'object'", name="value"),
+        Index("ix_resume_session_preferences_workspace_session", "workspace_id", "session_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    session_id: Mapped[UUID] = mapped_column(nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    preferences_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResumeUserFact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_user_facts"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["material_projects.workspace_id", "material_projects.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "scope_session_id", "project_id"],
+            [
+                "resume_session_projects.workspace_id",
+                "resume_session_projects.session_id",
+                "resume_session_projects.project_id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "supersedes_material_version_id"],
+            ["material_fact_versions.workspace_id", "material_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "supersedes_user_version_id"],
+            ["resume_user_fact_versions.workspace_id", "resume_user_fact_versions.id"],
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
+        CheckConstraint("current_version >= 1", name="version"),
+        CheckConstraint(
+            "supersedes_material_version_id IS NULL OR supersedes_user_version_id IS NULL",
+            name="one_prior",
+        ),
+        Index("ix_resume_user_facts_workspace_project", "workspace_id", "project_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    project_id: Mapped[UUID] = mapped_column(nullable=False)
+    scope_session_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    supersedes_material_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    supersedes_user_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
+
+
+class ResumeUserFactVersion(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_user_fact_versions"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint("workspace_id", "fact_id", "version"),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_id"],
+            ["resume_user_facts.workspace_id", "resume_user_facts.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "created_by_user_id"],
+            ["workspace_memberships.workspace_id", "workspace_memberships.user_id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version >= 1 AND char_length(claim) BETWEEN 1 AND 2000", name="claim"),
+        CheckConstraint(
+            "kind IN ('implementation','plan','experiment','personal_statement')", name="kind"
+        ),
+        CheckConstraint("review_status IN ('pending','confirmed','rejected')", name="review"),
+        CheckConstraint("jsonb_typeof(conditions_json) = 'object'", name="conditions"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    fact_id: Mapped[UUID] = mapped_column(nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    claim: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    conditions_json: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    review_status: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    attested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResumeSessionUserFact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_session_user_facts"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "session_id", "fact_version_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "session_id"],
+            ["resume_sessions.workspace_id", "resume_sessions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_version_id"],
+            ["resume_user_fact_versions.workspace_id", "resume_user_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    session_id: Mapped[UUID] = mapped_column(nullable=False)
+    fact_version_id: Mapped[UUID] = mapped_column(nullable=False)
+
+
+class ResumeVersionFact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "resume_version_facts"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "id"),
+        UniqueConstraint(
+            "workspace_id",
+            "version_id",
+            "material_fact_version_id",
+            name="uq_resume_version_facts_material",
+        ),
+        UniqueConstraint(
+            "workspace_id",
+            "version_id",
+            "user_fact_version_id",
+            name="uq_resume_version_facts_user",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "version_id"],
+            ["resume_versions.workspace_id", "resume_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "material_fact_version_id"],
+            ["material_fact_versions.workspace_id", "material_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "user_fact_version_id"],
+            ["resume_user_fact_versions.workspace_id", "resume_user_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(material_fact_version_id IS NULL) <> (user_fact_version_id IS NULL)",
+            name="one_fact",
+        ),
+        Index("ix_resume_version_facts_workspace_version", "workspace_id", "version_id"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    version_id: Mapped[UUID] = mapped_column(nullable=False)
+    material_fact_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    user_fact_version_id: Mapped[UUID | None] = mapped_column(nullable=True)
+
+
+class RequirementCoverageUserFact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "requirement_coverage_user_facts"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "coverage_id",
+            "fact_version_id",
+            name="uq_requirement_coverage_user_facts",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "coverage_id"],
+            ["requirement_coverage.workspace_id", "requirement_coverage.id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "fact_version_id"],
+            ["resume_user_fact_versions.workspace_id", "resume_user_fact_versions.id"],
+            ondelete="RESTRICT",
+        ),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    coverage_id: Mapped[UUID] = mapped_column(nullable=False)
+    fact_version_id: Mapped[UUID] = mapped_column(nullable=False)

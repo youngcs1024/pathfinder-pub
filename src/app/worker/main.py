@@ -19,6 +19,7 @@ from app.db.project_facts import SqlAlchemyProjectFactStore, extractor_identity
 from app.db.readiness import DatabaseReadinessProbe
 from app.db.resume_artifacts import SqlAlchemyResumeArtifactStore
 from app.db.resume_generation import ResumeGenerationPublisher, SqlAlchemyResumeGenerationStore
+from app.db.resume_revision import ResumeRevisionPublisher, SqlAlchemyResumeRevisionStore
 from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.runtime_policy import DatabaseComponent, DatabasePoolPolicy
 from app.db.session import create_database_engine, create_session_factory
@@ -38,6 +39,7 @@ from app.worker.backoff import ExponentialBackoff
 from app.worker.dispatcher import RunExecutorDispatcher
 from app.worker.generation_executor import GenerationRunExecutor
 from app.worker.material_executor import MaterialRunExecutor
+from app.worker.revision_executor import RevisionRunExecutor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WORKER_READY_PATH, WorkerRuntimeSettings
 
@@ -91,6 +93,7 @@ async def run_worker(settings: Settings | None = None) -> None:
         materials = SqlAlchemyMaterialStore(sessions, aliases)
         facts = SqlAlchemyProjectFactStore(sessions)
         generation_sessions = SqlAlchemyResumeGenerationStore(sessions)
+        revision_sessions = SqlAlchemyResumeRevisionStore(sessions)
         if resolved_settings.llm_mode == "qwen":
             if (
                 resolved_settings.qwen_api_key is None
@@ -212,6 +215,17 @@ async def run_worker(settings: Settings | None = None) -> None:
                 ),
             ),
         )
+        revision_executor = RevisionRunExecutor(
+            reader=reader,
+            revisions=revision_sessions,
+            model_factory=lambda tenant, run_id: llm.create_chat_model(
+                LLMInvocationContext(
+                    workspace_id=tenant.workspace_id,
+                    actor_user_id=tenant.actor_user_id,
+                    run_id=run_id,
+                )
+            ),
+        )
         if await reader.has_unsupported_pending_work():
             raise RuntimeError("unsupported pending work requires the previous executor")
         for handled_signal in (signal.SIGINT, signal.SIGTERM):
@@ -226,12 +240,14 @@ async def run_worker(settings: Settings | None = None) -> None:
                 generation_publisher=ResumeGenerationPublisher(
                     SqlAlchemyResumeArtifactStore(sessions)
                 ),
+                revision_publisher=ResumeRevisionPublisher(SqlAlchemyResumeArtifactStore(sessions)),
             ),
             tenant_service=TenantService(SqlAlchemyTenantResolver(sessions)),
             executor=RunExecutorDispatcher(
                 {
                     "pathfinder-resume-v2": material_executor,
                     "pathfinder-resume-v3": generation_executor,
+                    "pathfinder-resume-v4": revision_executor,
                 }
             ),
             settings=runtime,

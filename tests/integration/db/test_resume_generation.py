@@ -28,6 +28,7 @@ from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.resume_artifacts import SqlAlchemyResumeArtifactStore
 from app.db.resume_generation import ResumeGenerationPublisher, SqlAlchemyResumeGenerationStore
 from app.db.resume_profiles import ClaimReviewV1, ItemReviewV1, SqlAlchemyResumeProfileStore
+from app.db.resume_revision import ResumeRevisionPublisher, SqlAlchemyResumeRevisionStore
 from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
@@ -35,6 +36,14 @@ from app.domain.errors import DomainConflictError, DomainNotFoundError
 from app.domain.project_facts import CandidateFactV1, FactEvidenceV1
 from app.domain.provisioning import ProvisioningService
 from app.domain.resume_generation import GenerationBudgetV1, JobInputV1, SessionCreateV1
+from app.domain.resume_revision import (
+    ContentFeedbackV1,
+    FactFeedbackV1,
+    FactReviewV1,
+    LockChangeV1,
+    PatchV1,
+    UserFactInputV1,
+)
 from app.domain.tenancy import TenantService
 from app.llm.factory import LLMFactory
 from app.llm.fake import FakeEmbeddingModel, ScriptedFakeChatModel
@@ -44,6 +53,7 @@ from app.material.aliases import MaterialAliasRegistry
 from app.worker.backoff import ExponentialBackoff
 from app.worker.dispatcher import RunExecutorDispatcher
 from app.worker.generation_executor import GenerationRunExecutor
+from app.worker.revision_executor import RevisionRunExecutor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
 from tests.integration.db.test_material_snapshots import _fixture_aliases, _runner
@@ -361,5 +371,113 @@ async def test_scripted_fake_publishes_downloadable_tex(
         payload, _ = await artifacts.get_bytes(tenant, version["artifact_id"])
         assert b"Built a synthetic service" in payload
         assert b"canary@example.test" in payload
+        revisions = SqlAlchemyResumeRevisionStore(sessions)
+        bullet_id = UUID(version["content"]["projects"][0]["bullet_ids"][0])
+        base_id = detail["current_version_id"]
+        patch = PatchV1(
+            operation="replace_text",
+            item_id=bullet_id,
+            field="bullet",
+            text="Built a synthetic service.",
+            fact_version_ids=(fact_version_id,),
+        )
+        feedback = ContentFeedbackV1(
+            expected_session_revision=detail["revision"],
+            base_version_id=base_id,
+            target_item_ids=(bullet_id,),
+            patches=(patch,),
+        )
+        key = uuid4()
+        accepted = await revisions.command(tenant, created.receipt.resource_id, feedback, key)
+        assert (
+            await revisions.command(tenant, created.receipt.resource_id, feedback, key)
+        ).replayed
+        with pytest.raises(DomainConflictError):
+            await revisions.command(tenant, created.receipt.resource_id, feedback, uuid4())
+        revision_executor = RevisionRunExecutor(
+            reader=reader,
+            revisions=revisions,
+            model_factory=lambda actor, run_id: factory.create_chat_model(
+                LLMInvocationContext(actor.workspace_id, actor.actor_user_id, run_id=run_id)
+            ),
+        )
+        revision_runner = WorkerRunner(
+            worker_id="revision-test",
+            store=SqlAlchemyWorkerJobStore(
+                sessions,
+                ExponentialBackoff(WorkerRuntimeSettings(), Random(2)),
+                revision_publisher=ResumeRevisionPublisher(artifacts),
+            ),
+            tenant_service=tenancy,
+            executor=RunExecutorDispatcher({"pathfinder-resume-v4": revision_executor}),
+            settings=WorkerRuntimeSettings(),
+            unsupported_work_guard=reader.has_unsupported_pending_work,
+        )
+        assert await revision_runner.run_once(asyncio.Event())
+        revised_detail = await store.get_session(tenant, created.receipt.resource_id)
+        assert revised_detail["run_id"] == accepted.receipt.run_id
+        assert revised_detail["run_status"] == "completed"
+        assert revised_detail["current_version_id"] != base_id
+        revised = await store.get_version(
+            tenant, created.receipt.resource_id, revised_detail["current_version_id"]
+        )
+        assert revised["parent_version_id"] == base_id
+        assert revised["content"]["projects"][0]["bullets"][0]["text"] == patch.text
+        assert revised["diff"][0]["item_id"] == str(bullet_id)
+        assert (await store.get_version(tenant, created.receipt.resource_id, base_id))[
+            "content"
+        ] == version["content"]
+        lock = await revisions.command(
+            tenant,
+            created.receipt.resource_id,
+            LockChangeV1(
+                expected_session_revision=revised_detail["revision"],
+                base_version_id=revised_detail["current_version_id"],
+                item_id=bullet_id,
+                locked=True,
+            ),
+            uuid4(),
+        )
+        assert lock.receipt.status == "completed"
+        locked_detail = await store.get_session(tenant, created.receipt.resource_id)
+        assert str(bullet_id) in locked_detail["locked_item_ids"]
+        fact_submission = await revisions.command(
+            tenant,
+            created.receipt.resource_id,
+            FactFeedbackV1(
+                expected_session_revision=locked_detail["revision"],
+                base_version_id=locked_detail["current_version_id"],
+                fact=UserFactInputV1(
+                    project_id=project["id"],
+                    scope="session",
+                    claim="Reduced synthetic latency by 12%",
+                    kind="implementation",
+                    environment="synthetic benchmark",
+                    fact_scope="API requests",
+                    metric_basis="p95 before and after",
+                ),
+            ),
+            uuid4(),
+        )
+        assert fact_submission.receipt.status == "completed"
+        pending = (await revisions.list_user_facts(tenant, created.receipt.resource_id))[-1]
+        assert pending["review_status"] == "pending"
+        fact_detail = await store.get_session(tenant, created.receipt.resource_id)
+        reviewed = await revisions.command(
+            tenant,
+            created.receipt.resource_id,
+            FactReviewV1(
+                expected_session_revision=fact_detail["revision"],
+                base_version_id=fact_detail["current_version_id"],
+                fact_version_id=pending["fact_version_id"],
+                decision="confirm",
+                attested=True,
+            ),
+            uuid4(),
+        )
+        assert reviewed.receipt.status == "completed"
+        assert (await revisions.list_user_facts(tenant, created.receipt.resource_id))[-1][
+            "review_status"
+        ] == "confirmed"
     finally:
         await engine.dispose()

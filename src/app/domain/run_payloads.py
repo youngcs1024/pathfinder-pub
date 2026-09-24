@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.domain.research import ResearchOutputV1, ResearchOutputV2, ResearchRequestV1
 from app.domain.resume_generation import GenerationCandidateV1
+from app.domain.resume_revision import RevisionCandidateV1
 
 
 class RunMode(StrEnum):
@@ -120,6 +121,38 @@ class ResumeGenerationRunOutputV1(ResumeRunOutputV1[ResumeGenerationResultV1]):
     payload: ResumeGenerationResultV1
 
 
+class ResumeRevisionInputV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    session_id: UUID
+    feedback_id: UUID
+    base_version_id: UUID | None
+
+
+class ResumeRevisionResultV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    session_id: UUID
+    feedback_id: UUID
+    version_id: UUID | None
+    artifact_id: UUID | None
+    outcome: Literal["draft", "needs_input"]
+    questions: tuple[str, ...]
+
+
+class ResumeRevisionRunInputV1(ResumeRunInputV1[ResumeRevisionInputV1]):
+    mode: Literal[RunMode.RESUME_REVISION] = RunMode.RESUME_REVISION
+    payload: ResumeRevisionInputV1
+
+
+class ResumeRevisionCandidateOutputV1(ResumeRunOutputV1[RevisionCandidateV1]):
+    mode: Literal[RunMode.RESUME_REVISION] = RunMode.RESUME_REVISION
+    payload: RevisionCandidateV1
+
+
+class ResumeRevisionRunOutputV1(ResumeRunOutputV1[ResumeRevisionResultV1]):
+    mode: Literal[RunMode.RESUME_REVISION] = RunMode.RESUME_REVISION
+    payload: ResumeRevisionResultV1
+
+
 type RunInput = ResearchRequestV1 | ResumeRunInputV1
 type RunOutput = ResearchOutputV1 | ResearchOutputV2 | ResumeRunOutputV1
 
@@ -224,6 +257,12 @@ EXECUTION_CONTRACTS: tuple[RunContractV1, ...] = (
         "pathfinder-resume-v3",
         ResumeGenerationRunInputV1,
         (ResumeGenerationRunOutputV1,),
+    ),
+    RunContractV1(
+        RunMode.RESUME_REVISION,
+        "pathfinder-resume-v4",
+        ResumeRevisionRunInputV1,
+        (ResumeRevisionRunOutputV1,),
     ),
 )
 READ_CONTRACTS = (*LEGACY_READ_CONTRACTS, MATERIAL_V1_READ_CONTRACT, *EXECUTION_CONTRACTS)

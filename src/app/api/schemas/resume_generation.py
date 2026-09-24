@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.domain.resume_generation import GenerationBudgetV1, JobRequirementV1, SessionCreateV1
 from app.domain.resume_profile import JobPreferenceOverrideV1, ResumeContentV1
-from app.domain.run_payloads import ResumeGenerationResultV1
+from app.domain.run_payloads import ResumeGenerationResultV1, ResumeRevisionResultV1
 
 
 class GenerationApiModel(BaseModel):
@@ -48,16 +48,18 @@ class SessionListItemResponse(GenerationApiModel):
 
 class SessionDetailResponse(GenerationApiModel):
     session_id: UUID
+    initial_run_id: UUID
     run_id: UUID
     run_status: Literal["queued", "running", "completed", "failed", "cancelled"]
     error_category: str | None
-    result: ResumeGenerationResultV1 | None
+    result: ResumeGenerationResultV1 | ResumeRevisionResultV1 | None
     revision: int
     current_version_id: UUID | None
     profile_version_id: UUID
     preference_version: int
     project_ids: list[UUID]
     override: JobPreferenceOverrideV1
+    locked_item_ids: list[UUID]
     budget: GenerationBudgetV1
     job: JobSnapshotResponse
     requirements: list[RequirementResponse]
@@ -89,6 +91,8 @@ class SessionFactResponse(GenerationApiModel):
     claim: str
     kind: Literal["implementation", "plan", "experiment", "personal_statement"]
     conditions: dict[str, object]
+    source: Literal["material_snapshot", "user_attestation"]
+    attested_at: datetime | None
     evidence: list[FactEvidenceResponse]
 
 
@@ -97,6 +101,10 @@ class VersionDetailResponse(GenerationApiModel):
     session_id: UUID
     version: int
     artifact_id: UUID
+    parent_version_id: UUID | None
+    feedback_id: UUID | None
+    diff: list[dict[str, object]]
+    impact: list[str]
     content: ResumeContentV1
     validation: dict[str, object]
     coverage: list[CoverageResponse]
