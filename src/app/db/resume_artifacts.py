@@ -14,7 +14,11 @@ from app.db.resume_profiles import _profile
 from app.db.session import AsyncSessionFactory, database_session
 from app.domain.errors import DomainInvariantError, DomainNotFoundError, DomainValidationError
 from app.domain.resume_artifacts import TexArtifactInfoV1
-from app.domain.resume_profile import ResumeContentV1, ResumePreferencesV1
+from app.domain.resume_profile import (
+    ResumeContentV1,
+    ResumePreferencesV1,
+    require_locked_items_unchanged,
+)
 from app.domain.resume_templates import TemplateManifest, TemplateRenderer
 from app.domain.tenancy import TenantContext
 from app.resume.template_import import FIXED_PREAMBLE_SHA256, FIXED_SOURCE_SHA256, TEMPLATE_COMMIT
@@ -61,6 +65,7 @@ class SqlAlchemyResumeArtifactStore:
         profile_version_id: UUID,
         content: ResumeContentV1,
         preferences: ResumePreferencesV1,
+        lock_base_content: ResumeContentV1 | None = None,
     ) -> UUID:
         """Publish inside the caller's transaction; never commit independently."""
         version = await session.scalar(
@@ -87,6 +92,13 @@ class SqlAlchemyResumeArtifactStore:
         ):
             raise DomainValidationError("resume template identity is unsupported")
         profile_content = ResumeContentV1.model_validate(version.content_json)
+        if lock_base_content is not None:
+            # The publisher supplies the authorized revision base. Identity remains
+            # bound to the imported profile; session locks belong to that base.
+            require_locked_items_unchanged(
+                profile_content, lock_base_content, ResumePreferencesV1()
+            )
+            profile_content = lock_base_content
         rendered = render_with_template(
             self._renderer,
             source_bytes=source.source_bytes

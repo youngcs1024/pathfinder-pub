@@ -59,7 +59,7 @@ from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
 from tests.evals.product_acceptance_contracts import publish, require
 from tests.evals.quality_dataset import quality_identity_digest
-from tests.evals.resume_quality_baseline import common_input, one_shot
+from tests.evals.resume_quality_baseline import BaselineOutputError, common_input, one_shot
 from tests.evals.resume_quality_budget import ComparisonRecorder
 from tests.evals.resume_quality_contracts import input_change, review_template
 
@@ -371,7 +371,9 @@ async def run_case(rig, case, root, record):
                 "automatic_repairs": 0,
             }
         )
-    except Exception:
+    except Exception as error:
+        if isinstance(error, BaselineOutputError):
+            publish(root / f"{case.case_id}-b1-failed.json", error.private_output)
         record["arms"]["b1"]["status"] = "FAILED"
         record["arms"]["b1"]["failure_category"] = "b1_generation_failed"
     after = await rig.recorder.measurement()
@@ -528,7 +530,9 @@ def usage_delta(before, after):
     }
 
 
-async def execute_synthetic(database_url, root, dataset, budget, *, source_check=lambda: None):
+async def execute_synthetic(
+    database_url, root, dataset, budget, *, source_check=lambda: None, raise_on_error=False
+):
     """Caller owns the isolated, migrated database. No credentials or DSN in reports."""
     require(dataset.material_kind == "synthetic", "synthetic_inputs_required")
     engine = create_database_engine(SecretStr(database_url))
@@ -564,6 +568,8 @@ async def execute_synthetic(database_url, root, dataset, budget, *, source_check
                 record["failure_category"] = (
                     "budget_stopped" if recorder.stopped else "execution_failed"
                 )
+                if raise_on_error:
+                    raise
                 if recorder.stopped:
                     break
             finally:
@@ -575,6 +581,8 @@ async def execute_synthetic(database_url, root, dataset, budget, *, source_check
         )
     except Exception:
         report["failure_category"] = "preparation_failed"
+        if raise_on_error:
+            raise
     finally:
         if recorder is not None:
             report["usage"] = await recorder.measurement()

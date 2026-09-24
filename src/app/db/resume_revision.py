@@ -1141,6 +1141,7 @@ class ResumeRevisionPublisher:
             profile_version_id=row.profile_version_id,
             content=candidate.content,
             preferences=preferences,
+            lock_base_content=base_content,
         )
         version_id = uuid4()
         db.add(

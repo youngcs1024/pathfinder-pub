@@ -6,13 +6,15 @@ from uuid import UUID
 import pytest
 from pydantic import SecretStr
 
+from app.db.resume_artifacts import SqlAlchemyResumeArtifactStore
 from app.db.resume_generation import SqlAlchemyResumeGenerationStore
 from app.db.session import create_database_engine, create_session_factory
-from app.domain.errors import DomainNotFoundError
+from app.domain.errors import DomainNotFoundError, DomainValidationError
+from app.domain.resume_profile import ResumeContentV1, ResumePreferencesV1
 from tests.evals.product_acceptance_contracts import read_private_json
 from tests.evals.resume_quality import load_dataset
 from tests.evals.resume_quality_contracts import ComparisonBudget
-from tests.evals.resume_quality_runtime import execute_synthetic
+from tests.evals.resume_quality_runtime import SOURCE, execute_synthetic
 
 pytestmark = pytest.mark.integration
 
@@ -21,7 +23,7 @@ async def test_three_comparisons_use_worker_and_preserve_versions(migrated_datab
     root = tmp_path / "comparison"
     root.mkdir(mode=0o700)
     report = await execute_synthetic(
-        migrated_database_url, root, load_dataset(), ComparisonBudget()
+        migrated_database_url, root, load_dataset(), ComparisonBudget(), raise_on_error=True
     )
     assert report["status"] == "SYNTHETIC_PASS", report
     assert report["r71_status"] == "IN_PROGRESS"
@@ -62,7 +64,7 @@ async def test_three_comparisons_use_worker_and_preserve_versions(migrated_datab
                 select(ResumeSession).where(ResumeSession.id == UUID(a["session_id"]))
             )
             tenant = await TenantService(SqlAlchemyTenantResolver(sessions)).resolve_tenant(
-                workspace_id=row.workspace_id, actor_user_id=row.created_by
+                workspace_id=row.workspace_id, actor_user_id=row.owner_user_id
             )
         with pytest.raises(DomainNotFoundError):
             await SqlAlchemyResumeGenerationStore(sessions).get_version(
@@ -70,6 +72,37 @@ async def test_three_comparisons_use_worker_and_preserve_versions(migrated_datab
                 UUID(a["session_id"]),
                 UUID(b["arms"]["system"]["versions"][0]["version_id"]),
             )
+        raw = SOURCE.read_bytes()
+        artifacts = SqlAlchemyResumeArtifactStore(
+            sessions,
+            expected_source_sha256=hashlib.sha256(raw).hexdigest(),
+            expected_preamble_sha256=hashlib.sha256(raw.split(b"\\begin{document}")[0]).hexdigest(),
+        )
+        base = ResumeContentV1.model_validate(a["arms"]["system"]["versions"][1]["content"])
+        final = ResumeContentV1.model_validate(a["arms"]["system"]["versions"][2]["content"])
+        preferences = ResumePreferencesV1(locked_item_ids=(base.projects[0].bullet_ids[0],))
+        changed_bullet = base.projects[0].bullets[0].model_copy(update={"text": "tampered"})
+        changed_project = final.projects[0].model_copy(update={"bullets": (changed_bullet,)})
+        tampered = final.model_copy(update={"projects": (changed_project,)})
+        async with sessions.begin() as db:
+            with pytest.raises(DomainValidationError, match="locked"):
+                await artifacts.stage(
+                    db,
+                    tenant,
+                    profile_version_id=row.profile_version_id,
+                    content=tampered,
+                    preferences=preferences,
+                    lock_base_content=base,
+                )
+            with pytest.raises(DomainValidationError, match="personal"):
+                await artifacts.stage(
+                    db,
+                    tenant,
+                    profile_version_id=row.profile_version_id,
+                    content=final.model_copy(update={"display_name": "tampered"}),
+                    preferences=preferences,
+                    lock_base_content=base.model_copy(update={"display_name": "tampered"}),
+                )
     finally:
         await engine.dispose()
 

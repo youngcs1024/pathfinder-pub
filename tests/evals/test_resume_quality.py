@@ -111,7 +111,7 @@ async def test_one_shot_has_one_logical_call_with_counted_retry_and_private_fill
                 raise ProviderAdapterError(category="provider_timeout", retryable=True)
             return result
 
-    adapter = RetryAdapter([])
+    adapter = RetryAdapter([result])
 
     async def no_sleep(_):
         pass
