@@ -16,14 +16,18 @@ from app.domain.resume_revision import (
     ContentFeedbackV1,
     PatchV1,
     PreferenceFeedbackV1,
+    RevisionCandidateV1,
     RevisionInputs,
     UserFactInputV1,
     apply_scoped_patches,
     user_fact_issues,
 )
+from app.domain.run_payloads import ResumeRevisionCandidateOutputV1
+from app.domain.runs import RunStatus
 from app.llm.fake import ScriptedFakeChatModel
 from app.llm.ports import ChatModelResult
 from app.resume.template_import import parse_resume_source
+from app.worker.contracts import RunExecutionResult
 
 SOURCE = Path(__file__).resolve().parents[2] / "fixtures/resume/synthetic_main.tex"
 
@@ -247,3 +251,19 @@ async def test_non_target_draft_lock_does_not_block_scoped_edit() -> None:
     assert candidate.content is not None
     assert candidate.content.projects[0].bullet_ids[1] == generated_bullet_id
     assert candidate.content.projects[0].bullets[1] == current.projects[0].bullets[1]
+
+
+def test_revision_candidate_satisfies_strict_worker_output_contract() -> None:
+    candidate = RevisionCandidateV1(
+        content=None,
+        patches=(),
+        diff=(),
+        impact=(),
+        questions=("Need a clear target",),
+        correction_count=0,
+        prompt_version="synthetic",
+        model_id="fake",
+        retrieval_config_version="synthetic",
+    )
+    output = ResumeRevisionCandidateOutputV1(payload=candidate)
+    assert RunExecutionResult(status=RunStatus.COMPLETED, result=output).result == output

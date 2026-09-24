@@ -335,6 +335,8 @@ def apply_scoped_patches(
 
 
 class RevisionCandidateV1(RevisionModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
+
     content: ResumeContentV1 | None
     patches: tuple[PatchV1, ...]
     diff: tuple[dict[str, object], ...]
