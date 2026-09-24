@@ -728,9 +728,19 @@ async def test_scripted_fake_publishes_downloadable_tex(
         assert sibling_inputs.preferences.writing_advice == "sibling"
         with pytest.raises(DomainNotFoundError):
             await confirmations.download(tenant, children["sibling"], base_id)
-        with pytest.raises(DomainNotFoundError):
+        with pytest.raises(DomainConflictError):
             await confirmations.confirm(
                 tenant, children["sibling"], base_id, first_request, uuid4()
+            )
+        cross_session_request = first_request.model_copy(
+            update={
+                "expected_session_revision": sibling_after["revision"],
+                "expected_current_version_id": sibling_after["current_version_id"],
+            }
+        )
+        with pytest.raises(DomainNotFoundError):
+            await confirmations.confirm(
+                tenant, children["sibling"], base_id, cross_session_request, uuid4()
             )
         foreign = await provisioning.provision_personal_workspace("r52-foreign")
         outsider = await tenancy.resolve_tenant(
