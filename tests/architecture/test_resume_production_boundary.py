@@ -58,6 +58,7 @@ def test_only_approved_v2_and_explicitly_retired_legacy_routes_are_published():
         "/api/v2/workspaces/{workspace_id}/resume-sessions/{session_id}/feedback",
         "/api/v2/workspaces/{workspace_id}/resume-sessions/{session_id}/user-facts/{fact_version_id}/reviews",
         "/api/v2/workspaces/{workspace_id}/resume-sessions/{session_id}/locks",
+        "/api/v2/workspaces/{workspace_id}/resume-sessions/{session_id}/versions/{version_id}/confirm",
     }
     assert all(
         "410" in spec["responses"]

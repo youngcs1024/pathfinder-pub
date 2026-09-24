@@ -130,6 +130,7 @@ RESTORE_TABLES = {
         "run_jobs",
         "runs",
         "resume_commands",
+        "resume_confirmations",
         "resume_feedback",
         "resume_session_preference_versions",
         "resume_user_facts",
