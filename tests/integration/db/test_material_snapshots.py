@@ -113,7 +113,11 @@ def _runner(sessions, store):
         ),
         tenant_service=TenantService(SqlAlchemyTenantResolver(sessions)),
         executor=RunExecutorDispatcher(
-            {"pathfinder-resume-v2": executor, "pathfinder-resume-v3": executor}
+            {
+                "pathfinder-resume-v2": executor,
+                "pathfinder-resume-v3": executor,
+                "pathfinder-resume-v4": executor,
+            }
         ),
         settings=WorkerRuntimeSettings(),
         unsupported_work_guard=reader.has_unsupported_pending_work,

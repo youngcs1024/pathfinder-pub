@@ -17,7 +17,11 @@ from app.worker.settings import WorkerRuntimeSettings
 @pytest.mark.parametrize("version", ["pathfinder-research-v6", "unknown"])
 async def test_unregistered_graph_is_rejected_without_running_any_handler(version):
     result = await RunExecutorDispatcher(
-        {"pathfinder-resume-v2": object(), "pathfinder-resume-v3": object()}
+        {
+            "pathfinder-resume-v2": object(),
+            "pathfinder-resume-v3": object(),
+            "pathfinder-resume-v4": object(),
+        }
     ).execute(uuid4(), TenantContext(uuid4(), uuid4(), WorkspaceRole.ADMIN), version)
     assert result.status is RunStatus.FAILED
     assert result.error_category == "unknown_graph_version" and not result.retryable
@@ -58,6 +62,7 @@ async def test_production_startup_is_read_only_and_only_clean_state_becomes_read
             assert {item.graph_version for item in kwargs["store"]._execution_contracts} == {
                 "pathfinder-resume-v2",
                 "pathfinder-resume-v3",
+                "pathfinder-resume-v4",
             }
             assert isinstance(kwargs["executor"], RunExecutorDispatcher)
             assert "approved_action_executor" not in kwargs
@@ -97,7 +102,11 @@ async def test_work_appearing_after_startup_stops_before_reclaim_or_claim():
         store=SimpleNamespace(reclaim_stale_leases=forbidden, claim_due_job=forbidden),
         tenant_service=object(),
         executor=RunExecutorDispatcher(
-            {"pathfinder-resume-v2": object(), "pathfinder-resume-v3": object()}
+            {
+                "pathfinder-resume-v2": object(),
+                "pathfinder-resume-v3": object(),
+                "pathfinder-resume-v4": object(),
+            }
         ),
         settings=WorkerRuntimeSettings(),
         unsupported_work_guard=guard,

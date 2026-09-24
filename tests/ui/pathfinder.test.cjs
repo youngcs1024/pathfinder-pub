@@ -72,7 +72,7 @@ test("R5.1 feedback conflict keeps inputs and prevents blind retry", async t => 
   const body = h.call("resumeFeedbackBody");
   assert.equal(body.expected_session_revision, 3);
   assert.equal(body.base_version_id, "version-a");
-  assert.deepEqual(body.target_item_ids, ["bullet-a"]);
+  assert.deepEqual(Array.from(body.target_item_ids), ["bullet-a"]);
   const submission = { key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", body,
     sessionId: "session-a", actorId: "actor-a", workspaceId: "workspace-a", conflict: false };
   h.state.resumeFeedbackSubmission = submission;

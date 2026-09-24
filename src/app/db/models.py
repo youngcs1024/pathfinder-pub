@@ -2133,7 +2133,12 @@ class ResumeUserFactVersion(UUIDPrimaryKeyMixin, Base):
 class ResumeSessionUserFact(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "resume_session_user_facts"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "session_id", "fact_version_id"),
+        UniqueConstraint(
+            "workspace_id",
+            "session_id",
+            "fact_version_id",
+            name="uq_resume_session_user_facts_workspace_id_session_id_fact_versi",
+        ),
         ForeignKeyConstraint(
             ["workspace_id", "session_id"],
             ["resume_sessions.workspace_id", "resume_sessions.id"],

@@ -330,7 +330,11 @@ async def test_scripted_fake_publishes_downloadable_tex(
             ),
             tenant_service=tenancy,
             executor=RunExecutorDispatcher(
-                {"pathfinder-resume-v2": executor, "pathfinder-resume-v3": executor}
+                {
+                    "pathfinder-resume-v2": executor,
+                    "pathfinder-resume-v3": executor,
+                    "pathfinder-resume-v4": executor,
+                }
             ),
             settings=WorkerRuntimeSettings(),
             unsupported_work_guard=reader.has_unsupported_pending_work,
@@ -409,7 +413,13 @@ async def test_scripted_fake_publishes_downloadable_tex(
                 revision_publisher=ResumeRevisionPublisher(artifacts),
             ),
             tenant_service=tenancy,
-            executor=RunExecutorDispatcher({"pathfinder-resume-v4": revision_executor}),
+            executor=RunExecutorDispatcher(
+                {
+                    "pathfinder-resume-v2": executor,
+                    "pathfinder-resume-v3": executor,
+                    "pathfinder-resume-v4": revision_executor,
+                }
+            ),
             settings=WorkerRuntimeSettings(),
             unsupported_work_guard=reader.has_unsupported_pending_work,
         )
