@@ -60,6 +60,14 @@ def save(path, value):
     publish(path, json.loads(json.dumps(value, default=str)))
 
 
+def preserve(path, value):
+    value = json.loads(json.dumps(value, default=str))
+    if path.exists():
+        require(read_private_json(path) == value, "existing_artifact_changed")
+    else:
+        save(path, value)
+
+
 def key(rig, name):
     path = rig.root / f"command-{hashlib.sha256(name.encode()).hexdigest()}.json"
     if not path.exists():
@@ -278,7 +286,7 @@ async def draft(rig, case):
         case=case,
         confirmed_ids={f for p in facts["projects"].values() for f in p["fact_version_ids"]},
     )
-    save(rig.root / f"{case.case_id}-frozen-rubric.json", rubric)
+    preserve(rig.root / f"{case.case_id}-frozen-rubric.json", rubric)
     request = SessionCreateV1(
         profile_version_id=UUID(profile["version_id"]),
         preference_version=profile["preference_version"],
@@ -288,11 +296,11 @@ async def draft(rig, case):
     )
     created = await rig.store.create(rig.tenant, request, key(rig, f"{case.case_id}-session"))
     sid = created.receipt.resource_id
-    save(rig.root / f"{case.case_id}-session.json", {"session_id": sid})
+    preserve(rig.root / f"{case.case_id}-session.json", {"session_id": sid})
     inputs = await rig.store.execution_inputs(rig.tenant, sid)
     shared = common_input(inputs, rig.identity.source_sha256)
-    save(rig.root / f"{case.case_id}-input.json", shared)
-    save(
+    preserve(rig.root / f"{case.case_id}-input.json", shared)
+    preserve(
         rig.root / f"{case.case_id}-b0.json",
         {
             "tex": rig.source_bytes.decode(),
@@ -303,7 +311,14 @@ async def draft(rig, case):
     )
     before = await rig.recorder.measurement()
     # Create-only barrier precedes any provider call. B1 failure never triggers repair.
-    save(
+    if (rig.root / f"{case.case_id}-b1-started.json").exists():
+        require(rig.preprovider_recovery, "b1_already_started")
+        require(
+            not (rig.root / f"{case.case_id}-b1.json").exists()
+            and not (rig.root / f"{case.case_id}-b1-failed.json").exists(),
+            "b1_has_output",
+        )
+    preserve(
         rig.root / f"{case.case_id}-b1-started.json",
         {"common_input_digest": quality_identity_digest(shared)},
     )
@@ -480,6 +495,15 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
         )
         if (root / "materials-recovery-started.json").exists() and stage == "materials":
             require((await recorder.usage())["attempts"] == 0, "nonempty_ledger_recovery_rejected")
+        preprovider_recovery = (root / f"{stage}-preprovider-recovery-started.json").exists()
+        if preprovider_recovery:
+            approved = read_private_json(root / f"{stage}-preprovider-recovery.json")
+            require_review(approved, binding=inputs.digest, kind="preprovider_recovery")
+            require(
+                approved["ledger_digest"] == quality_identity_digest(await recorder.measurement()),
+                "recovery_ledger_changed",
+            )
+            admit(await recorder.usage(), inputs.budget)
         # Read-only/fact-review stages can still preserve reports after budget exhaustion.
         values = credentials(credentials_path)
         bundle = create_qwen_adapters(
@@ -492,6 +516,7 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
         )
         rig = SimpleNamespace(
             root=root,
+            preprovider_recovery=preprovider_recovery,
             inputs=inputs,
             sessions=sessions,
             tenant=tenant,

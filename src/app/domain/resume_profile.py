@@ -156,9 +156,17 @@ def check_model_input_privacy(content: ResumeContentV1, value: object) -> None:
                 flags=re.I,
             )
             digits = "".join(c for c in phone_text if c.isdigit())
+            # Year-month ranges are ordinary resume data, not generic phone candidates.
+            # Exact protected values and normalized contact digits still use the original.
+            generic_phone_text = re.sub(
+                r"(?<!\d)(?:19|20)\d{2}[./-](?:0?[1-9]|1[0-2])\s*"
+                r"(?:--?|\u2013|\u2014|至)\s*(?:19|20)\d{2}[./-](?:0?[1-9]|1[0-2])(?!\d)",
+                "",
+                phone_text,
+            )
             has_phone = any(
                 10 <= len("".join(c for c in match.group() if c.isdigit())) <= 15
-                for match in phone_pattern.finditer(phone_text)
+                for match in phone_pattern.finditer(generic_phone_text)
             )
             if (
                 email_pattern.search(part)

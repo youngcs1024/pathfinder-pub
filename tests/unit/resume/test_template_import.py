@@ -141,3 +141,28 @@ def test_preferences_keep_global_exclusions_and_soft_advice_separate() -> None:
         validate_preference_targets(
             content, ResumePreferencesV1(excluded_project_ids=(content.education[0].id,))
         )
+
+
+@pytest.mark.parametrize("period", ["2025.9 -- 2028.6", "2021.09 - 2025.06", "2024/1\u20132025/12"])
+def test_year_month_ranges_are_not_generic_phone_numbers(period):
+    content = _parse(SOURCE.read_text()).content
+    assert content is not None
+    check_model_input_privacy(content, period)
+    education = content.education[0].model_copy(
+        update={"period": content.education[0].period.model_copy(update={"text": period})}
+    )
+    content.model_copy(update={"education": (education,)}).model_projection()
+    with pytest.raises(DomainValidationError):
+        check_model_input_privacy(content, period + " phone: +86 13900001111")
+
+
+def test_date_exception_does_not_hide_known_contact_digits():
+    content = _parse(SOURCE.read_text()).content
+    assert content is not None
+    contact = tuple(
+        field.model_copy(update={"value": "2025 9 2028 6"}) if field.kind == "phone" else field
+        for field in content.contact
+    )
+    protected = content.model_copy(update={"contact": contact})
+    with pytest.raises(DomainValidationError):
+        check_model_input_privacy(protected, "2025.9 -- 2028.6")

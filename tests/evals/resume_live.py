@@ -118,6 +118,21 @@ def begin_stage(root, stage, binding, source_sha=None):
         require(result["authorization_digest"] == binding, "stage_binding_changed")
         return result
     if (root / f"{stage}-started.json").exists():
+        if stage.endswith("-draft"):
+            require(
+                (root / f"{stage}-preprovider-recovery.json").exists(),
+                "interrupted_stage_requires_review",
+            )
+            approval = read_private_json(root / f"{stage}-preprovider-recovery.json")
+            require_review(approval, binding=binding, kind="preprovider_recovery")
+            publish(
+                root / f"{stage}-preprovider-recovery-started.json",
+                {
+                    "authorization_digest": binding,
+                    "source_sha": source_sha,
+                },
+            )
+            return None
         # Only the known pre-provider material setup failure can resume automatically.
         require(stage == "materials", "interrupted_stage_requires_review")
         approval = read_private_json(root / "materials-empty-recovery.json")
