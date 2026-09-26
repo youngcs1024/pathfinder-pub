@@ -307,3 +307,76 @@ async def test_material_prompt_is_bounded_and_failed_response_is_retained(tmp_pa
     assert calls[0][1]["prompt_version"] == MATERIAL_PROMPT_VERSION
     paths = list(tmp_path.glob("material-response-*.json"))
     assert len(paths) == 1 and json.loads(paths[0].read_text())["finish_status"] == "incomplete"
+
+
+async def test_delegated_fact_correction_uses_versioned_business_commands(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_live_runtime import facts_stage
+
+    tmp_path.chmod(0o700)
+    fact_id, project_id, import_id, file_id = (str(uuid4()) for _ in range(4))
+    catalog = {"import_id": import_id, "facts": [{"id": fact_id, "version": 1}]}
+    digest = quality_identity_digest(catalog)
+    publish(tmp_path / "candidates.json", catalog)
+    publish(
+        tmp_path / "materials-done.json",
+        {
+            "projects": {
+                "project": {
+                    "project_id": project_id,
+                    "catalog_digest": digest,
+                    "catalog_file": "candidates.json",
+                }
+            }
+        },
+    )
+    candidate = {
+        "claim": "Conditionally enabled",
+        "kind": "implementation",
+        "evidence": [
+            {"snapshot_file_id": file_id, "start_line": 1, "end_line": 1, "quote": "if enabled"}
+        ],
+    }
+    publish(
+        tmp_path / "fact-review.json",
+        {
+            "reviewer": "codex_agent_delegated",
+            "authorization_digest": "fixed",
+            "kind": "facts",
+            "rationale": "checked original source",
+            "projects": {
+                "project": {
+                    "catalog_digest": digest,
+                    "decisions": {
+                        fact_id: {
+                            "decision": "confirm",
+                            "rationale": "correct unconditional wording",
+                            "candidate": candidate,
+                        }
+                    },
+                }
+            },
+        },
+    )
+    calls = []
+
+    class Store:
+        async def command(self, tenant, **kwargs):
+            calls.append(kwargs)
+
+        async def current_facts(self, tenant, project_id):
+            return {"facts": [{"review_status": "confirmed", "version_id": str(uuid4())}]}
+
+    monkeypatch.setattr(
+        "tests.evals.resume_live_runtime.SqlAlchemyProjectFactStore", lambda _: Store()
+    )
+    rig = SimpleNamespace(
+        root=tmp_path, inputs=SimpleNamespace(digest="fixed"), sessions=None, tenant=None
+    )
+    result = await facts_stage(rig)
+    assert result["projects"]["project"]["fact_version_ids"]
+    assert [c["kind"] for c in calls] == ["material_fact_revise", "material_fact_review"]
+    assert [c["expected_version"] for c in calls] == [1, 2]
+    assert calls[-1]["attested"] is False

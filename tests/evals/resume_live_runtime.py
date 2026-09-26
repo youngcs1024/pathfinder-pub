@@ -26,6 +26,7 @@ from app.db.resume_revision import SqlAlchemyResumeRevisionStore
 from app.db.run_execution import SqlAlchemyRunExecutionReader
 from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
+from app.domain.project_facts import CandidateFactV1
 from app.domain.provisioning import ProvisioningService
 from app.domain.resume_confirmation import ConfirmVersionV1
 from app.domain.resume_generation import GenerationBudgetV1, JobInputV1, SessionCreateV1
@@ -180,6 +181,20 @@ async def facts_stage(rig):
                 decision["decision"] in {"confirm", "reject"} and bool(decision["rationale"]),
                 "fact_review_invalid",
             )
+            version = fact["version"]
+            if decision.get("candidate") is not None:
+                candidate = CandidateFactV1.model_validate_json(json.dumps(decision["candidate"]))
+                await store.command(
+                    rig.tenant,
+                    kind="material_fact_revise",
+                    project_id=UUID(state["project_id"]),
+                    import_id=UUID(frozen["import_id"]),
+                    request_id=key(rig, f"fact-revise-{fact['id']}"),
+                    fact_id=UUID(fact["id"]),
+                    expected_version=version,
+                    candidate=candidate,
+                )
+                version += 1
             await store.command(
                 rig.tenant,
                 kind="material_fact_review",
@@ -187,7 +202,7 @@ async def facts_stage(rig):
                 import_id=UUID(frozen["import_id"]),
                 request_id=key(rig, f"review-{fact['id']}"),
                 fact_id=UUID(fact["id"]),
-                expected_version=fact["version"],
+                expected_version=version,
                 decision=decision["decision"],
                 attested=False,
             )
