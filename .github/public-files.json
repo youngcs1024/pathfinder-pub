@@ -441,6 +441,7 @@
     "tests/evals/resume_live_contracts.py",
     "tests/evals/resume_live_environment.py",
     "tests/evals/resume_live_material.py",
+    "tests/evals/resume_live_recording.py",
     "tests/evals/resume_live_runtime.py",
     "tests/evals/resume_quality.py",
     "tests/evals/resume_quality_baseline.py",

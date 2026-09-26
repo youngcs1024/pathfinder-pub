@@ -182,6 +182,17 @@ async def execute(root, stage, credentials_path):
                 **result,
             },
         )
+    if "-system-retry-" in stage:
+        case_id = stage.split("-system-retry-", 1)[0]
+        publish(
+            root / f"{case_id}-draft-done.json",
+            {
+                "authorization_digest": inputs.digest,
+                "source_sha": source_sha,
+                "recovered_stage": stage,
+                **result,
+            },
+        )
     return result
 
 
@@ -222,7 +233,12 @@ def main(argv=None):
             for s in ("draft", "round1", "round2", "confirm")
         }
         require(
-            args.stage in stages or re.fullmatch(r"materials-retry-[0-9]{3}", args.stage),
+            args.stage in stages
+            or re.fullmatch(r"materials-retry-[0-9]{3}", args.stage)
+            or any(
+                re.fullmatch(re.escape(c.case_id) + r"-system-retry-[0-9]{3}", args.stage)
+                for c in inputs.cases
+            ),
             "invalid_stage",
         )
         fd = os.open(args.root / "controller.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)

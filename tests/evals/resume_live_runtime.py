@@ -44,13 +44,14 @@ from app.worker.dispatcher import RunExecutorDispatcher
 from app.worker.material_executor import MaterialRunExecutor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
-from tests.evals.product_acceptance_budget import admit
+from tests.evals.product_acceptance_budget import admit, summarize
 from tests.evals.product_acceptance_contracts import publish, read_private_json, require
 from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.quality_pilot import credentials
 from tests.evals.resume_live_baseline import one_shot_live
 from tests.evals.resume_live_contracts import assessed_coverage, require_review, validate_rubric
 from tests.evals.resume_live_material import MATERIAL_PROMPT_VERSION, LiveMaterialModel
+from tests.evals.resume_live_recording import RecordingFactory
 from tests.evals.resume_quality_baseline import BaselineOutputError, common_input
 from tests.evals.resume_quality_budget import ComparisonRecorder
 from tests.evals.resume_quality_runtime import snapshot, usage_delta, worker
@@ -337,6 +338,7 @@ async def draft(rig, case):
         save(rig.root / f"{case.case_id}-b1-failed.json", error.private_output)
         b1_status = "PARSE_FAILED"
     b1_usage = usage_delta(before, await rig.recorder.measurement())
+    preserve(rig.root / f"{case.case_id}-b1-usage.json", b1_usage)
     admit(await rig.recorder.usage(), rig.inputs.budget)
     before = await rig.recorder.measurement()
     require(await worker(rig, rig.factory).run_once(asyncio.Event()), "worker_idle")
@@ -353,6 +355,82 @@ async def draft(rig, case):
         "b1_usage": b1_usage,
         "b1_finalization_cost": "NOT_MEASURED",
         "initial_usage": usage_delta(before, await rig.recorder.measurement()),
+        "common_input_digest": quality_identity_digest(shared),
+    }
+
+
+def row_usage(rows):
+    return {
+        **summarize(rows, provider="qwen"),
+        "latency_ms": sum(r.latency_ms or 0 for r in rows),
+        "invocation_ids": [str(r.id) for r in rows],
+        "cost_status": "ESTIMATED",
+    }
+
+
+async def retry_system(rig, case, stage):
+    approved = review(rig, f"{stage}-review.json", "system_retry")
+    require(
+        approved["ledger_digest"] == quality_identity_digest(await rig.recorder.measurement()),
+        "retry_ledger_changed",
+    )
+    admit(await rig.recorder.usage(), rig.inputs.budget)
+    require(not (rig.root / f"{case.case_id}-system-0.json").exists(), "system_draft_exists")
+    old_sid = UUID(read_private_json(rig.root / f"{case.case_id}-session.json")["session_id"])
+    old = await rig.store.get_session(rig.tenant, old_sid)
+    require(
+        old["run_status"] in {"failed", "completed"} and old["current_version_id"] is None,
+        "system_retry_not_safe",
+    )
+    b1_file = rig.root / f"{case.case_id}-b1.json"
+    failed = rig.root / f"{case.case_id}-b1-failed.json"
+    require(b1_file.exists() != failed.exists(), "baseline_result_required")
+    usage_file = rig.root / f"{case.case_id}-b1-usage.json"
+    if usage_file.exists():
+        b1_usage = read_private_json(usage_file)
+    else:
+        # Only legacy first-case recovery can infer the sole B1 row; never guess between cases.
+        rows = [r for r in await rig.recorder.rows() if r.graph_node == "baseline_once"]
+        require(len(rows) == 1, "baseline_usage_ambiguous")
+        b1_usage = row_usage(rows)
+        save(usage_file, b1_usage)
+    request = SessionCreateV1(
+        profile_version_id=old["profile_version_id"],
+        preference_version=old["preference_version"],
+        project_ids=tuple(old["project_ids"]),
+        job=JobInputV1(source="paste", text=case.jd),
+        budget=GenerationBudgetV1(max_model_calls=12, max_tool_calls=0, max_cost_cny=Decimal("20")),
+    )
+    created = await rig.store.create(rig.tenant, request, key(rig, stage))
+    sid = created.receipt.resource_id
+    shared = common_input(
+        await rig.store.execution_inputs(rig.tenant, sid), rig.identity.source_sha256
+    )
+    original = read_private_json(rig.root / f"{case.case_id}-input.json")
+    require(shared == original, "system_retry_inputs_changed")
+    require(await worker(rig, rig.factory).run_once(asyncio.Event()), "worker_idle")
+    save(rig.root / f"{stage}-session.json", await rig.store.get_session(rig.tenant, sid))
+    initial = await snapshot(rig, sid)
+    save(rig.root / f"{case.case_id}-system-0.json", initial)
+    run_ids = {old["run_id"]}
+    for path in rig.root.glob(f"{case.case_id}-*session.json"):
+        value = read_private_json(path).get("run_id")
+        if value:
+            run_ids.add(UUID(value))
+    initial_usage = row_usage([r for r in await rig.recorder.rows() if r.run_id in run_ids])
+    baseline_start = rig.root / f"{case.case_id}-draft-preprovider-recovery-started.json"
+    if not baseline_start.exists():
+        baseline_start = rig.root / f"{case.case_id}-draft-started.json"
+    return {
+        "session_id": sid,
+        "b1_source_sha": read_private_json(baseline_start).get("source_sha"),
+        "supersedes_failed_session_id": old_sid,
+        "b1_status": "GENERATED" if b1_file.exists() else "PARSE_FAILED",
+        "b1_usage": b1_usage,
+        "b1_finalization_cost": "NOT_MEASURED",
+        "b1_repeated": False,
+        "initial_usage": initial_usage,
+        "initial_usage_includes_failed_runs": True,
         "common_input_digest": quality_identity_digest(shared),
     }
 
@@ -538,6 +616,7 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
                 expected_preamble_sha256=template.preamble_sha256,
             ),
         )
+        rig.factory = RecordingFactory(rig.factory, root)
         if stage == "materials" or stage.startswith("materials-retry-"):
             rig.material_output = root
             rig.material_attempt = stage
@@ -590,6 +669,10 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
                 "usage": await recorder.measurement(),
             }
             save(root / "report.json", result)
+        elif "-system-retry-" in stage:
+            case_id = stage.split("-system-retry-", 1)[0]
+            case = next(c for c in inputs.cases if c.case_id == case_id)
+            result = await retry_system(rig, case, stage)
         else:
             case_id, operation = stage.rsplit("-", 1)
             case = next(c for c in inputs.cases if c.case_id == case_id)

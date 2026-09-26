@@ -60,6 +60,20 @@ class _State(TypedDict, total=False):
     candidate: GenerationCandidateV1
 
 
+def _ground_requirements(jd: str, analysis: RequirementExtractionV1) -> RequirementExtractionV1:
+    requirements = []
+    for item in analysis.requirements:
+        if jd[item.start : item.end] != item.quote:
+            start = jd.find(item.quote)
+            if start < 0 or jd.find(item.quote, start + 1) >= 0:
+                raise DomainValidationError("job requirement reference is ambiguous or absent")
+            item = item.model_copy(update={"start": start, "end": start + len(item.quote)})
+        requirements.append(item)
+    result = analysis.model_copy(update={"requirements": tuple(requirements)})
+    validate_requirement_positions(jd, result.requirements)
+    return result
+
+
 def _valid_bullet(bullet: DraftBulletV1, inputs: GenerationInputs, requirement_count: int) -> bool:
     fact = next(
         (value for value in inputs.facts if value.version_id == bullet.fact_version_id), None
@@ -244,7 +258,7 @@ class ResumeGenerationGraph:
             analysis = RequirementExtractionV1.model_validate_json(
                 response.content or "", strict=True
             )
-            validate_requirement_positions(inputs.job_text, analysis.requirements)
+            analysis = _ground_requirements(inputs.job_text, analysis)
         except (ValueError, DomainValidationError):
             raise GenerationError("invalid_job_reference") from None
         return {"analysis": analysis}

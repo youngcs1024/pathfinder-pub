@@ -200,3 +200,27 @@ async def test_jd_upload_is_bounded_and_never_truncated() -> None:
         JobInputV1(source="upload", filename="job.pdf", text="role")
     with pytest.raises(ValueError):
         JobInputV1(source="paste", text="x" * (32 * 1024 + 1))
+
+
+async def test_unique_exact_quote_can_ground_wrong_unicode_offsets():
+    from app.agents.resume_generation import _ground_requirements
+    from app.domain.resume_generation import JobRequirementV1, RequirementExtractionV1
+
+    jd = "岗位要求:使用 Python 开发;保留原文。"
+    item = JobRequirementV1(kind="explicit", start=1, end=3, quote="使用 Python 开发")
+    result = _ground_requirements(jd, RequirementExtractionV1(requirements=(item,)))
+    grounded = result.requirements[0]
+    assert jd[grounded.start : grounded.end] == item.quote
+    assert grounded.start == jd.index(item.quote)
+    assert grounded.kind == "explicit"
+
+
+@pytest.mark.parametrize("jd,quote", [("Python / Python", "Python"), ("Python", "Java")])
+async def test_wrong_offsets_do_not_select_ambiguous_or_fabricated_quotes(jd, quote):
+    from app.agents.resume_generation import _ground_requirements
+    from app.domain.errors import DomainValidationError
+    from app.domain.resume_generation import JobRequirementV1, RequirementExtractionV1
+
+    item = JobRequirementV1(kind="explicit", start=1, end=2, quote=quote)
+    with pytest.raises(DomainValidationError):
+        _ground_requirements(jd, RequirementExtractionV1(requirements=(item,)))
