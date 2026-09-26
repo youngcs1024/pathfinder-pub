@@ -224,3 +224,57 @@ async def test_live_b1_parse_failure_retains_body_without_second_call():
         await one_shot_live(Model(), inputs, source, identity)
     assert exc.value.private_output["content"] == "invalid raw output"
     assert calls == [1]
+
+
+def test_business_keys_are_persisted_v4_and_not_reallocated(tmp_path):
+    from types import SimpleNamespace
+
+    from app.db.material import MaterialProjectCommandV1
+    from app.domain.resume_commands import ResumeCommandRequest
+    from tests.evals.resume_live_runtime import key
+
+    tmp_path.chmod(0o700)
+    rig = SimpleNamespace(root=tmp_path, inputs=SimpleNamespace(digest="fixed"))
+    first = key(rig, "project-a")
+    assert first.version == 4
+    assert key(rig, "project-a") == first
+    assert key(rig, "project-b") != first
+    ResumeCommandRequest(
+        client_request_id=first,
+        kind="material_project_create",
+        target_id=None,
+        payload_version=1,
+        payload=MaterialProjectCommandV1(name="Project"),
+    )
+    rig.inputs.digest = "changed"
+    with pytest.raises(AcceptanceError):
+        key(rig, "project-a")
+
+
+def test_source_rebind_preserves_old_manifest_and_requires_chain(tmp_path):
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_live import effective_source
+
+    tmp_path.chmod(0o700)
+    old = {"source_sha": "old", "files": {}}
+    manifest = {**old, "authorization_digest": "fixed"}
+    assert effective_source(tmp_path, manifest) == old
+    review = {
+        "reviewer": "codex_agent_delegated",
+        "authorization_digest": "fixed",
+        "kind": "source_rebind",
+        "rationale": "bounded fix",
+    }
+    new = {"source_sha": "new", "files": {"code.py": "digest"}}
+    publish(
+        tmp_path / "source-rebind-001.json",
+        {"previous_digest": quality_identity_digest(old), "source": new, "review": review},
+    )
+    assert effective_source(tmp_path, manifest) == new
+    assert manifest["source_sha"] == "old"
+    publish(
+        tmp_path / "source-rebind-002.json",
+        {"previous_digest": "wrong", "source": new, "review": review},
+    )
+    with pytest.raises(AcceptanceError):
+        effective_source(tmp_path, manifest)

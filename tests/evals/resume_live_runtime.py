@@ -8,7 +8,7 @@ import json
 from decimal import Decimal
 from random import Random
 from types import SimpleNamespace
-from uuid import UUID, uuid5
+from uuid import UUID, uuid4
 
 from pydantic import SecretStr
 
@@ -59,7 +59,17 @@ def save(path, value):
 
 
 def key(rig, name):
-    return uuid5(rig.inputs.allocation_id, name)
+    path = rig.root / f"command-{hashlib.sha256(name.encode()).hexdigest()}.json"
+    if not path.exists():
+        save(path, {"authorization_digest": rig.inputs.digest, "name": name, "id": str(uuid4())})
+    stored = read_private_json(path)
+    require(
+        stored["authorization_digest"] == rig.inputs.digest and stored["name"] == name,
+        "command_identity_changed",
+    )
+    value = UUID(stored["id"])
+    require(value.version == 4, "command_identity_invalid")
+    return value
 
 
 def review(rig, name, kind):
@@ -440,6 +450,8 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
         recorder = ComparisonRecorder(
             sessions, tenant, provider="qwen", budget=inputs.budget, source_check=source_check
         )
+        if (root / "materials-recovery-started.json").exists() and stage == "materials":
+            require((await recorder.usage())["attempts"] == 0, "nonempty_ledger_recovery_rejected")
         # Read-only/fact-review stages can still preserve reports after budget exhaustion.
         values = credentials(credentials_path)
         bundle = create_qwen_adapters(
@@ -526,7 +538,7 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
         )
     finally:
         if recorder is not None:
-            save(root / f"{stage}-ledger.json", await recorder.measurement())
+            save(root / f"{stage}-ledger-{uuid4().hex}.json", await recorder.measurement())
         if bundle is not None:
             await bundle.aclose()
         await engine.dispose()

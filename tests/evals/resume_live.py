@@ -20,8 +20,9 @@ from tests.evals.product_acceptance_contracts import (
     require,
 )
 from tests.evals.product_acceptance_environment import IMAGE, docker
+from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.quality_experiment_binding import ROOT, file_inventory, git, read_json
-from tests.evals.resume_live_contracts import LiveInputs
+from tests.evals.resume_live_contracts import LiveInputs, require_review
 from tests.evals.resume_live_environment import ResumableDatabase
 
 
@@ -56,26 +57,79 @@ def verify(root, manifest):
     require(inputs.digest == manifest["authorization_digest"], "authorization_changed")
     require(read_json(root / "inputs.json", LiveInputs) == inputs, "authorization_changed")
     verify_inputs(root, inputs)
+    source = effective_source(root, manifest)
     require(
-        git(ROOT, "rev-parse", "HEAD").decode().strip() == manifest["source_sha"], "source_changed"
+        git(ROOT, "rev-parse", "HEAD").decode().strip() == source["source_sha"], "source_changed"
     )
     require(
-        set(bound_files()) == set(manifest["files"])
-        and file_inventory(ROOT, manifest["files"]) == manifest["files"],
+        set(bound_files()) == set(source["files"])
+        and file_inventory(ROOT, source["files"]) == source["files"],
         "source_changed",
     )
     return inputs
 
 
-def begin_stage(root, stage, binding):
+def effective_source(root, manifest):
+    source = {"source_sha": manifest["source_sha"], "files": manifest["files"]}
+    for path in sorted(root.glob("source-rebind-*.json")):
+        entry = read_private_json(path)
+        require(entry["previous_digest"] == quality_identity_digest(source), "source_chain_changed")
+        require_review(
+            entry["review"], binding=manifest["authorization_digest"], kind="source_rebind"
+        )
+        source = entry["source"]
+    return source
+
+
+def rebind_source(root):
+    manifest = read_private_json(root / "manifest.json")
+    inputs = LiveInputs.model_validate_json(json.dumps(manifest["inputs"]))
+    verify_inputs(root, inputs)
+    require(read_json(root / "inputs.json", LiveInputs) == inputs, "authorization_changed")
+    old = effective_source(root, manifest)
+    ordinal = len(list(root.glob("source-rebind-*.json"))) + 1
+    review = read_private_json(root / f"rebind-review-{ordinal:03}.json")
+    require_review(review, binding=inputs.digest, kind="source_rebind")
+    require(review["previous_sha"] == old["source_sha"], "source_review_stale")
+    require(not git(ROOT, "status", "--porcelain").strip(), "source_not_committed")
+    source = {
+        "source_sha": git(ROOT, "rev-parse", "HEAD").decode().strip(),
+        "files": file_inventory(ROOT, bound_files()),
+    }
+    require(review["new_sha"] == source["source_sha"], "source_review_stale")
+    publish(
+        root / f"source-rebind-{ordinal:03}.json",
+        {
+            "previous_digest": quality_identity_digest(old),
+            "source": source,
+            "review": review,
+            "prior_outputs_are_new_version_evidence": False,
+        },
+    )
+    verify(root, manifest)
+
+
+def begin_stage(root, stage, binding, source_sha=None):
     """A completed stage replays; an interrupted logical operation needs investigation."""
     done = root / f"{stage}-done.json"
     if done.exists():
         result = read_private_json(done)
         require(result["authorization_digest"] == binding, "stage_binding_changed")
         return result
-    require(not (root / f"{stage}-started.json").exists(), "interrupted_stage_requires_review")
-    publish(root / f"{stage}-started.json", {"authorization_digest": binding})
+    if (root / f"{stage}-started.json").exists():
+        # Only the known pre-provider material setup failure can resume automatically.
+        require(stage == "materials", "interrupted_stage_requires_review")
+        approval = read_private_json(root / "materials-empty-recovery.json")
+        require_review(approval, binding=binding, kind="empty_stage_recovery")
+        require(not list(root.glob("*-import.json")), "material_commands_already_started")
+        publish(
+            root / "materials-recovery-started.json",
+            {"authorization_digest": binding, "source_sha": source_sha},
+        )
+        return None
+    publish(
+        root / f"{stage}-started.json", {"authorization_digest": binding, "source_sha": source_sha}
+    )
     return None
 
 
@@ -84,7 +138,8 @@ async def execute(root, stage, credentials_path):
 
     manifest = read_private_json(root / "manifest.json")
     inputs = verify(root, manifest)
-    old = begin_stage(root, stage, inputs.digest)
+    source_sha = effective_source(root, manifest)["source_sha"]
+    old = begin_stage(root, stage, inputs.digest, source_sha)
     if old is not None:
         return old
     with tracing_context(enabled=False):
@@ -97,13 +152,16 @@ async def execute(root, stage, credentials_path):
                 credentials_path,
                 source_check=lambda: verify(root, manifest),
             )
-    publish(root / f"{stage}-done.json", {"authorization_digest": inputs.digest, **result})
+    publish(
+        root / f"{stage}-done.json",
+        {"authorization_digest": inputs.digest, "source_sha": source_sha, **result},
+    )
     return result
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "execute", "report"))
+    parser.add_argument("action", choices=("prepare", "execute", "report", "rebind"))
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--stage")
     parser.add_argument("--credentials", type=Path)
@@ -116,6 +174,14 @@ def main(argv=None):
         )
         if args.action == "prepare":
             prepare(args.root)
+            return 0
+        if args.action == "rebind":
+            fd = os.open(
+                args.root / "controller.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600
+            )
+            with os.fdopen(fd, "w") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                rebind_source(args.root)
             return 0
         if args.action == "report":
             result = read_private_json(args.root / "report.json")
