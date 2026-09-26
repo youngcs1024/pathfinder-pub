@@ -131,7 +131,7 @@ async def test_confirmed_fact_yields_real_tex_and_human_review_coverage() -> Non
 async def test_forged_or_mislabelled_requirement_fails(kind: str, quote: str) -> None:
     _, _, inputs, _, _ = _inputs()
     with pytest.raises(GenerationError, match="invalid_job_reference"):
-        await _generate(inputs, [_requirements(kind=kind, quote=quote)])
+        await _generate(inputs, [_requirements(kind=kind, quote=quote)], repairs=False)
 
 
 @pytest.mark.parametrize("kind", ["plan", "experiment"])
@@ -238,3 +238,16 @@ async def test_empty_optional_basis_is_canonicalized_but_not_valid_inference(bas
     inferred = item.model_copy(update={"kind": "inferred"})
     with pytest.raises(DomainValidationError):
         _ground_requirements("Use Python", RequirementExtractionV1(requirements=(inferred,)))
+
+
+async def test_job_extraction_uses_only_existing_single_repair_slot():
+    _, _, inputs, project_id, fact_id = _inputs()
+    bad = _requirements(kind="inferred", quote="Invented inference")
+    candidate, repairs = await _generate(
+        inputs, [bad, _requirements(), _selection(project_id, fact_id)]
+    )
+    assert repairs == ["repair"]
+    assert candidate.content is not None
+    assert candidate.correction_count == 1
+    with pytest.raises(GenerationError, match="invalid_job_reference"):
+        await _generate(inputs, [bad, bad])
