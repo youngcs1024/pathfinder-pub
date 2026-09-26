@@ -85,3 +85,33 @@ def require_review(review, *, binding, kind):
         "review_binding_mismatch",
     )
     require(bool(review.get("rationale")), "review_rationale_required")
+
+
+def validate_rubric(value, *, case, confirmed_ids):
+    """Freeze only source-checked applicable requirements before any generation."""
+    requirements = value["requirements"]
+    require(isinstance(requirements, list), "rubric_required")
+    ids = [r["requirement_id"] for r in requirements]
+    require(len(ids) == len(set(ids)), "duplicate_requirement")
+    for row in requirements:
+        require(bool(row["quote"]) and row["quote"] in case.jd, "requirement_not_in_jd")
+        require(
+            bool(row["fact_version_ids"]) and set(row["fact_version_ids"]) <= confirmed_ids,
+            "requirement_support_missing",
+        )
+        require(bool(row["rationale"]), "requirement_review_missing")
+    return requirements
+
+
+def assessed_coverage(requirements, assessment):
+    from types import SimpleNamespace
+
+    from tests.evals.resume_quality_contracts import coverage
+
+    require(assessment.get("human_minutes") is None, "human_time_not_measured")
+    require(bool(assessment.get("rationale")), "quality_rationale_missing")
+    return coverage(
+        tuple(SimpleNamespace(requirement_id=r["requirement_id"]) for r in requirements),
+        fully=assessment["fully_covered_ids"],
+        partially=assessment["partially_covered_ids"],
+    )

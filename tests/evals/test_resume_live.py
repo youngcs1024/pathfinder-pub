@@ -131,3 +131,96 @@ def test_default_execute_never_calls_provider(tmp_path, monkeypatch):
         "tests.evals.resume_live.execute", lambda *args: pytest.fail("must not execute")
     )
     assert main(["execute", "--root", str(tmp_path), "--stage", "materials"]) == 1
+
+
+def test_frozen_applicable_denominator_and_human_time():
+    from types import SimpleNamespace
+
+    from tests.evals.resume_live_contracts import assessed_coverage, validate_rubric
+
+    case = SimpleNamespace(jd="Python backend")
+    rows = [
+        {
+            "requirement_id": "python",
+            "quote": "Python",
+            "fact_version_ids": ["f1"],
+            "rationale": "source implements Python",
+        }
+    ]
+    assert validate_rubric({"requirements": rows}, case=case, confirmed_ids={"f1"}) == rows
+    with pytest.raises(AcceptanceError):
+        validate_rubric({"requirements": rows}, case=case, confirmed_ids={"other"})
+    quality = {
+        "human_minutes": None,
+        "rationale": "partial implementation",
+        "fully_covered_ids": [],
+        "partially_covered_ids": ["python"],
+    }
+    result = assessed_coverage(rows, quality)
+    assert result["ratio"] == 0 and result["partially_covered_ids"] == ["python"]
+    empty = {**quality, "partially_covered_ids": []}
+    assert assessed_coverage([], empty)["status"] == "NOT_APPLICABLE"
+    with pytest.raises(AcceptanceError):
+        assessed_coverage(rows, {**quality, "human_minutes": 0})
+
+
+async def test_live_b1_has_one_call_redacts_identity_and_fills_source():
+    from app.llm.ports import ChatModelResult
+    from tests.evals.resume_live_baseline import one_shot_live
+    from tests.unit.agents.test_resume_generation import _inputs
+
+    source, identity, inputs, _, _ = _inputs()
+    profile = inputs.profile_content
+    calls = []
+
+    class Model:
+        async def invoke(self, messages, tools, metadata):
+            calls.append(messages)
+            payload = json.loads(messages[1].content)
+            assert "display_name" not in payload["profile"]
+            assert "contact" not in payload["profile"]
+            assert "source" not in payload["profile"]["projects"][0]
+            return ChatModelResult(
+                content=json.dumps(
+                    {
+                        "projects": [
+                            {
+                                "id": str(profile.projects[0].id),
+                                "summary": "Supported project",
+                                "technologies": [],
+                                "bullets": ["Supported implementation"],
+                            }
+                        ],
+                        "education_ids": [str(i.id) for i in profile.education],
+                        "skill_ids": [str(i.id) for i in profile.skills],
+                    }
+                )
+            )
+
+    result = await one_shot_live(Model(), inputs, source, identity)
+    assert len(calls) == result["logical_generations"] == 1
+    assert result["automatic_repairs"] == 0
+    assert result["content"]["contact"] == profile.model_dump(mode="json")["contact"]
+    assert result["content"]["projects"][0]["source"] == profile.projects[0].source.model_dump(
+        mode="json"
+    )
+
+
+async def test_live_b1_parse_failure_retains_body_without_second_call():
+    from app.llm.ports import ChatModelResult
+    from tests.evals.resume_live_baseline import one_shot_live
+    from tests.evals.resume_quality_baseline import BaselineOutputError
+    from tests.unit.agents.test_resume_generation import _inputs
+
+    source, identity, inputs, _, _ = _inputs()
+    calls = []
+
+    class Model:
+        async def invoke(self, *args):
+            calls.append(1)
+            return ChatModelResult(content="invalid raw output")
+
+    with pytest.raises(BaselineOutputError) as exc:
+        await one_shot_live(Model(), inputs, source, identity)
+    assert exc.value.private_output["content"] == "invalid raw output"
+    assert calls == [1]

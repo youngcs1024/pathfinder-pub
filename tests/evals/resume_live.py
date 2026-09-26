@@ -7,6 +7,7 @@ import asyncio
 import fcntl
 import json
 import os
+import traceback
 from pathlib import Path
 from uuid import uuid4
 
@@ -148,7 +149,15 @@ def main(argv=None):
         if args.root.is_dir():
             publish(
                 args.root / f"failure-{uuid4().hex}.json",
-                {"status": "PARTIAL", "exception_type": type(error).__name__, "stage": args.stage},
+                {
+                    "status": "PARTIAL",
+                    "exception_type": type(error).__name__,
+                    "frames": [
+                        {"file": f.filename, "line": f.lineno, "function": f.name}
+                        for f in traceback.extract_tb(error.__traceback__)
+                    ],
+                    "stage": args.stage,
+                },
             )
         print("R71 PARTIAL: inspect private stage evidence; no automatic replay")
         return 1

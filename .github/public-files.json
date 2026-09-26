@@ -437,6 +437,7 @@
     "tests/evals/quality_score_contracts.py",
     "tests/evals/regression.py",
     "tests/evals/resume_live.py",
+    "tests/evals/resume_live_baseline.py",
     "tests/evals/resume_live_contracts.py",
     "tests/evals/resume_live_environment.py",
     "tests/evals/resume_live_runtime.py",

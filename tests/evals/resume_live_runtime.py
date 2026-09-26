@@ -47,8 +47,9 @@ from tests.evals.product_acceptance_budget import admit
 from tests.evals.product_acceptance_contracts import publish, read_private_json, require
 from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.quality_pilot import credentials
-from tests.evals.resume_live_contracts import require_review
-from tests.evals.resume_quality_baseline import BaselineOutputError, common_input, one_shot
+from tests.evals.resume_live_baseline import one_shot_live
+from tests.evals.resume_live_contracts import assessed_coverage, require_review, validate_rubric
+from tests.evals.resume_quality_baseline import BaselineOutputError, common_input
 from tests.evals.resume_quality_budget import ComparisonRecorder
 from tests.evals.resume_quality_runtime import snapshot, usage_delta, worker
 
@@ -233,6 +234,13 @@ async def profile_stage(rig):
 async def draft(rig, case):
     profile = read_private_json(rig.root / "profile-done.json")
     facts = read_private_json(rig.root / "facts-done.json")
+    rubric = review(rig, f"{case.case_id}-rubric.json", "rubric")
+    validate_rubric(
+        rubric,
+        case=case,
+        confirmed_ids={f for p in facts["projects"].values() for f in p["fact_version_ids"]},
+    )
+    save(rig.root / f"{case.case_id}-frozen-rubric.json", rubric)
     request = SessionCreateV1(
         profile_version_id=UUID(profile["version_id"]),
         preference_version=profile["preference_version"],
@@ -262,7 +270,7 @@ async def draft(rig, case):
         {"common_input_digest": quality_identity_digest(shared)},
     )
     try:
-        baseline = await one_shot(
+        baseline = await one_shot_live(
             rig.factory.create_chat_model(
                 LLMInvocationContext(rig.tenant.workspace_id, rig.tenant.actor_user_id)
             ),
@@ -310,6 +318,10 @@ async def revise(rig, case, ordinal):
         bool(approved["initial_quality"]) if ordinal == 1 else bool(approved["compile_review"]),
         "quality_review_missing",
     )
+    if ordinal == 1:
+        rubric = read_private_json(rig.root / f"{case.case_id}-frozen-rubric.json")
+        for arm in ("b0", "b1", "system"):
+            assessed_coverage(rubric["requirements"], approved["initial_quality"][arm])
     detail = await rig.store.get_session(rig.tenant, sid)
     require(str(detail["current_version_id"]) == previous["version_id"], "revision_base_changed")
     if ordinal == 2:
@@ -350,6 +362,8 @@ async def revise(rig, case, ordinal):
 async def confirm(rig, case):
     approved = review(rig, f"{case.case_id}-final-review.json", "final")
     final = read_private_json(rig.root / f"{case.case_id}-system-2.json")
+    rubric = read_private_json(rig.root / f"{case.case_id}-frozen-rubric.json")
+    final_coverage = assessed_coverage(rubric["requirements"], approved["final_quality"])
     require(
         approved["version_id"] == final["version_id"]
         and approved["tex_sha256"] == final["tex_sha256"],
@@ -408,6 +422,7 @@ async def confirm(rig, case):
         "review_digest": quality_identity_digest(approved),
         "human_review": "NOT_RUN",
         "stable_download": True,
+        "final_coverage": final_coverage,
     }
 
 
@@ -469,11 +484,31 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
                 c.case_id: read_private_json(root / f"{c.case_id}-confirm-done.json")
                 for c in inputs.cases
             }
+            comparisons = {}
+            for case in inputs.cases:
+                name = case.case_id
+                rubric = read_private_json(root / f"{name}-frozen-rubric.json")
+                initial = read_private_json(root / f"{name}-round1-review.json")["initial_quality"]
+                comparisons[name] = {
+                    "initial_quality": initial,
+                    "initial_coverage": {
+                        arm: assessed_coverage(rubric["requirements"], value)
+                        for arm, value in initial.items()
+                    },
+                    "draft": read_private_json(root / f"{name}-draft-done.json"),
+                    "revision_rounds": [
+                        read_private_json(root / f"{name}-round{i}-done.json") for i in (1, 2)
+                    ],
+                    "final_quality": read_private_json(root / f"{name}-final-review.json"),
+                    "b0_b1_finalization_cost": "NOT_MEASURED",
+                    "human_minutes": None,
+                }
             result = {
                 "status": "AGENT_ACCEPTED",
                 "r71_status": "ACCEPTED",
                 "human_review": "NOT_RUN",
                 "cases": cases,
+                "comparisons": comparisons,
                 "usage": await recorder.measurement(),
             }
             save(root / "report.json", result)
