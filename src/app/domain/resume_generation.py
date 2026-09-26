@@ -152,6 +152,7 @@ def validate_requirement_positions(jd: str, requirements: tuple[JobRequirementV1
             or requirement.end > len(jd)
             or jd[requirement.start : requirement.end] != requirement.quote
             or (requirement.kind == "inferred") != (requirement.inference_basis is not None)
+            or (requirement.kind == "inferred" and not (requirement.inference_basis or "").strip())
         ):
             raise DomainValidationError("job requirement reference is invalid")
 

@@ -224,3 +224,17 @@ async def test_wrong_offsets_do_not_select_ambiguous_or_fabricated_quotes(jd, qu
     item = JobRequirementV1(kind="explicit", start=1, end=2, quote=quote)
     with pytest.raises(DomainValidationError):
         _ground_requirements(jd, RequirementExtractionV1(requirements=(item,)))
+
+
+@pytest.mark.parametrize("basis", ["", "  "])
+async def test_empty_optional_basis_is_canonicalized_but_not_valid_inference(basis):
+    from app.agents.resume_generation import _ground_requirements
+    from app.domain.errors import DomainValidationError
+    from app.domain.resume_generation import JobRequirementV1, RequirementExtractionV1
+
+    item = JobRequirementV1(kind="explicit", start=0, end=1, quote="Python", inference_basis=basis)
+    result = _ground_requirements("Use Python", RequirementExtractionV1(requirements=(item,)))
+    assert result.requirements[0].inference_basis is None
+    inferred = item.model_copy(update={"kind": "inferred"})
+    with pytest.raises(DomainValidationError):
+        _ground_requirements("Use Python", RequirementExtractionV1(requirements=(inferred,)))
