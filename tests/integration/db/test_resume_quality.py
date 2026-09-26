@@ -117,3 +117,44 @@ async def test_budget_stop_preserves_partial_report(migrated_database_url, tmp_p
     assert report["usage"]["attempts"] == 1
     assert read_private_json(root / "report.json")["status"] == "PARTIAL"
     assert all(case["status"] != "COMPLETE" for case in report["cases"])
+
+
+async def test_recreated_live_recorder_keeps_original_attempt_ledger(
+    migrated_database_url, tmp_path
+):
+    from sqlalchemy import select
+
+    from app.db.models import LLMInvocation
+    from app.db.tenancy import SqlAlchemyTenantResolver
+    from app.domain.tenancy import TenantService
+    from tests.evals.product_acceptance_budget import admit
+    from tests.evals.product_acceptance_contracts import AcceptanceError
+    from tests.evals.resume_quality_budget import ComparisonRecorder
+
+    root = tmp_path / "resume-ledger"
+    root.mkdir(mode=0o700)
+    report = await execute_synthetic(
+        migrated_database_url, root, load_dataset(), ComparisonBudget(provider_attempt_cap=1)
+    )
+    engine = create_database_engine(SecretStr(migrated_database_url))
+    try:
+        sessions = create_session_factory(engine)
+        async with sessions() as db:
+            row = await db.scalar(select(LLMInvocation))
+        tenant = await TenantService(SqlAlchemyTenantResolver(sessions)).resolve_tenant(
+            workspace_id=row.workspace_id, actor_user_id=row.actor_user_id
+        )
+        resumed = ComparisonRecorder(
+            sessions, tenant, provider="fake", budget=ComparisonBudget(provider_attempt_cap=1)
+        )
+        usage = await resumed.measurement()
+        assert usage["attempts"] == report["usage"]["attempts"] == 1
+        assert usage["invocation_ids"] == report["usage"]["invocation_ids"]
+        with pytest.raises(AcceptanceError, match="budget_exhausted"):
+            admit(usage, resumed.budget)
+        # Unknown live pricing cannot become zero by rebuilding the recorder.
+        live = ComparisonRecorder(sessions, tenant, provider="qwen", budget=ComparisonBudget())
+        with pytest.raises(AcceptanceError, match="unknown_usage_or_cost"):
+            admit(await live.usage(), live.budget)
+    finally:
+        await engine.dispose()
