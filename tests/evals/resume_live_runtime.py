@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 from pydantic import SecretStr
 
-from app.agents.material_facts import PROMPT_VERSION, MaterialFactExtractor
+from app.agents.material_facts import MaterialFactExtractor
 from app.db.documents import SqlAlchemyDocumentRepository
 from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.material import SqlAlchemyMaterialStore
@@ -49,6 +49,7 @@ from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.quality_pilot import credentials
 from tests.evals.resume_live_baseline import one_shot_live
 from tests.evals.resume_live_contracts import assessed_coverage, require_review, validate_rubric
+from tests.evals.resume_live_material import MATERIAL_PROMPT_VERSION, LiveMaterialModel
 from tests.evals.resume_quality_baseline import BaselineOutputError, common_input
 from tests.evals.resume_quality_budget import ComparisonRecorder
 from tests.evals.resume_quality_runtime import snapshot, usage_delta, worker
@@ -93,10 +94,16 @@ async def materials(rig):
         materials=store,
         aliases=aliases,
         facts=facts,
-        extractor_digest=extractor_identity(PROMPT_VERSION, f"qwen:{rig.inputs.chat_model}"),
+        extractor_digest=extractor_identity(
+            MATERIAL_PROMPT_VERSION,
+            f"qwen:{rig.inputs.chat_model}",
+        ),
         extractor_factory=lambda tenant, run_id, _scope: MaterialFactExtractor(
-            model=rig.factory.create_chat_model(
-                LLMInvocationContext(tenant.workspace_id, tenant.actor_user_id, run_id=run_id)
+            model=LiveMaterialModel(
+                rig.factory.create_chat_model(
+                    LLMInvocationContext(tenant.workspace_id, tenant.actor_user_id, run_id=run_id)
+                ),
+                rig.material_output,
             )
         ),
         ingestion_factory=lambda tenant, run_id: DocumentIngestionService(
@@ -128,17 +135,23 @@ async def materials(rig):
             rig.tenant, created["id"], p.alias, key(rig, f"source-{p.alias}")
         )
         imported = await store.submit_import(
-            rig.tenant, created["id"], (source["id"],), key(rig, f"import-{p.alias}")
+            rig.tenant,
+            created["id"],
+            (source["id"],),
+            key(rig, f"import-{p.alias}-{rig.material_attempt}"),
         )
         save(
-            rig.root / f"{p.alias}-import.json",
+            rig.material_output / f"{p.alias}-import.json",
             {"project_id": created["id"], "import_id": imported.receipt.resource_id},
         )
         require(await runner.run_once(asyncio.Event()), "material_worker_idle")
         catalog = await facts.current_facts(rig.tenant, created["id"])
-        save(rig.root / f"{p.alias}-candidates.json", catalog)
+        save(rig.material_output / f"{p.alias}-candidates.json", catalog)
         projects[p.alias] = {
             "project_id": str(created["id"]),
+            "catalog_file": str(
+                (rig.material_output / f"{p.alias}-candidates.json").relative_to(rig.root)
+            ),
             "catalog_digest": quality_identity_digest(json.loads(json.dumps(catalog, default=str))),
         }
         require(catalog["complete"], "material_extraction_incomplete")
@@ -152,7 +165,7 @@ async def facts_stage(rig):
     store = SqlAlchemyProjectFactStore(rig.sessions)
     accepted = {}
     for alias, state in imported["projects"].items():
-        frozen = read_private_json(rig.root / f"{alias}-candidates.json")
+        frozen = read_private_json(rig.root / state["catalog_file"])
         chosen = decisions["projects"][alias]
         require(
             chosen["catalog_digest"] == state["catalog_digest"] == quality_identity_digest(frozen),
@@ -485,7 +498,20 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
                 expected_preamble_sha256=template.preamble_sha256,
             ),
         )
-        if stage == "materials":
+        if stage == "materials" or stage.startswith("materials-retry-"):
+            rig.material_output = root
+            rig.material_attempt = stage
+            if stage != "materials":
+                approved = review(rig, f"{stage}-review.json", "material_retry")
+                require(
+                    approved["ledger_digest"]
+                    == quality_identity_digest(await recorder.measurement()),
+                    "retry_ledger_changed",
+                )
+                require(not (root / "materials-done.json").exists(), "materials_already_completed")
+                admit(await recorder.usage(), inputs.budget)
+                rig.material_output = root / stage
+                rig.material_output.mkdir(mode=0o700)
             result = await materials(rig)
         elif stage == "facts":
             result = await facts_stage(rig)

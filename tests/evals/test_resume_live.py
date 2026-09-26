@@ -278,3 +278,32 @@ def test_source_rebind_preserves_old_manifest_and_requires_chain(tmp_path):
     )
     with pytest.raises(AcceptanceError):
         effective_source(tmp_path, manifest)
+
+
+async def test_material_prompt_is_bounded_and_failed_response_is_retained(tmp_path):
+    from app.agents.material_facts import SYSTEM_PROMPT
+    from app.llm.ports import ChatMessage, ChatModelResult
+    from tests.evals.resume_live_material import LIMITS, MATERIAL_PROMPT_VERSION, LiveMaterialModel
+
+    tmp_path.chmod(0o700)
+    calls = []
+
+    class Model:
+        async def invoke(self, messages, tools, metadata):
+            calls.append((messages, metadata))
+            return ChatModelResult(content='{"facts":', finish_status="incomplete")
+
+    value = await LiveMaterialModel(Model(), tmp_path).invoke(
+        (
+            ChatMessage(role="system", content=SYSTEM_PROMPT),
+            ChatMessage(role="user", content="source"),
+        ),
+        (),
+        {"prompt_version": "old"},
+    )
+    assert value.content == '{"facts":'
+    assert len(calls) == 1
+    assert calls[0][0][0].content.endswith(LIMITS)
+    assert calls[0][1]["prompt_version"] == MATERIAL_PROMPT_VERSION
+    paths = list(tmp_path.glob("material-response-*.json"))
+    assert len(paths) == 1 and json.loads(paths[0].read_text())["finish_status"] == "incomplete"

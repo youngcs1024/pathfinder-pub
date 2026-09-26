@@ -7,6 +7,7 @@ import asyncio
 import fcntl
 import json
 import os
+import re
 import traceback
 from pathlib import Path
 from uuid import uuid4
@@ -156,6 +157,16 @@ async def execute(root, stage, credentials_path):
         root / f"{stage}-done.json",
         {"authorization_digest": inputs.digest, "source_sha": source_sha, **result},
     )
+    if stage.startswith("materials-retry-"):
+        publish(
+            root / "materials-done.json",
+            {
+                "authorization_digest": inputs.digest,
+                "source_sha": source_sha,
+                "recovered_stage": stage,
+                **result,
+            },
+        )
     return result
 
 
@@ -195,7 +206,10 @@ def main(argv=None):
             for c in inputs.cases
             for s in ("draft", "round1", "round2", "confirm")
         }
-        require(args.stage in stages, "invalid_stage")
+        require(
+            args.stage in stages or re.fullmatch(r"materials-retry-[0-9]{3}", args.stage),
+            "invalid_stage",
+        )
         fd = os.open(args.root / "controller.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
