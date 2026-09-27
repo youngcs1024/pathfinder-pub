@@ -66,6 +66,15 @@ class _State(TypedDict, total=False):
     candidate: GenerationCandidateV1
 
 
+def _json_payload(content: str | None) -> str:
+    """Unwrap one complete JSON fence; never extract JSON from surrounding prose."""
+    text = (content or "").strip()
+    lines = text.splitlines()
+    if len(lines) >= 3 and lines[0] in ("```json", "```") and lines[-1] == "```":
+        return "\n".join(lines[1:-1])
+    return text
+
+
 def _ground_requirements(jd: str, analysis: RequirementExtractionV1) -> RequirementExtractionV1:
     requirements = []
     for item in analysis.requirements:
@@ -269,7 +278,7 @@ class ResumeGenerationGraph:
             response = await self._invoke(messages, node="analyze_job", inputs=inputs)
             try:
                 analysis = RequirementExtractionV1.model_validate_json(
-                    response.content or "", strict=True
+                    _json_payload(response.content), strict=True
                 )
                 analysis = _ground_requirements(inputs.job_text, analysis)
             except (ValueError, DomainValidationError):
@@ -328,7 +337,9 @@ class ResumeGenerationGraph:
             messages.append(ChatMessage(role="user", content=correction))
         response = await self._invoke(messages, node="write_draft", inputs=inputs)
         try:
-            return DraftSelectionV1.model_validate_json(response.content or "", strict=True)
+            return DraftSelectionV1.model_validate_json(
+                _json_payload(response.content), strict=True
+            )
         except ValueError:
             raise GenerationError("invalid_draft_schema") from None
 

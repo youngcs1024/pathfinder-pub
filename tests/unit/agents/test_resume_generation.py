@@ -251,3 +251,20 @@ async def test_job_extraction_uses_only_existing_single_repair_slot():
     assert candidate.correction_count == 1
     with pytest.raises(GenerationError, match="invalid_job_reference"):
         await _generate(inputs, [bad, bad])
+
+
+async def test_complete_json_fences_preserve_strict_generation_validation():
+    _, _, inputs, project_id, fact_id = _inputs()
+    steps = [_requirements(), _selection(project_id, fact_id)]
+    fenced = [ChatModelResult(content="```json\n" + step.content + "\n```") for step in steps]
+    candidate, repairs = await _generate(inputs, fenced)
+    assert candidate.content is not None
+    assert repairs == []
+    from app.agents.resume_generation import _json_payload
+
+    prose = "Comment\n```json\n{}\n```"
+    assert _json_payload(prose) == prose
+    bad = _requirements(quote="Invented requirement")
+    invalid = ChatModelResult(content="```json\n" + bad.content + "\n```")
+    with pytest.raises(GenerationError, match="invalid_job_reference"):
+        await _generate(inputs, [invalid, invalid])
