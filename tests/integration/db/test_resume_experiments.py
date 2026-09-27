@@ -175,3 +175,67 @@ async def test_factory_timeout_is_counted_and_stops_retry(ledger):
     await resumed.initialize()
     measured = await resumed.measurement()
     assert measured["attempts"] == measured["unknown_cost"] == measured["unknown_usage"] == 1
+
+
+@pytest.mark.parametrize("new_unknown", [False, True])
+async def test_reserved_timeout_survives_restart_and_new_unknown_stops(ledger, new_unknown):
+    from tests.evals.product_acceptance_contracts import publish
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_experiment_budget import CHAT_HEADROOM_CNY
+
+    sessions, tenant, kwargs, recorder = ledger
+    root = kwargs["root"]
+    first = attempt(tenant)
+    started = {"binding": kwargs["inputs"].digest, "before": {"invocation_ids": []}}
+    publish(root / "annotation-example-started.json", started)
+    await recorder.prepare(first)
+    with pytest.raises(AcceptanceError, match="unknown_usage_or_cost"):
+        await recorder.finalize(
+            first,
+            LLMInvocationOutcome(status="failed", latency_ms=1, error_category="provider_timeout"),
+        )
+    from tests.evals.product_acceptance_contracts import read_private_json
+
+    original = read_private_json(root / f"accounted-{first.invocation_id}.json")
+    publish(
+        root / "timeout-exception.json",
+        {
+            "binding": recorder.binding,
+            "authorization": "Synthetic explicit single-call authorization",
+            "policy": "single_terminal_timeout_v1",
+            "invocation_id": str(first.invocation_id),
+            "accounted_digest": quality_identity_digest(original),
+            "stage": "annotation-example",
+            "started_digest": quality_identity_digest(started),
+            "reserved_cost_cny": str(CHAT_HEADROOM_CNY),
+        },
+    )
+    resumed = ExperimentRecorder(sessions, tenant, **kwargs)
+    await resumed.initialize()
+    value = await resumed.check_admission()
+    assert value["attempts"] == value["unknown_cost"] == value["unknown_usage"] == 1
+    assert Decimal(value["budget_occupied_cny"]) == CHAT_HEADROOM_CNY
+    second = attempt(tenant)
+    await resumed.prepare(second)
+    if not new_unknown:
+        await resumed.finalize(second, known())
+        latest = ExperimentRecorder(sessions, tenant, **kwargs)
+        await latest.initialize()
+        value = await latest.check_admission(after=True)
+        assert value["attempts"] == 2 and value["unknown_cost"] == 1
+        assert Decimal(value["budget_occupied_cny"]) == CHAT_HEADROOM_CNY + Decimal("0.01")
+        assert read_private_json(root / f"accounted-{first.invocation_id}.json") == original
+        return
+    with pytest.raises(AcceptanceError, match="unknown_usage_or_cost"):
+        await resumed.finalize(
+            second,
+            LLMInvocationOutcome(status="failed", latency_ms=1, error_category="provider_timeout"),
+        )
+    latest = ExperimentRecorder(sessions, tenant, **kwargs)
+    await latest.initialize()
+    with pytest.raises(AcceptanceError, match="unknown_usage_or_cost"):
+        await latest.check_admission()
+    value = await latest.measurement()
+    assert value["attempts"] == value["unknown_cost"] == 2
+    assert value["reserved_unknown_attempts"] == 1
+    assert read_private_json(root / f"accounted-{first.invocation_id}.json") == original

@@ -160,10 +160,9 @@ def freeze(root, usage):
         read_private_json(root / "preparation-complete.json")["binding"] == inputs.digest,
         "preparation_incomplete",
     )
-    require(
-        not usage["unknown_cost"] and not usage["unknown_usage"] and not usage["unfinished"],
-        "accounting_incomplete",
-    )
+    from tests.evals.resume_experiment_budget import admit
+
+    admit(usage, inputs.budget, after=True)
     facts = read_private_json(root / "inputs" / inputs.facts_file)["facts"]
     profile = profile_evidence(read_private_json(root / "inputs" / inputs.profile_file))
     annotations = validate_reviews(root, inputs, facts, profile)

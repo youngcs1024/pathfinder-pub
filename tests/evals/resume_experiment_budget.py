@@ -11,15 +11,24 @@ from tests.evals.resume_live_budget import ledger_identity
 # Frozen qwen3.6-flash model envelope includes reasoning, not just max_tokens.
 # https://help.aliyun.com/zh/model-studio/qwen3-6-flash (verified 2026-09-27)
 # Use the full 65536 response + 131072 reasoning limit, conservatively even though
-# the adapter restricts response content to 4096. Unknown-cost continuation is forbidden.
+# the adapter restricts response content to 4096. Only an explicitly bound
+# single-timeout receipt can reserve unknown cost.
 CHAT_HEADROOM_CNY = Decimal("4.8") + Decimal(65536 + 131072) * Decimal("28.8") / Decimal(1000000)
 EMBEDDING_HEADROOM_CNY = Decimal("5")  # 10 items, <= 1M tokens each at CNY .5/M.
 
 
 def admit(usage, budget, *, after=False, kind="chat"):
     require(not usage["unfinished"], "unfinished_accounting")
-    require(not usage["unknown_usage"] and not usage["unknown_cost"], "unknown_usage_or_cost")
-    amount = Decimal(usage["known_cost_cny"])
+    reserved = usage.get("reserved_unknown_attempts", 0)
+    require(
+        reserved in (0, 1)
+        and usage["unknown_usage"] == reserved
+        and usage["unknown_cost"] == reserved,
+        "unknown_usage_or_cost",
+    )
+    reservation = Decimal(usage.get("reserved_cost_cny", "0"))
+    require(reservation == CHAT_HEADROOM_CNY * reserved, "invalid_reservation")
+    amount = Decimal(usage["known_cost_cny"]) + reservation
     require(amount.is_finite() and amount >= 0, "invalid_cost")
     if after:
         require(
@@ -32,6 +41,55 @@ def admit(usage, budget, *, after=False, kind="chat"):
             amount + headroom <= budget.cost_cap_cny and usage["attempts"] < budget.attempt_cap,
             "budget_exhausted",
         )
+
+
+def timeout_exception(root, binding, rows):
+    paths = list(root.glob("timeout-exception*.json"))
+    pin = root / "budget-exception-pin.json"
+    if not paths:
+        require(not pin.exists(), "exception_removed")
+        return None
+    require(len(paths) == 1 and paths[0].name == "timeout-exception.json", "duplicate_exception")
+    receipt = read_private_json(paths[0])
+    require(
+        receipt["binding"] == binding
+        and receipt["authorization"]
+        and receipt["reserved_cost_cny"] == str(CHAT_HEADROOM_CNY)
+        and receipt["policy"] == "single_terminal_timeout_v1",
+        "exception_binding_changed",
+    )
+    row = next((r for r in rows if str(r.id) == receipt["invocation_id"]), None)
+    require(
+        row is not None
+        and row.status == "failed"
+        and row.error_category == "provider_timeout"
+        and row.estimated_cost is None
+        and row.token_usage is None
+        and row.provider == "qwen"
+        and row.graph_node == "annotate"
+        and receipt["accounted_digest"] == quality_identity_digest(ledger_identity(row)),
+        "exception_not_terminal_timeout",
+    )
+    require(
+        receipt["stage"].startswith("annotation-")
+        and "/" not in receipt["stage"]
+        and ".." not in receipt["stage"],
+        "exception_stage_invalid",
+    )
+    started = read_private_json(root / f"{receipt['stage']}-started.json")
+    require(
+        receipt["started_digest"] == quality_identity_digest(started)
+        and started["binding"] == binding["input_digest"]
+        and receipt["invocation_id"] not in started["before"]["invocation_ids"]
+        and not (root / f"{receipt['stage']}-response.json").exists(),
+        "exception_stage_changed",
+    )
+    identity = {"receipt_digest": quality_identity_digest(receipt)}
+    if pin.exists():
+        require(read_private_json(pin) == identity, "exception_changed")
+    else:
+        publish(pin, identity)
+    return receipt
 
 
 class ExperimentRecorder(DatabaseBudgetRecorder):
@@ -100,7 +158,15 @@ class ExperimentRecorder(DatabaseBudgetRecorder):
     async def measurement(self):
         rows = await self.audit()
         usage = summarize(rows, provider=self.provider)
+        exception = timeout_exception(self.root, self.binding, rows)
+        reservation = CHAT_HEADROOM_CNY if exception else Decimal(0)
+        occupied = Decimal(usage["known_cost_cny"]) + reservation
         return {
+            "reserved_unknown_attempts": int(exception is not None),
+            "reserved_cost_cny": str(reservation),
+            "budget_occupied_cny": str(occupied),
+            "remaining_admission_cny": str(self.budget.cost_cap_cny - occupied),
+            "timeout_exception": exception,
             **usage,
             "invocation_ids": [str(r.id) for r in rows],
             "latency_ms": sum(r.latency_ms or 0 for r in rows),

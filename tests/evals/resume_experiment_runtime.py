@@ -82,6 +82,32 @@ def smoke_inputs():
 
 
 async def invoke_stage(root, *, stage, task, payload, model, recorder, binding):
+    # Only the explicitly authorized failed stage gets a new, immutable namespace.
+    exception_path = root / "timeout-exception.json"
+    if exception_path.exists():
+        exception = read_private_json(exception_path)
+        if exception["stage"] == stage:
+            usage = await recorder.check_admission(after=True)
+            require(usage["timeout_exception"] == exception, "exception_not_audited")
+            from tests.evals.resume_experiments import preserve
+
+            preserve(
+                root / f"{stage}-rerun-link.json",
+                {
+                    "original_stage": stage,
+                    "original_invocation_id": exception["invocation_id"],
+                    "exception_digest": quality_identity_digest(exception),
+                    "replacement_stage": stage + "-rerun-001",
+                },
+            )
+            original = read_private_json(root / f"{stage}-started.json")
+            require(
+                original["binding"] == binding
+                and original["payload_digest"] == quality_identity_digest(payload)
+                and original["prompt_digest"] == PROMPT_DIGESTS[task],
+                "rerun_input_changed",
+            )
+            stage += "-rerun-001"
     done = root / f"{stage}-response.json"
     started = root / f"{stage}-started.json"
     payload_digest = quality_identity_digest(payload)

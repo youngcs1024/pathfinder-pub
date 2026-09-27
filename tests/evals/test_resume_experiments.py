@@ -455,3 +455,123 @@ async def test_invalid_annotation_is_retained_for_agent_review_without_repair(
     assert runtime.validate_reviews(tmp_path, inputs, facts)["synthetic"][
         "annotation"
     ] == annotation.model_dump(mode="json")
+
+
+def test_single_reservation_budget_boundary():
+    value = {
+        **usage(),
+        "unknown_cost": 1,
+        "unknown_usage": 1,
+        "reserved_unknown_attempts": 1,
+        "reserved_cost_cny": str(CHAT_HEADROOM_CNY),
+    }
+    admit(value, ExperimentBudget(cost_cap_cny=CHAT_HEADROOM_CNY * 2))
+    with pytest.raises(AcceptanceError, match="budget_exhausted"):
+        admit(value, ExperimentBudget(cost_cap_cny=CHAT_HEADROOM_CNY * 2 - Decimal("0.01")))
+    with pytest.raises(AcceptanceError, match="unknown_usage_or_cost"):
+        admit({**value, "unknown_cost": 2}, ExperimentBudget())
+    with pytest.raises(AcceptanceError, match="unfinished_accounting"):
+        admit({**value, "unfinished": 1}, ExperimentBudget())
+
+
+@pytest.mark.parametrize("corruption", ["binding", "duplicate", "started", "terminal"])
+def test_timeout_exception_rejects_wrong_identity(tmp_path, corruption):
+    from types import SimpleNamespace
+
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_experiment_budget import timeout_exception
+    from tests.evals.resume_live_budget import ledger_identity
+
+    tmp_path.chmod(0o700)
+    row = SimpleNamespace(
+        id="old",
+        status="failed",
+        error_category="provider_timeout",
+        estimated_cost=None,
+        token_usage=None,
+        provider="qwen",
+        graph_node="annotate",
+        workspace_id="w",
+        actor_user_id="a",
+        model="m",
+        request_hash="h",
+        pricing_version=None,
+        currency=None,
+        latency_ms=1,
+        run_id=None,
+    )
+    binding = {"input_digest": "input"}
+    started = {"binding": "input", "before": {"invocation_ids": []}}
+    publish(tmp_path / "annotation-test-started.json", started)
+    receipt = dict(
+        binding=binding,
+        authorization="explicit",
+        policy="single_terminal_timeout_v1",
+        invocation_id="old",
+        accounted_digest=quality_identity_digest(ledger_identity(row)),
+        stage="annotation-test",
+        started_digest=quality_identity_digest(started),
+        reserved_cost_cny=str(CHAT_HEADROOM_CNY),
+    )
+    if corruption == "binding":
+        receipt["binding"] = {"input_digest": "other"}
+    if corruption == "started":
+        receipt["started_digest"] = "wrong"
+    if corruption == "terminal":
+        row.status = "started"
+    publish(tmp_path / "timeout-exception.json", receipt)
+    if corruption == "duplicate":
+        publish(tmp_path / "timeout-exception-copy.json", receipt)
+    with pytest.raises(AcceptanceError):
+        timeout_exception(tmp_path, binding, [row])
+
+
+async def test_authorized_rerun_reuses_new_response(tmp_path):
+    from types import SimpleNamespace
+
+    from tests.evals.quality_dataset import quality_identity_digest
+
+    tmp_path.chmod(0o700)
+    payload = {"safe": True}
+    exception = {"stage": "annotation-test", "invocation_id": "old"}
+    publish(tmp_path / "timeout-exception.json", exception)
+    publish(
+        tmp_path / "annotation-test-started.json",
+        {
+            "binding": "input",
+            "payload_digest": quality_identity_digest(payload),
+            "prompt_digest": PROMPT_DIGESTS["annotate"],
+        },
+    )
+
+    class Recorder:
+        async def check_admission(self, **kwargs):
+            return {"timeout_exception": exception, "invocation_ids": ["old"]}
+
+        async def snapshot(self):
+            return {"invocation_ids": ["old", "new"]}
+
+    class Model:
+        calls = 0
+
+        async def invoke(self, *args):
+            self.calls += 1
+            return SimpleNamespace(content='{"ok":true}', finish_status="completed", tool_calls=())
+
+    model = Model()
+    kwargs = dict(
+        stage="annotation-test",
+        task="annotate",
+        payload=payload,
+        model=model,
+        recorder=Recorder(),
+        binding="input",
+    )
+    assert await invoke_stage(tmp_path, **kwargs) == {"ok": True}
+    assert await invoke_stage(tmp_path, **kwargs) == {"ok": True}
+    assert model.calls == 1
+    from tests.evals.product_acceptance_contracts import read_private_json
+
+    response = read_private_json(tmp_path / "annotation-test-rerun-001-response.json")
+    assert response["invocation_ids"] == ["new"]
+    assert not (tmp_path / "annotation-test-response.json").exists()
