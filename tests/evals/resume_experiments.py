@@ -87,15 +87,69 @@ def verify(root):
         and manifest["minimum_usable"] == MINIMUM,
         "manifest_changed",
     )
+    source = effective_source(root, manifest)
     require(
-        git(ROOT, "rev-parse", "HEAD").decode().strip() == manifest["source_sha"], "source_changed"
+        git(ROOT, "rev-parse", "HEAD").decode().strip() == source["source_sha"], "source_changed"
     )
     require(
-        set(bound_files()) == set(manifest["files"])
-        and file_inventory(ROOT, manifest["files"]) == manifest["files"],
+        set(bound_files()) == set(source["files"])
+        and file_inventory(ROOT, source["files"]) == source["files"],
         "source_changed",
     )
     return manifest, inputs
+
+
+def effective_source(root, manifest):
+    source = {"source_sha": manifest["source_sha"], "files": manifest["files"]}
+    for path in sorted(root.glob("source-rebind-[0-9][0-9][0-9].json")):
+        entry = read_private_json(path)
+        require(
+            entry["binding"] == manifest["input_digest"]
+            and entry["previous_digest"] == quality_identity_digest(source),
+            "source_chain_changed",
+        )
+        require(
+            entry["review"]["approved"] is True and entry["review"]["rationale"], "review_required"
+        )
+        source = entry["source"]
+    return source
+
+
+def rebind_source(root):
+    inputs = load_inputs(root)
+    manifest = read_private_json(root / "manifest.json")
+    require(
+        manifest["input_digest"] == inputs.digest and manifest["prompts"] == PROMPT_DIGESTS,
+        "rebind_cannot_change_inputs_or_prompts",
+    )
+    require(not (root / "frozen.json").exists(), "preparation_already_frozen")
+    require(not git(ROOT, "status", "--porcelain").strip(), "source_not_committed")
+    previous = effective_source(root, manifest)
+    ordinal = len(list(root.glob("source-rebind-[0-9][0-9][0-9].json"))) + 1
+    source = {
+        "source_sha": git(ROOT, "rev-parse", "HEAD").decode().strip(),
+        "files": file_inventory(ROOT, bound_files()),
+    }
+    review = read_private_json(root / f"source-rebind-review-{ordinal:03}.json")
+    require(
+        review["approved"] is True
+        and bool(review["rationale"])
+        and review["binding"] == inputs.digest
+        and review["previous_digest"] == quality_identity_digest(previous)
+        and review["new_sha"] == source["source_sha"],
+        "rebind_review_changed",
+    )
+    publish(
+        root / f"source-rebind-{ordinal:03}.json",
+        {
+            "binding": inputs.digest,
+            "previous_digest": quality_identity_digest(previous),
+            "source": source,
+            "review": review,
+            "prior_outputs_are_new_source_evidence": False,
+        },
+    )
+    verify(root)
 
 
 def freeze(root, usage):
@@ -117,6 +171,7 @@ def freeze(root, usage):
         "status": "PREPARATION_FROZEN",
         "input_digest": inputs.digest,
         "manifest_digest": quality_identity_digest(manifest),
+        "effective_source": effective_source(root, manifest),
         "annotations": annotations,
         "usage": usage,
         "planned": PLANNED,
@@ -145,15 +200,20 @@ def report(root):
         "formal_samples_executed": 0,
         "human_review": "NOT_RUN",
         "usage": result["usage"] if result else None,
-        "annotations_recorded": sum(
-            (root / f"annotation-{c.case_id}.json").exists() for c in inputs.cases
+        "annotations_recorded": len(result["annotations"])
+        if result
+        else sum((root / f"annotation-{c.case_id}.json").exists() for c in inputs.cases),
+        "annotation_proposals": sum(
+            (root / f"annotation-{c.case_id}-proposal.json").exists() for c in inputs.cases
         ),
     }
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "execute", "resume", "freeze", "report"))
+    parser.add_argument(
+        "action", choices=("prepare", "execute", "resume", "freeze", "report", "rebind")
+    )
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--credentials", type=Path)
     parser.add_argument("--live", action="store_true")
@@ -166,12 +226,20 @@ def main(argv=None):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             if args.action == "prepare":
                 prepare(root)
+            elif args.action == "rebind":
+                rebind_source(root)
             elif args.action == "report":
                 print(json.dumps(report(root)))
             else:
                 from tests.evals.resume_experiment_runtime import execute
 
                 manifest, inputs = verify(root)
+                if args.action == "resume":
+                    require(
+                        (root / "ledger-binding.json").exists()
+                        and (root / "database-owner.json").exists(),
+                        "resume_identity_missing",
+                    )
                 if args.action != "freeze":
                     require(args.live and args.credentials is not None, "live_opt_in_required")
                     require(not (root / "frozen.json").exists(), "preparation_already_frozen")

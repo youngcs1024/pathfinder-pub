@@ -363,3 +363,95 @@ def test_reviewed_profile_is_self_report_not_new_project_facts():
     value["requirements"][0]["profile_item_ids"] = ["not_a_profile_item"]
     with pytest.raises(AcceptanceError, match="unknown_profile_item"):
         checked_annotation(value, case, facts, profile)
+
+
+def test_headroom_includes_reasoning_beyond_response_cap():
+    assert CHAT_HEADROOM_CNY == Decimal("10.4623104")
+    with pytest.raises(AcceptanceError, match="budget_exhausted"):
+        admit(usage(), ExperimentBudget(cost_cap_cny=Decimal("10")))
+
+
+def test_source_rebind_preserves_input_and_previous_source(tmp_path):
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_experiments import effective_source
+
+    tmp_path.chmod(0o700)
+    manifest = {"source_sha": "old", "files": {"file": "old_digest"}, "input_digest": "input"}
+    prior = effective_source(tmp_path, manifest)
+    new = {"source_sha": "new", "files": {"file": "new_digest"}}
+    publish(
+        tmp_path / "source-rebind-001.json",
+        {
+            "binding": "input",
+            "previous_digest": quality_identity_digest(prior),
+            "source": new,
+            "review": {"approved": True, "rationale": "same input, accounting repair"},
+        },
+    )
+    assert effective_source(tmp_path, manifest) == new
+    assert manifest["source_sha"] == "old"
+    with pytest.raises(AcceptanceError, match="chain"):
+        effective_source(tmp_path, {**manifest, "input_digest": "replacement"})
+
+
+async def test_invalid_annotation_is_retained_for_agent_review_without_repair(
+    tmp_path, monkeypatch
+):
+    from tests.evals import resume_experiment_runtime as runtime
+    from tests.evals.product_acceptance_contracts import read_private_json
+    from tests.evals.quality_dataset import quality_identity_digest
+
+    tmp_path.chmod(0o700)
+    (tmp_path / "inputs").mkdir(mode=0o700)
+    _, _, original, _, _ = _inputs()
+    publish(
+        tmp_path / "inputs" / "profile.json",
+        {
+            "content": original.profile_content.model_dump(mode="json"),
+            "version_id": str(uuid4()),
+        },
+    )
+    facts, annotation, _, _ = smoke_inputs()
+    case = SimpleNamespace(case_id="synthetic", jd="要求:实现分页查询。")
+    inputs = SimpleNamespace(profile_file="profile.json", cases=(case,), digest="binding")
+    calls = []
+
+    async def result(root, **kwargs):
+        calls.append(kwargs["task"])
+        if kwargs["task"] == "annotate":
+            value = annotation.model_dump(mode="json")
+            value["requirements"][0]["fact_version_ids"] = ["wrong_fact_identity"]
+            return value
+        value = assessment_dict()
+        if "百万" in kwargs["payload"]["candidate"]:
+            value["claims"][0].update(
+                quote="已上线服务百万用户", support="unsupported", fact_version_ids=[]
+            )
+            value["coverage"][0]["status"] = "none"
+        return value
+
+    monkeypatch.setattr(runtime, "invoke_stage", result)
+    await runtime.prepare_annotations(tmp_path, inputs, None, None, facts)
+    assert calls == ["annotate", "score", "score"]
+    assert not (tmp_path / "annotation-synthetic.json").exists()
+    proposal = read_private_json(tmp_path / "annotation-synthetic-proposal.json")
+    assert proposal["requirements"][0]["fact_version_ids"] == ["wrong_fact_identity"]
+    assert (
+        read_private_json(tmp_path / "annotation-synthetic-validation.json")["status"]
+        == "REQUIRES_AGENT_REVIEW"
+    )
+    publish(
+        tmp_path / "review-synthetic.json",
+        {
+            "binding": "binding",
+            "annotation_digest": quality_identity_digest(proposal),
+            "review_kind": "AGENT_ASSESSED",
+            "approved": True,
+            "rationale": "corrected by checking original fact",
+            "reviewed_requirement_ids": ["pagination"],
+            "final_annotation": annotation.model_dump(mode="json"),
+        },
+    )
+    assert runtime.validate_reviews(tmp_path, inputs, facts)["synthetic"][
+        "annotation"
+    ] == annotation.model_dump(mode="json")

@@ -8,9 +8,11 @@ from tests.evals.product_acceptance_contracts import publish, read_private_json,
 from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.resume_live_budget import ledger_identity
 
-# Fixed adapter: <= 1M input tokens, <= 4096 output tokens, highest frozen tariff.
-# This is conservative admission headroom, NEVER an unknown-cost reservation.
-CHAT_HEADROOM_CNY = Decimal("4.8") + Decimal(4096) * Decimal("28.8") / Decimal(1000000)
+# Frozen qwen3.6-flash model envelope includes reasoning, not just max_tokens.
+# https://help.aliyun.com/zh/model-studio/qwen3-6-flash (verified 2026-09-27)
+# Use the full 65536 response + 131072 reasoning limit, conservatively even though
+# the adapter restricts response content to 4096. Unknown-cost continuation is forbidden.
+CHAT_HEADROOM_CNY = Decimal("4.8") + Decimal(65536 + 131072) * Decimal("28.8") / Decimal(1000000)
 EMBEDDING_HEADROOM_CNY = Decimal("5")  # 10 items, <= 1M tokens each at CNY .5/M.
 
 

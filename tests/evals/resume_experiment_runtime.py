@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from langsmith import tracing_context
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from app.db.provisioning import SqlAlchemyProvisioningStore
 from app.db.session import create_database_engine, create_session_factory
@@ -16,7 +16,12 @@ from app.llm.factory import LLMFactory
 from app.llm.invocations import LLMInvocationContext
 from app.llm.ports import ChatMessage
 from app.llm.qwen_adapters import create_qwen_adapters
-from tests.evals.product_acceptance_contracts import publish, read_private_json, require
+from tests.evals.product_acceptance_contracts import (
+    AcceptanceError,
+    publish,
+    read_private_json,
+    require,
+)
 from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.quality_pilot import credentials
 from tests.evals.resume_experiment_budget import ExperimentRecorder
@@ -153,8 +158,22 @@ async def prepare_annotations(root, inputs, model, recorder, facts):
             recorder=recorder,
             binding=inputs.digest,
         )
-        annotation = checked_annotation(locate_annotation(value, case), case, facts, profile)
-        preserve(root / f"{stage}.json", annotation.model_dump(mode="json"))
+        proposal = locate_annotation(value, case)
+        preserve(root / f"{stage}-proposal.json", proposal)
+        try:
+            annotation = checked_annotation(proposal, case, facts, profile)
+        except (AcceptanceError, ValidationError):
+            # Preparation annotations are proposals, never accepted scoring answers.
+            # Keep invalid references for explicit agent review; no model repair or resampling.
+            preserve(
+                root / f"{stage}-validation.json",
+                {
+                    "status": "REQUIRES_AGENT_REVIEW",
+                    "proposal_digest": quality_identity_digest(proposal),
+                },
+            )
+        else:
+            preserve(root / f"{stage}.json", annotation.model_dump(mode="json"))
     smoke_facts, annotation, packets, mapping = smoke_inputs()
     scores = {}
     for packet in packets:
@@ -269,7 +288,10 @@ async def execute_database(root, inputs, url, credentials_path, *, audit_only=Fa
 def validate_reviews(root, inputs, facts, profile=None):
     frozen = {}
     for case in inputs.cases:
-        original = read_private_json(root / f"annotation-{case.case_id}.json")
+        proposal = root / f"annotation-{case.case_id}-proposal.json"
+        original = read_private_json(
+            proposal if proposal.exists() else root / f"annotation-{case.case_id}.json"
+        )
         review = read_private_json(root / f"review-{case.case_id}.json")
         require(
             review["binding"] == inputs.digest
