@@ -279,6 +279,7 @@ class ResumeGenerationGraph:
         ]
         for correction_count in range(2):
             response = await self._invoke(messages, node="analyze_job", inputs=inputs)
+            analysis = None
             try:
                 analysis = RequirementExtractionV1.model_validate_json(
                     _json_payload(response.content), strict=True
@@ -298,7 +299,18 @@ class ResumeGenerationGraph:
                                 "quotes; do not invent replacements. Explicit/preferred "
                                 "inference_basis must be null. Inferred rows need a meaningful "
                                 "basis. You may omit all inferred rows. "
-                                "Return the same JSON schema; this is the only correction attempt."
+                                "Return the same JSON schema; this is the only correction attempt. "
+                                "Non-literal quotes to remove or replace with exact source: "
+                                + json.dumps(
+                                    [
+                                        item.quote
+                                        for item in analysis.requirements
+                                        if item.quote not in inputs.job_text
+                                    ]
+                                    if analysis
+                                    else [],
+                                    ensure_ascii=False,
+                                )
                             ),
                         ),
                     )
