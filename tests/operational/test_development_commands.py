@@ -68,8 +68,8 @@ def _run(
             "uv run --locked pytest tests/integration --deselect "
             "tests/integration/db/test_retrieval_benchmark.py::"
             "test_real_db_benchmark_pipeline_filters_accounting_and_determinism --deselect "
-            "tests/integration/db/test_gate8_demo.py::"
-            "test_gate8_demo_complete_application_flow",
+            "tests/integration/db/test_resume_demo.py::"
+            "test_resume_demo_complete_flow",
         ),
         (
             "test-integration",
@@ -83,7 +83,7 @@ def _run(
         (
             "demo",
             "uv run --locked pytest -q "
-            "tests/integration/db/test_gate8_demo.py::test_gate8_demo_complete_application_flow",
+            "tests/integration/db/test_resume_demo.py::test_resume_demo_complete_flow",
         ),
         ("live-smoke", "uv run --locked python -m tests.evals --live-smoke"),
         (
@@ -216,15 +216,21 @@ def test_make_targets_propagate_command_failure(target: str, override: str) -> N
     assert result.returncode != 0
 
 
-def test_demo_forces_offline_modes_and_passes_test_only_failure_selector() -> None:
-    result = _run("make", "--dry-run", "demo", "DEMO_FAILURE=rag")
+@pytest.mark.parametrize("target", ["demo", "demo-legacy"])
+def test_demo_forces_offline_modes_and_passes_test_only_failure_selector(target) -> None:
+    result = _run("make", "--dry-run", target, "DEMO_FAILURE=rag")
 
     assert result.returncode == 0, result.stderr
     assert "PF_LLM_MODE=fake" in result.stdout
     assert "PF_SEARCH_MODE=fake" in result.stdout
     assert "PF_AUTH_MODE=fake" in result.stdout
     assert "PF_TRACE_MODE=off" in result.stdout
-    assert 'PF_GATE87_DEMO_FAILURE="rag"' in result.stdout
+    if target == "demo-legacy":
+        assert 'PF_GATE87_DEMO_FAILURE="rag"' in result.stdout
+        assert "test_gate8_demo_complete_application_flow" in result.stdout
+    else:
+        assert "test_resume_demo_complete_flow" in result.stdout
+        assert "PF_GATE87_DEMO_FAILURE" not in result.stdout
 
 
 def test_benchmark_help_requires_no_toolchain_or_docker():

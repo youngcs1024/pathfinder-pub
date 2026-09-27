@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import time
+import traceback
 from pathlib import Path
 
 import pytest
@@ -46,12 +47,14 @@ async def test_resume_upgrade_backup_restore_and_continue(tmp_path, monkeypatch,
             source.upgrade(OLD)
             legacy = product(source, rehearsal.directory / "legacy")
             await seed_current(legacy, monkeypatch, rehearsal)
+            assert pending_counts(source)[-1] == 2
             drained = product(source, rehearsal.directory / "legacy-drain")
             drained.document_id, drained.runs = legacy.document_id, dict(legacy.runs)
             async with drained.open():
                 for name in ("approve", "reject"):
                     await decide(drained, name, "reject")
                     await drained.work(name)
+            assert pending_counts(source) == (0, 0, 0, 0, 0)
             before_upgrade = source.snapshot()
             # Real approval decisions, invocation accounting, and checkpoint rows exist at 0015.
             for table in ("approval_decisions", "llm_invocations", "run_events"):
@@ -128,6 +131,7 @@ async def test_resume_upgrade_backup_restore_and_continue(tmp_path, monkeypatch,
             ) as rig:
                 assert (await rig.client.get("/readyz")).status_code == 200
                 await resume_product.verify_history(rig, state)
+                await verify_operational_downloads(rig, source_probe)
                 confirmed, _ = await resume_product.post(
                     rig,
                     resume_product.session_path(rig, state)
@@ -162,9 +166,13 @@ async def test_resume_upgrade_backup_restore_and_continue(tmp_path, monkeypatch,
                 json.dumps(after, sort_keys=True).encode()
             ).hexdigest()
             report.update(stage="complete", status="PASS")
-    except BaseException:
+    except BaseException as error:
         report.update(status="IN_PROGRESS", failure_category="unexpected_error")
-        raise RestoreError("resume_restore_rehearsal_failed") from None
+        location = traceback.extract_tb(error.__traceback__)[-1]
+        raise RestoreError(
+            f"resume_restore_rehearsal_failed stage={report['stage']} "
+            f"type={type(error).__name__} at={Path(location.filename).name}:{location.lineno}"
+        ) from None
     finally:
         report["resources_stopped"] = rehearsal.stop()
         report["elapsed_ms"] = round((time.monotonic() - rehearsal.started) * 1000)
@@ -226,3 +234,33 @@ def operational_snapshot(database, run_id):
             stdin=script,
         )
     return json.loads(result)
+
+
+def pending_counts(database):
+    path = Path(__file__).resolve().parents[3] / "scripts/release_drain.sql"
+    with path.open("rb") as script:
+        output = database.execute(
+            ["psql", "-X", "-qAt", "-U", "pf_e84", "-d", "pathfinder", "--set", "ON_ERROR_STOP=1"],
+            stdin=script,
+        )
+    return tuple(map(int, output.decode().strip().split("|")))
+
+
+async def verify_operational_downloads(rig, expected):
+    from scripts.resume_restore_verify import verify
+
+    fixture = expected["fixture"]
+    base = (
+        f"/api/v2/workspaces/{fixture['workspace_id']}/resume-sessions/"
+        f"{fixture['session_id']}/versions"
+    )
+    paths = ["/api/v1/me", base] + [
+        base + "/" + v["version_id"] + "/download" for v in fixture["versions"]
+    ]
+    responses = {}
+    for path in paths:
+        response = await rig.client.get(path)
+        assert response.status_code == 200
+        responses[path] = response.content, response.headers
+    result = verify(expected, responses.__getitem__)
+    assert result == {"history_download": True, "confirmation": True, "versions": 3}

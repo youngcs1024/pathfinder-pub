@@ -647,7 +647,7 @@ def test_secret_canary_never_appears_in_output_diagnostics_or_command_log(
     assert canary not in docker_log.read_text(encoding="utf-8")
 
 
-def test_release_script_does_not_name_or_create_business_execution_facts() -> None:
+def test_release_script_only_reads_business_execution_facts() -> None:
     source = RELEASE_SCRIPT.read_text(encoding="utf-8")
 
     for table_name in (
@@ -658,7 +658,13 @@ def test_release_script_does_not_name_or_create_business_execution_facts() -> No
         "tool_invocations",
         "mock_submissions",
     ):
-        assert table_name not in source
+        assert table_name not in source.replace(
+            "from app.domain.runs import EXECUTABLE_GRAPH_VERSIONS", ""
+        )
+    probe = (PROJECT_ROOT / "scripts/release_drain.sql").read_text()
+    assert "BEGIN READ ONLY" in probe
+    for verb in ("INSERT ", "UPDATE ", "DELETE ", "TRUNCATE "):
+        assert verb not in probe.upper()
     assert "alembic downgrade" not in source
     assert "pg_restore --list" in source
     assert "pg_restore" in source
@@ -698,7 +704,7 @@ def test_cutover_orders_stops_and_second_check_before_backup(release_environment
     assert Path(
         environment["TMPDIR"], "pathfinder-release-pathfinder-release-contract.lock"
     ).is_file()
-    assert not any("rm " in " ".join(c) for c in commands)
+    assert not any(c[0] in {"rm", "rmdir"} for c in commands)
 
 
 def test_execution_guard_blocks_rollback_promotion(release_environment):

@@ -108,7 +108,15 @@ async def get(rig, path):
 async def post(rig, path, body, *, key=None):
     key = str(key or uuid4())
     response = await rig.client.post(path, json=body, headers={"Idempotency-Key": key})
-    assert response.status_code in (200, 201, 202), "product command failed"
+    assert response.status_code in (200, 201, 202), (
+        "product command failed",
+        response.status_code,
+        [
+            (e.get("type"), e.get("loc"))
+            for e in response.json().get("detail", [])
+            if isinstance(e, dict)
+        ],
+    )
     return response.json(), key
 
 

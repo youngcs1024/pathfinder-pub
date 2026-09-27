@@ -2,15 +2,28 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, BeforeValidator, ConfigDict
 
-from app.domain.resume_generation import GenerationBudgetV1, JobRequirementV1, SessionCreateV1
+from app.domain.resume_generation import GenerationBudgetV1, JobRequirementV1
+from app.domain.resume_generation import SessionCreateV1 as DomainSessionCreateV1
 from app.domain.resume_profile import JobPreferenceOverrideV1, ResumeContentV1
 from app.domain.run_payloads import ResumeGenerationResultV1, ResumeRevisionResultV1
+
+
+def _session_from_json(value):
+    # FastAPI has already decoded HTTP JSON into Python objects. Restore JSON
+    # semantics for UUID/tuple/Decimal without relaxing strict scalar validation.
+    if isinstance(value, dict):
+        return DomainSessionCreateV1.model_validate_json(json.dumps(value, allow_nan=False))
+    return value
+
+
+SessionCreateV1 = Annotated[DomainSessionCreateV1, BeforeValidator(_session_from_json)]
 
 
 class GenerationApiModel(BaseModel):

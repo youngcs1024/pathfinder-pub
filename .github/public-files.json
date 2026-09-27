@@ -670,6 +670,7 @@
     "tests/unit/api/test_request_context.py",
     "tests/unit/api/test_resume_artifacts.py",
     "tests/unit/api/test_resume_confirmation.py",
+    "tests/unit/api/test_resume_generation_wire.py",
     "tests/unit/api/test_resume_profiles.py",
     "tests/unit/api/test_retired_workflow.py",
     "tests/unit/api/test_run_request_identity.py",
