@@ -61,6 +61,10 @@ RESTORE_CHECKS = {
     "invalid_backup_refused",
     "occupied_target_refused",
 }
+RESUME_RESTORE_CHECKS = (
+    RESTORE_CHECKS - {"operational_probe", "approval_checkpoint_resume", "terminal_no_resubmit"}
+) | {"resume_history_download", "resume_revision_after_restore"}
+
 RESTORE_ERRORS = {
     "unexpected_error",
     "deadline",
@@ -238,9 +242,9 @@ def restore_projection(value):
             "complete",
             "cleanup",
         },
-        "old_revision": {"0014_gate6_action_recovery"},
+        "old_revision": {"0014_gate6_action_recovery", "0015_e3_run_request_identity"},
         "revision": {"0025_r52_resume_confirmations"},
-        "graph": {"pathfinder-research-v6"},
+        "graph": {"pathfinder-research-v6", "pathfinder-resume-v4"},
         "postgres_image": {"pgvector/pgvector:0.8.5-pg16"},
     }.items():
         check(value.get(key) in allowed)
@@ -249,7 +253,7 @@ def restore_projection(value):
     check(type(value.get("resources_stopped")) is bool)
     result["resources_stopped"] = value["resources_stopped"]
     checks = value.get("checks")
-    check(isinstance(checks, dict) and checks.keys() <= RESTORE_CHECKS)
+    check(isinstance(checks, dict) and checks.keys() <= (RESTORE_CHECKS | RESUME_RESTORE_CHECKS))
     check(all(type(v) is bool for v in checks.values()))
     result["checks"] = dict(checks)
     tables = value.get("tables")
@@ -271,7 +275,10 @@ def restore_projection(value):
     if result["status"] == "PASS":
         check(result.get("failure_category") is None)
         check(result["stage"] == "complete" and result["resources_stopped"])
-        check(checks.keys() == RESTORE_CHECKS and all(checks.values()))
+        required = (
+            RESUME_RESTORE_CHECKS if result["graph"] == "pathfinder-resume-v4" else RESTORE_CHECKS
+        )
+        check(checks.keys() == required and all(checks.values()))
         check(tables.keys() == RESTORE_TABLES)
         check(
             {"dump_sha256", "snapshot_sha256", "business_digest", "postgres_image_id", "dump_bytes"}

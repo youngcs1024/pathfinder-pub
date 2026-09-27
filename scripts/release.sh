@@ -45,11 +45,9 @@ fail() {
 }
 
 cleanup_lock() {
-    if [[ "$lock_acquired" -eq 1 && -n "$lock_directory" ]]; then
-        if [[ -f "$lock_directory/owner" ]]; then
-            rm -f -- "$lock_directory/owner"
-        fi
-        rmdir -- "$lock_directory" 2>/dev/null || true
+    if [[ "$lock_acquired" -eq 1 ]]; then
+        flock -u 9
+        exec 9>&-
         lock_acquired=0
     fi
 }
@@ -90,15 +88,13 @@ validate_project_name() {
 acquire_lock() {
     validate_project_name
     lock_directory="${LOCK_ROOT%/}/pathfinder-release-${PROJECT_NAME}.lock"
-    if ! mkdir -- "$lock_directory" 2>/dev/null; then
-        printf 'release: error: another release holds lock %s\n' "$lock_directory" >&2
-        printf '%s\n' \
-            'release: do not remove it until no release process is running and DB/API/worker/Caddy state has been inspected' >&2
-        exit 1
+    command -v flock >/dev/null 2>&1 || fail "flock is required"
+    [[ ! -L "$lock_directory" ]] || fail "release lock must not be a symlink"
+    exec 9>>"$lock_directory"
+    if ! flock -n 9; then
+        fail "another release holds lock $lock_directory"
     fi
     lock_acquired=1
-    printf 'pid=%s\naction=%s\nstarted_utc=%s\n' \
-        "$$" "${ACTION:-missing}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$lock_directory/owner"
 }
 
 validate_action() {
@@ -155,6 +151,11 @@ static_preflight() {
     require_nonempty PF_RELEASE_BACKUP_DIR
     require_nonempty PF_DATABASE_URL
     require_nonempty PF_POSTGRES_PASSWORD
+    PF_RELEASE_DRAIN_SECONDS="${PF_RELEASE_DRAIN_SECONDS:-180}"
+    if [[ ! "$PF_RELEASE_DRAIN_SECONDS" =~ ^[0-9]{2,3}$ ]] \
+        || (( 10#$PF_RELEASE_DRAIN_SECONDS < 30 || 10#$PF_RELEASE_DRAIN_SECONDS > 900 )); then
+        fail "PF_RELEASE_DRAIN_SECONDS must be between 30 and 900"
+    fi
     validate_image_reference
     validate_backup_directory
 
@@ -285,12 +286,22 @@ detect_deployment() {
         deployment_kind="inconsistent"
         fail "existing API and worker image references or IDs do not match"
     fi
-    if [[ "$api_state" != "running" || "$api_health" != "healthy" \
-        || "$worker_state" != "running" || "$worker_health" != "healthy" \
+    if [[ ( "$api_state" != "running" && "$api_state" != "exited" ) \
+        || ( "$api_state" == "running" && "$api_health" != "healthy" ) \
+        || ( "$worker_state" != "running" && "$worker_state" != "exited" ) \
+        || ( "$worker_state" == "running" && "$worker_health" != "healthy" ) \
+        || ( "$api_state" == "running" && "$worker_state" == "exited" ) \
         || "$caddy_state" != "running" \
         || "$postgres_state" != "running" || "$postgres_health" != "healthy" ]]; then
         deployment_kind="inconsistent"
         fail "existing deployment is not fully running and healthy"
+    fi
+    cutover_identity="$api_ids|$worker_ids|$previous_api_image_id|$candidate_image_id"
+    if [[ "$api_state" == "exited" || "$worker_state" == "exited" ]]; then
+        [[ -f "$lock_directory.cutover" && ! -L "$lock_directory.cutover" ]] \
+            || fail "stopped services have no release cutover receipt"
+        [[ "$(cat -- "$lock_directory.cutover")" == "$cutover_identity" ]] \
+            || fail "stopped service identity does not match release cutover receipt"
     fi
     log "deployment=existing"
     log "previous_api_image=$previous_api_image previous_api_image_id=$previous_api_image_id"
@@ -347,6 +358,73 @@ database_preflight() {
     fi
 }
 
+query_pending_work() {
+    docker compose exec -T postgres sh -ec \
+        'exec psql -X -q -A -t --set ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' \
+        <"$REPOSITORY_ROOT/scripts/release_drain.sql" 2>/dev/null
+}
+
+assert_drained() {
+    local counts
+    if ! counts="$(query_pending_work)"; then
+        fail "cannot determine pending work; previous executor and operator review required"
+    fi
+    [[ "$counts" =~ ^[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+$ ]] \
+        || fail "invalid pending work response"
+    if [[ "$counts" != "0|0|0|0|0" ]]; then
+        return 1
+    fi
+}
+
+quiesce_existing() {
+    [[ "$deployment_kind" == "existing" ]] || return 0
+    stage="stop-admission"
+    [[ ! -L "$lock_directory.cutover" ]] || fail "cutover receipt must not be a symlink"
+    printf '%s\n' "$cutover_identity" >"$lock_directory.cutover"
+    docker compose stop --timeout 30 api >/dev/null 2>&1 || fail "old API stop failed"
+    stage="drain-previous-worker"
+    local deadline counts waiting
+    deadline=$((SECONDS + 10#$PF_RELEASE_DRAIN_SECONDS))
+    while true; do
+        if ! counts="$(query_pending_work)"; then
+            fail "cannot determine pending work; previous executor and operator review required"
+        fi
+        [[ "$counts" =~ ^[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+\|[0-9]+$ ]] \
+            || fail "invalid pending work response"
+        [[ "$counts" != "0|0|0|0|0" ]] || break
+        waiting="${counts##*|}"
+        [[ "$waiting" == "0" ]] || fail "waiting approval requires previous API/operator review"
+        (( SECONDS < deadline )) || fail "drain deadline exceeded; retain previous executor for reconciliation"
+        sleep 1
+    done
+    stage="stop-previous-worker"
+    docker compose stop --timeout 30 worker >/dev/null 2>&1 || fail "old worker stop failed"
+    stage="post-stop-drain-check"
+    assert_drained || fail "pending work changed while stopping worker"
+}
+
+candidate_execution_guard() {
+    stage="candidate-execution-preflight"
+    if ! docker compose run --rm --no-deps --entrypoint python worker -c '
+import asyncio
+from app.config import Settings
+from app.domain.runs import EXECUTABLE_GRAPH_VERSIONS
+from app.db.session import create_database_engine, create_session_factory
+from app.db.run_execution import SqlAlchemyRunExecutionReader
+async def check():
+    if not EXECUTABLE_GRAPH_VERSIONS or any(not v.startswith("pathfinder-resume-v") for v in EXECUTABLE_GRAPH_VERSIONS):
+        raise SystemExit(1)
+    engine = create_database_engine(Settings().database_url)
+    try:
+        if await SqlAlchemyRunExecutionReader(create_session_factory(engine)).has_unsupported_pending_work():
+            raise SystemExit(1)
+    finally:
+        await engine.dispose()
+asyncio.run(check())' >/dev/null 2>&1; then
+        fail "candidate execution versions cannot safely run this database"
+    fi
+}
+
 create_backup() {
     stage="backup"
     if ! mkdir -p -- "$PF_RELEASE_BACKUP_DIR"; then
@@ -384,6 +462,7 @@ create_backup() {
         fail "validated backup could not be promoted to its final path"
     fi
     log "backup_path=$backup_path"
+    log "backup_sha256=$(sha256sum -- "$backup_path" | awk '{print $1}')"
     log "backup_bytes=$(wc -c <"$backup_path") validation=pg_restore-list-ok"
 }
 
@@ -476,6 +555,10 @@ main() {
 
     bootstrap_postgres_if_fresh
     database_preflight
+    quiesce_existing
+    if [[ "$deployment_kind" == "fresh" && "$revision_before" != "base" ]]; then
+        assert_drained || fail "existing database requires the previous executor before migration"
+    fi
 
     if [[ "$ACTION" == "release" ]]; then
         create_backup
@@ -485,6 +568,7 @@ main() {
         log "code rollback schema check passed; no database downgrade or restore will run"
     fi
 
+    candidate_execution_guard
     promote_api_and_smoke
     start_caddy_if_fresh
     run_optional_edge_smoke

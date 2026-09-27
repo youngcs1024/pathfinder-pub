@@ -46,6 +46,8 @@ if args[:3] == ["compose", "config", "--quiet"]:
 
 if args[:6] == ["compose", "run", "--rm", "--no-deps", "--entrypoint", "python"]:
     service = args[6]
+    if "EXECUTABLE_GRAPH_VERSIONS" in args[-1] and failure == "execution-guard":
+        raise SystemExit(1)
     if failure == f"settings-{service}":
         raise SystemExit(1)
     raise SystemExit(0)
@@ -100,7 +102,8 @@ if args[:4] == ["compose", "ps", "--all", "--quiet"]:
 if args and args[0] == "inspect":
     container_id = args[-1]
     if container_id == "api-id":
-        emit(f"{PREVIOUS_IMAGE}|sha256:previous|running|healthy")
+        status = "exited" if os.environ.get("FAKE_API_STOPPED") else "running"
+        emit(f"{PREVIOUS_IMAGE}|sha256:previous|{status}|healthy")
     elif container_id.startswith("worker-id"):
         image_id = "sha256:different" if state == "mismatch" else "sha256:previous"
         image_ref = (
@@ -108,15 +111,36 @@ if args and args[0] == "inspect":
             if state == "reference-mismatch"
             else "{PREVIOUS_IMAGE}"
         )
-        emit(f"{image_ref}|{image_id}|running|healthy")
+        status = "exited" if os.environ.get("FAKE_WORKER_STOPPED") else "running"
+        emit(f"{image_ref}|{image_id}|{status}|healthy")
     elif container_id == "caddy-id":
         emit("caddy:tested|sha256:caddy|running|")
     else:
         emit("postgres:tested|sha256:postgres|running|healthy")
     raise SystemExit(0)
 
+if args[:2] == ["compose", "stop"]:
+    raise SystemExit(1 if failure == "stop-" + args[-1] else 0)
+
 if args[:5] == ["compose", "exec", "-T", "postgres", "sh"]:
     shell_command = args[-1]
+    if "psql -X -q -A -t" in shell_command:
+        sys.stdin.read()
+        if failure == "drain-query":
+            raise SystemExit(1)
+        counts = os.environ.get("FAKE_PENDING", "0|0|0|0|0")
+        stopped_worker = any(
+            c[:2] == ["compose", "stop"] and c[-1] == "worker"
+            for c in map(json.loads, log_path.read_text().splitlines())
+        )
+        if os.environ.get("FAKE_DRAIN_ONCE") == "1":
+            calls = log_path.read_text().count("psql -X -q -A -t")
+            if calls > 1:
+                counts = "0|0|0|0|0"
+        if failure == "post-stop-work" and stopped_worker:
+            counts = "0|1|0|0|0"
+        emit(counts)
+        raise SystemExit(0)
     if "pg_dump" in shell_command:
         if failure == "pg-dump":
             raise SystemExit(1)
@@ -639,3 +663,103 @@ def test_release_script_does_not_name_or_create_business_execution_facts() -> No
     assert "pg_restore --list" in source
     assert "pg_restore" in source
     assert "pg_dump" in source
+
+
+@pytest.mark.parametrize("failure", ["stop-api", "stop-worker", "drain-query", "post-stop-work"])
+def test_cutover_failure_never_backs_up_or_migrates(release_environment, failure):
+    environment, docker_log, _ = release_environment
+    environment.update(FAKE_STATE="existing", FAKE_FAIL=failure)
+    result = _run_release(environment)
+    assert result.returncode != 0
+    _assert_no_migration_or_service_mutation(_commands(docker_log))
+
+
+@pytest.mark.parametrize("counts", ["1|1|0|0|1", "unknown", "0|0|0|0|0|0"])
+def test_pending_approval_or_malformed_state_stops_cutover(release_environment, counts):
+    environment, docker_log, _ = release_environment
+    environment.update(FAKE_STATE="existing", FAKE_PENDING=counts)
+    result = _run_release(environment)
+    assert result.returncode != 0
+    commands = _commands(docker_log)
+    _assert_no_migration_or_service_mutation(commands)
+    assert not any(c[:2] == ["compose", "stop"] and c[-1] == "worker" for c in commands)
+
+
+def test_cutover_orders_stops_and_second_check_before_backup(release_environment):
+    environment, docker_log, _ = release_environment
+    environment["FAKE_STATE"] = "existing"
+    assert _run_release(environment).returncode == 0
+    commands = _commands(docker_log)
+    api = _find(commands, ["compose", "stop", "--timeout", "30", "api"])
+    worker = _find(commands, ["compose", "stop", "--timeout", "30", "worker"])
+    queries = [i for i, c in enumerate(commands) if "psql -X -q -A -t" in " ".join(c)]
+    dump = next(i for i, c in enumerate(commands) if "pg_dump" in " ".join(c))
+    assert api < queries[0] < worker < queries[1] < dump
+    assert Path(
+        environment["TMPDIR"], "pathfinder-release-pathfinder-release-contract.lock"
+    ).is_file()
+    assert not any("rm " in " ".join(c) for c in commands)
+
+
+def test_execution_guard_blocks_rollback_promotion(release_environment):
+    environment, docker_log, _ = release_environment
+    environment.update(FAKE_STATE="existing", FAKE_FAIL="execution-guard")
+    result = _run_release(environment, "rollback")
+    assert result.returncode != 0
+    _assert_no_migration_or_service_mutation(_commands(docker_log))
+
+
+@pytest.mark.parametrize("seconds", ["0", "29", "901", "oops", "-1"])
+def test_invalid_drain_deadline_has_no_docker_effect(release_environment, seconds):
+    environment, docker_log, _ = release_environment
+    environment["PF_RELEASE_DRAIN_SECONDS"] = seconds
+    assert _run_release(environment).returncode != 0
+    assert _commands(docker_log) == []
+
+
+@pytest.mark.parametrize("counts", ["1|1|0|0|0", "0|1|0|0|0", "0|0|1|0|0", "0|0|0|1|0"])
+def test_waits_for_old_worker_to_drain_each_kind(release_environment, counts):
+    environment, docker_log, _ = release_environment
+    environment.update(FAKE_STATE="existing", FAKE_PENDING=counts, FAKE_DRAIN_ONCE="1")
+    result = _run_release(environment)
+    assert result.returncode == 0, result.stderr
+    assert sum("psql -X -q -A -t" in " ".join(c) for c in _commands(docker_log)) == 3
+
+
+def test_drain_deadline_retains_old_worker_and_stops_before_backup(release_environment):
+    environment, docker_log, _ = release_environment
+    environment.update(
+        FAKE_STATE="existing", FAKE_PENDING="0|1|0|0|0", PF_RELEASE_DRAIN_SECONDS="30"
+    )
+    result = _run_release(environment)
+    assert result.returncode != 0 and "drain deadline exceeded" in result.stderr
+    commands = _commands(docker_log)
+    _assert_no_migration_or_service_mutation(commands)
+    assert not any(c[:2] == ["compose", "stop"] and c[-1] == "worker" for c in commands)
+
+
+@pytest.mark.parametrize("worker_stopped", [False, True])
+def test_resume_stopped_services_requires_exact_previous_receipt(
+    release_environment, worker_stopped
+):
+    environment, docker_log, _ = release_environment
+    environment.update(FAKE_STATE="existing", FAKE_API_STOPPED="1")
+    if worker_stopped:
+        environment["FAKE_WORKER_STOPPED"] = "1"
+    result = _run_release(environment)
+    assert result.returncode != 0 and "no release cutover receipt" in result.stderr
+    _assert_no_migration_or_service_mutation(_commands(docker_log))
+    environment.pop("FAKE_API_STOPPED")
+    environment.pop("FAKE_WORKER_STOPPED", None)
+    environment["FAKE_FAIL"] = "migration"
+    assert _run_release(environment).returncode != 0
+    environment.update(FAKE_FAIL="", FAKE_API_STOPPED="1")
+    if worker_stopped:
+        environment["FAKE_WORKER_STOPPED"] = "1"
+    assert _run_release(environment).returncode == 0
+    receipt = Path(
+        environment["TMPDIR"], "pathfinder-release-pathfinder-release-contract.lock.cutover"
+    )
+    receipt.write_text("different-container-identity")
+    result = _run_release(environment)
+    assert result.returncode != 0 and "identity does not match" in result.stderr

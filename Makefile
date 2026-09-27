@@ -130,7 +130,7 @@ test-integration-core: verify-toolchain
 	fi
 	TMPDIR="$(PYTEST_TMPDIR)" $(UV) run --locked pytest tests/integration \
 		--deselect tests/integration/db/test_retrieval_benchmark.py::test_real_db_benchmark_pipeline_filters_accounting_and_determinism \
-		--deselect tests/integration/db/test_gate8_demo.py::test_gate8_demo_complete_application_flow
+		--deselect tests/integration/db/test_resume_demo.py::test_resume_demo_complete_flow
 
 test-integration: verify-toolchain
 	@if [ ! -d "$(PYTEST_TMPDIR)" ] || [ ! -w "$(PYTEST_TMPDIR)" ]; then \
@@ -187,6 +187,17 @@ evals-baseline-refresh: verify-toolchain-quiet
 	@$(UV) run --locked python -m tests.evals.baseline_refresh --reason "$(REASON)"
 
 demo: verify-toolchain
+	@if [ ! -d "$(PYTEST_TMPDIR)" ] || [ ! -w "$(PYTEST_TMPDIR)" ]; then \
+		printf 'error: pytest temporary directory is not writable: %s\n' \
+			"$(PYTEST_TMPDIR)" >&2; \
+		exit 1; \
+	fi
+	PF_LLM_MODE=fake PF_SEARCH_MODE=fake PF_AUTH_MODE=fake PF_TRACE_MODE=off \
+		TMPDIR="$(PYTEST_TMPDIR)" \
+		$(UV) run --locked pytest -q tests/integration/db/test_resume_demo.py::test_resume_demo_complete_flow
+
+.PHONY: demo-legacy
+demo-legacy: verify-toolchain
 	@if [ ! -d "$(PYTEST_TMPDIR)" ] || [ ! -w "$(PYTEST_TMPDIR)" ]; then \
 		printf 'error: pytest temporary directory is not writable: %s\n' \
 			"$(PYTEST_TMPDIR)" >&2; \

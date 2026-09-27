@@ -389,6 +389,12 @@ if service == "postgres" and "psql" in command and "--set" in command:
             value = json.dumps(parsed, sort_keys=True, separators=(",", ":"))
         emit(value)
     raise SystemExit(0)
+if service == "api" and command[3:5] == ["python", "-"]:
+    sys.stdin.read()
+    if failure == "resume-download":
+        raise SystemExit(1)
+    emit('{{"history_download":true,"confirmation":true,"versions":3}}')
+    raise SystemExit(0)
 if service == "api" and "readyz" in joined:
     raise SystemExit(1 if failure == "api-readiness" else 0)
 if service == "api" and "invalid initial SSE event sequence" in joined:
@@ -468,7 +474,7 @@ def rehearsal_environment(tmp_path: Path) -> tuple[dict[str, str], Path]:
 
 def _run_rehearsal(environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        (str(REHEARSAL_SCRIPT),),
+        (str(REHEARSAL_SCRIPT), "--profile", "legacy-gate85"),
         cwd=PROJECT_ROOT,
         env=environment,
         check=False,
@@ -649,7 +655,7 @@ def test_sigterm_during_restore_reports_stage_and_retains_resources(
     environment["FAKE_BLOCK"] = "pg-restore"
     environment["FAKE_NOTIFY"] = str(notify)
     process = subprocess.Popen(
-        (str(REHEARSAL_SCRIPT),),
+        (str(REHEARSAL_SCRIPT), "--profile", "legacy-gate85"),
         cwd=PROJECT_ROOT,
         env=environment,
         stdout=subprocess.PIPE,
@@ -739,3 +745,42 @@ def test_consistency_sql_is_read_only_and_omits_sensitive_bodies() -> None:
         "'result_sha256', encode(sha256(convert_to(run.result_json::text, 'UTF8')), 'hex')"
         in source
     )
+
+
+@pytest.mark.parametrize("failure", ["", "resume-download", "consistency-mismatch", "migration"])
+def test_default_resume_mode_preserves_transport_and_avoids_legacy_writes(
+    rehearsal_environment, failure
+):
+    environment, command_log = rehearsal_environment
+    environment["FAKE_FAIL"] = failure
+    result = subprocess.run(
+        (str(REHEARSAL_SCRIPT),),
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert (result.returncode == 0) is (failure == "")
+    records = _records(command_log)
+    assert not any("gate85-remote-staging-cleanup" in r["args"] for r in records)
+    assert not any("gate85-fixture-document" in r["args"] for r in records)
+    assert not any(r["tool"] == "docker" and "POST" in r["args"] for r in records)
+    if not failure:
+        manifest_path = next(Path(environment["PF_GATE85_BACKUP_DIR"]).glob("*.manifest.json"))
+        manifest = json.loads(manifest_path.read_text())
+        assert manifest["profile"] == "resume-r72"
+        assert manifest["resume_read_verification"]["downloads"]["history_download"]
+        assert manifest["new_revision_e2e"] == "CI_ONLY"
+
+
+def test_restore_unknown_profile_fails_before_external_commands(rehearsal_environment):
+    environment, command_log = rehearsal_environment
+    result = subprocess.run(
+        (str(REHEARSAL_SCRIPT), "--profile", "unknown"),
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert _records(command_log) == []

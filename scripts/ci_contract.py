@@ -153,7 +153,7 @@ RETRIEVAL_NODE = (
     "tests/integration/db/test_retrieval_benchmark.py::"
     "test_real_db_benchmark_pipeline_filters_accounting_and_determinism"
 )
-DEMO_NODE = "tests/integration/db/test_gate8_demo.py::test_gate8_demo_complete_application_flow"
+DEMO_NODE = "tests/integration/db/test_resume_demo.py::test_resume_demo_complete_flow"
 
 
 @dataclass(frozen=True)

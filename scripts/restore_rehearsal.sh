@@ -5,7 +5,19 @@ set -Eeuo pipefail
 umask 077
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-readonly CONSISTENCY_SQL="$REPOSITORY_ROOT/scripts/gate85_consistency.sql"
+PROFILE="resume-r72"
+if [[ "${1:-}" == "--profile" && $# == 2 ]]; then
+    PROFILE="$2"
+elif [[ $# != 0 ]]; then
+    printf 'usage: restore_rehearsal.sh [--profile resume-r72|legacy-gate85]\n' >&2
+    exit 2
+fi
+case "$PROFILE" in
+    resume-r72) CONSISTENCY_SQL="$REPOSITORY_ROOT/scripts/resume_restore_consistency.sql" ;;
+    legacy-gate85) CONSISTENCY_SQL="$REPOSITORY_ROOT/scripts/gate85_consistency.sql" ;;
+    *) printf 'unsupported restore profile\n' >&2; exit 2 ;;
+esac
+export PF_RESTORE_PROFILE="$PROFILE"
 readonly LOCK_ROOT="${TMPDIR:-/tmp}"
 
 stage="initialization"
@@ -54,11 +66,9 @@ fail() {
 }
 
 cleanup_lock() {
-    if [[ "$lock_acquired" -eq 1 && -n "$lock_directory" ]]; then
-        if [[ -f "$lock_directory/owner" ]]; then
-            rm -f -- "$lock_directory/owner"
-        fi
-        rmdir -- "$lock_directory" 2>/dev/null || true
+    if [[ "$lock_acquired" -eq 1 ]]; then
+        flock -u 9
+        exec 9>&-
         lock_acquired=0
     fi
 }
@@ -203,13 +213,13 @@ static_preflight() {
 acquire_lock() {
     stage="rehearsal-lock"
     lock_directory="${LOCK_ROOT%/}/pathfinder-gate85-${PF_GATE85_RESTORE_PROJECT}.lock"
-    if ! mkdir -- "$lock_directory" 2>/dev/null; then
+    require_command flock
+    [[ ! -L "$lock_directory" ]] || fail "rehearsal lock must not be a symlink"
+    exec 9>>"$lock_directory"
+    if ! flock -n 9; then
         fail "another Gate 8.5 rehearsal holds lock $lock_directory"
     fi
     lock_acquired=1
-    printf 'pid=%s\nsource_project=%s\nrestore_project=%s\nstarted_utc=%s\n' \
-        "$$" "$PF_GATE85_SOURCE_PROJECT" "$PF_GATE85_RESTORE_PROJECT" \
-        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$lock_directory/owner"
 }
 
 line_count() {
@@ -633,37 +643,8 @@ copy_dump_off_host() {
     log "off_host_copy=verified path=$backup_path bytes=$local_bytes sha256=$local_sha"
 }
 
-remove_remote_staging_copy() {
-    stage="remote-staging-cleanup"
-    if ! ssh -- "$PF_GATE85_SOURCE_SSH" sh -s -- \
-        gate85-remote-staging-cleanup "$remote_staging_directory" "$remote_dump_path" <<'REMOTE_CLEANUP'
-set -eu
-action="$1"
-staging_directory="$2"
-dump_path="$3"
-if [ "$action" != "gate85-remote-staging-cleanup" ]; then
-    exit 91
-fi
-case "$staging_directory" in
-    /tmp/pathfinder-gate85.[0-9a-f]*) ;;
-    *) exit 92 ;;
-esac
-case "$dump_path" in
-    "$staging_directory"/*-gate85.dump) ;;
-    *) exit 93 ;;
-esac
-if [ ! -f "$dump_path" ]; then
-    exit 94
-fi
-rm -- "$dump_path"
-rmdir -- "$staging_directory"
-REMOTE_CLEANUP
-    then
-        fail "verified off-host copy exists, but exact remote staging cleanup failed"
-    fi
-    log "remote_staging_cleanup=exact-script-created-artifact-only"
-    remote_staging_directory="removed-after-verified-copy"
-    remote_dump_path="removed-after-verified-copy"
+retain_remote_staging_copy() {
+    log "remote staging dump retained at $remote_dump_path"
 }
 
 start_restore_postgres() {
@@ -933,6 +914,26 @@ print(json.dumps({"decision":"approve","expected_version":int(sys.argv[1]),"reas
     log "restored_e2e_sse=$sse_result"
 }
 
+run_restored_resume_reads() {
+    stage="restored-resume-verification"
+    local expected
+    expected="$(cat "$work_directory/source-a.json")"
+    if ! compose exec -T api python - "$expected" \
+        <"$REPOSITORY_ROOT/scripts/resume_restore_verify.py" \
+        >"$work_directory/restored-e2e-sse.json"; then
+        fail "restored resume identity, confirmation or historical download failed"
+    fi
+    # Startup and reads must not change restored business records or invocation accounting.
+    if ! target_snapshot "$PF_GATE85_FIXTURE_RUN_ID" "$fixture_document_id" \
+        >"$work_directory/restored-e2e.json"; then
+        fail "post-read snapshot failed"
+    fi
+    cmp --silent "$work_directory/source-a.json" "$work_directory/restored-e2e.json" \
+        || fail "restored startup or read changed persisted records"
+    restored_e2e_run_id="$PF_GATE85_FIXTURE_RUN_ID"
+    log "resume_history_download=passed confirmation=passed persisted_records=unchanged"
+}
+
 collect_restore_resources() {
     local kind="$1"
     case "$kind" in
@@ -968,6 +969,7 @@ write_manifest() {
     if ! python3 -c '
 import json
 import sys
+import os
 from pathlib import Path
 
 (
@@ -1051,6 +1053,12 @@ manifest = {
     },
     "destructive_cleanup": "NOT PERFORMED",
 }
+manifest["profile"] = os.environ["PF_RESTORE_PROFILE"]
+if manifest["profile"] == "resume-r72":
+    manifest["source_fixture"].pop("document_id")
+    manifest["resume_read_verification"] = manifest.pop("restored_fake_e2e")
+    manifest["resume_read_verification"]["downloads"] = manifest["resume_read_verification"].pop("sse")
+    manifest["new_revision_e2e"] = "CI_ONLY"
 Path(manifest_path).write_text(
     json.dumps(manifest, indent=2, sort_keys=True) + "\n",
     encoding="utf-8",
@@ -1113,13 +1121,17 @@ main() {
     remote_deployment_preflight
     local_restore_absence_preflight
     build_and_validate_candidate
-    discover_fixture_document
+    if [[ "$PROFILE" == "legacy-gate85" ]]; then
+        discover_fixture_document
+    else
+        fixture_document_id="not-applicable"
+    fi
     backup_started="$(date +%s%N)"
     capture_source_snapshot_a
     remote_create_dump
     capture_and_compare_source_snapshot_b
     copy_dump_off_host
-    remove_remote_staging_copy
+    retain_remote_staging_copy
     backup_finished="$(date +%s%N)"
     restore_started="$backup_finished"
     start_restore_postgres
@@ -1127,7 +1139,11 @@ main() {
     migrate_restored_database
     compare_restored_snapshot
     start_restored_api_and_worker
-    run_restored_fake_e2e
+    if [[ "$PROFILE" == "legacy-gate85" ]]; then
+        run_restored_fake_e2e
+    else
+        run_restored_resume_reads
+    fi
     restore_finished="$(date +%s%N)"
     stop_restore_services_without_destroying
     containers="$(collect_restore_resources containers)"
@@ -1141,7 +1157,11 @@ main() {
     write_manifest "$completed_utc" "$backup_seconds" "$restore_seconds" "$total_seconds" \
         "$containers" "$volumes" "$networks"
     stage="success"
-    log "Gate 8.5 validation: PASS"
+    if [[ "$PROFILE" == "legacy-gate85" ]]; then
+        log "Gate 8.5 validation: PASS"
+    else
+        log "R7.2 isolated resume restore: PASS"
+    fi
     log "restore_project=$PF_GATE85_RESTORE_PROJECT"
     log "restore_containers=$(printf '%s' "$containers" | tr '\n' ',')"
     log "restore_volumes=$(printf '%s' "$volumes" | tr '\n' ',')"

@@ -42,6 +42,36 @@ APPLIED_MIGRATION_HASHES = {
     "0015_e3_run_request_identity.py": (
         "5582d4480f0f138959f7178a1cae2b67a672a82f5392d16edd2f7bba4af30d7a"
     ),
+    "0016_r1_execution_contracts.py": (
+        "d79b5683f2e8fe50e969727eeea168749dbea39505c8ef427a20f95d601eed9f"
+    ),
+    "0017_r12_resume_commands.py": (
+        "c5907cb01a365e99bcdaaa17a8fd93049e40e14ae52956b84b56da4071403d04"
+    ),
+    "0018_r21_material_snapshots.py": (
+        "c8533f58a091f74ed88f744192ca906c50da96b5251096caabe98d5fe6f13555"
+    ),
+    "0019_r21_material_line_ranges.py": (
+        "5d8b97d2d25ad9fcd87e09492b61bb7dd7fba22f79e52684682fc502618aab62"
+    ),
+    "0020_r22_project_facts.py": (
+        "87e9aa9d16ca083e062be32f5c70e01f107979b3b129d6eecd37b90a32c73e15"
+    ),
+    "0021_r31_resume_profiles.py": (
+        "7392b9f091a91b26332830929726aef53267ddb6d82794349d79311cc8805df7"
+    ),
+    "0022_r32_resume_tex_artifacts.py": (
+        "b4ef8e6b1ec4d9e568c1560cf0fecbf9132b8f2bd3185da175dcc60991f1feea"
+    ),
+    "0023_r41_resume_generation.py": (
+        "51d162e500174263aebcc3e79d31036a32af66dec2c455648a77f5b66145bf76"
+    ),
+    "0024_r51_resume_revision.py": (
+        "7ff93d627a67e00d3b911a4599379250ae43a4ce0ec13e6630f9c9d21ad889ba"
+    ),
+    "0025_r52_resume_confirmations.py": (
+        "461e8249cc6fa675bb60a96b0dbd6d7c4bcc1f3f1b6faa992d382b1af5ea6fbb"
+    ),
 }
 
 
