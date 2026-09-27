@@ -241,14 +241,14 @@ def main(argv=None):
         stages = {"materials", "facts", "profile", "report"} | {
             f"{c.case_id}-{s}"
             for c in inputs.cases
-            for s in ("draft", "round1", "round2", "confirm")
+            for s in ("draft", *(f"round{i}" for i in range(1, 10)), "confirm")
         }
         require(
             args.stage in stages
             or re.fullmatch(r"materials-retry-[0-9]{3}", args.stage)
             or any(
                 re.fullmatch(
-                    re.escape(c.case_id) + r"-(?:system|round[12])-retry-[0-9]{3}", args.stage
+                    re.escape(c.case_id) + r"-(?:system|round[1-9])-retry-[0-9]{3}", args.stage
                 )
                 for c in inputs.cases
             ),

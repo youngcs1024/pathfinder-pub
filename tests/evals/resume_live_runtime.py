@@ -510,9 +510,25 @@ async def revise(rig, case, ordinal, *, retry_stage=None):
     }
 
 
+def reviewed_final_ordinal(root, case_id, approved):
+    ordinal = approved.get("final_ordinal", 2)
+    require(type(ordinal) is int and 2 <= ordinal <= 9, "invalid_final_ordinal")
+    present = {p.name for p in root.glob(f"{case_id}-system-*.json")}
+    expected = {f"{case_id}-system-{i}.json" for i in range(ordinal + 1)}
+    # Compilation/audit receipts have suffixes; only bare snapshot names count.
+    snapshots = {
+        name
+        for name in present
+        if name.removeprefix(f"{case_id}-system-").removesuffix(".json").isdigit()
+    }
+    require(snapshots == expected, "final_history_incomplete_or_stale")
+    return ordinal
+
+
 async def confirm(rig, case):
     approved = review(rig, f"{case.case_id}-final-review.json", "final")
-    final = read_private_json(rig.root / f"{case.case_id}-system-2.json")
+    ordinal = reviewed_final_ordinal(rig.root, case.case_id, approved)
+    final = read_private_json(rig.root / f"{case.case_id}-system-{ordinal}.json")
     rubric = read_private_json(rig.root / f"{case.case_id}-frozen-rubric.json")
     final_coverage = assessed_coverage(rubric["requirements"], approved["final_quality"])
     require(
@@ -557,8 +573,8 @@ async def confirm(rig, case):
     await store.confirm(
         rig.tenant, sid, request.version_id, request, key(rig, f"{case.case_id}-confirm")
     )
-    for ordinal in range(3):
-        prior = read_private_json(rig.root / f"{case.case_id}-system-{ordinal}.json")
+    for historical_ordinal in range(ordinal + 1):
+        prior = read_private_json(rig.root / f"{case.case_id}-system-{historical_ordinal}.json")
         data = await store.download(rig.tenant, sid, UUID(prior["version_id"]))
         require(
             data[0] == prior["tex"].encode() and data[1] == prior["tex_sha256"], "history_changed"
@@ -674,7 +690,14 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
                     },
                     "draft": read_private_json(root / f"{name}-draft-done.json"),
                     "revision_rounds": [
-                        read_private_json(root / f"{name}-round{i}-done.json") for i in (1, 2)
+                        read_private_json(root / f"{name}-round{i}-done.json")
+                        for i in range(
+                            1,
+                            reviewed_final_ordinal(
+                                root, name, read_private_json(root / f"{name}-final-review.json")
+                            )
+                            + 1,
+                        )
                     ],
                     "final_quality": read_private_json(root / f"{name}-final-review.json"),
                     "b0_b1_finalization_cost": "NOT_MEASURED",
@@ -703,7 +726,7 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
             case = next(c for c in inputs.cases if c.case_id == case_id)
             if operation == "draft":
                 result = await draft(rig, case)
-            elif operation in {"round1", "round2"}:
+            elif operation in {f"round{i}" for i in range(1, 10)}:
                 result = await revise(rig, case, int(operation[-1]))
             else:
                 result = await confirm(rig, case)

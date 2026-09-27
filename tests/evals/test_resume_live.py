@@ -427,3 +427,17 @@ async def test_revision_recovery_rejects_changed_ledger_or_active_run(tmp_path, 
         AcceptanceError, match="retry_ledger_changed" if mismatch else "revision_still_running"
     ):
         await revise(rig, SimpleNamespace(case_id="case"), 2, retry_stage="case-round2-retry-001")
+
+
+def test_additional_round_final_requires_contiguous_current_history(tmp_path):
+    from tests.evals.resume_live_runtime import reviewed_final_ordinal
+
+    for ordinal in range(4):
+        publish(tmp_path / f"case-system-{ordinal}.json", {"version": ordinal})
+    assert reviewed_final_ordinal(tmp_path, "case", {"final_ordinal": 3}) == 3
+    with pytest.raises(AcceptanceError, match="final_history_incomplete_or_stale"):
+        reviewed_final_ordinal(tmp_path, "case", {"final_ordinal": 2})
+    with pytest.raises(AcceptanceError, match="final_history_incomplete_or_stale"):
+        reviewed_final_ordinal(tmp_path, "case", {"final_ordinal": 4})
+    with pytest.raises(AcceptanceError, match="invalid_final_ordinal"):
+        reviewed_final_ordinal(tmp_path, "case", {"final_ordinal": True})
