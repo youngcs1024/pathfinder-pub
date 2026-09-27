@@ -100,6 +100,7 @@ class Requirement(EvalContractModel):
     applicable: bool
     support: Literal["full", "partial", "unsupported", "insufficient"]
     fact_version_ids: tuple[str, ...]
+    profile_item_ids: tuple[str, ...] = ()
     necessary_conditions: tuple[str, ...]
     rationale: str = Field(min_length=1)
 
@@ -130,18 +131,28 @@ def normalize_json(raw):
     return value
 
 
-def checked_annotation(value, case, facts):
+def checked_annotation(value, case, facts, profile=None):
     result = Annotation.model_validate_json(json.dumps(value))
     ids = [r.requirement_id for r in result.requirements]
     require(len(ids) == len(set(ids)), "duplicate_requirement")
     known = {f["version_id"] for f in facts}
+    profile_ids = {
+        item["id"] for kind in ("education", "skills") for item in (profile or {}).get(kind, [])
+    }
     for row in result.requirements:
         # Unique exact quotes can have offsets deterministically located; never fuzzy match.
         require(case.jd[row.start : row.end] == row.quote, "invalid_requirement_quote")
         require(set(row.fact_version_ids) <= known, "unknown_fact")
+        require(set(row.profile_item_ids) <= profile_ids, "unknown_profile_item")
         require(len(set(row.fact_version_ids)) == len(row.fact_version_ids), "duplicate_fact")
-        require(row.support not in {"full", "partial"} or row.fact_version_ids, "support_missing")
-        require(row.support != "unsupported" or not row.fact_version_ids, "unsupported_has_facts")
+        require(
+            row.support not in {"full", "partial"} or row.fact_version_ids or row.profile_item_ids,
+            "support_missing",
+        )
+        require(
+            row.support != "unsupported" or not (row.fact_version_ids or row.profile_item_ids),
+            "unsupported_has_facts",
+        )
     return result
 
 

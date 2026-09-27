@@ -31,6 +31,7 @@ from tests.evals.resume_experiment_scoring import (
     annotation_payload,
     blind_packets,
     checked_assessment,
+    profile_evidence,
     score_metrics,
 )
 from tests.evals.resume_live_environment import ResumableDatabase
@@ -140,18 +141,19 @@ async def invoke_stage(root, *, stage, task, payload, model, recorder, binding):
 async def prepare_annotations(root, inputs, model, recorder, facts):
     from tests.evals.resume_experiments import preserve
 
+    profile = profile_evidence(read_private_json(root / "inputs" / inputs.profile_file))
     for case in inputs.cases:
         stage = f"annotation-{case.case_id}"
         value = await invoke_stage(
             root,
             stage=stage,
             task="annotate",
-            payload=annotation_payload(case, facts),
+            payload=annotation_payload(case, facts, profile),
             model=model,
             recorder=recorder,
             binding=inputs.digest,
         )
-        annotation = checked_annotation(locate_annotation(value, case), case, facts)
+        annotation = checked_annotation(locate_annotation(value, case), case, facts, profile)
         preserve(root / f"{stage}.json", annotation.model_dump(mode="json"))
     smoke_facts, annotation, packets, mapping = smoke_inputs()
     scores = {}
@@ -264,7 +266,7 @@ async def execute_database(root, inputs, url, credentials_path, *, audit_only=Fa
         await engine.dispose()
 
 
-def validate_reviews(root, inputs, facts):
+def validate_reviews(root, inputs, facts, profile=None):
     frozen = {}
     for case in inputs.cases:
         original = read_private_json(root / f"annotation-{case.case_id}.json")
@@ -280,7 +282,7 @@ def validate_reviews(root, inputs, facts):
             and bool(review["rationale"]),
             "review_required",
         )
-        final = checked_annotation(review.get("final_annotation", original), case, facts)
+        final = checked_annotation(review.get("final_annotation", original), case, facts, profile)
         require(
             set(review["reviewed_requirement_ids"])
             == {r.requirement_id for r in final.requirements},

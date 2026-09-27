@@ -341,3 +341,25 @@ def test_agent_review_binds_original_annotation_and_every_requirement(tmp_path):
     inputs.digest = "changed"
     with pytest.raises(AcceptanceError, match="binding"):
         validate_reviews(tmp_path, inputs, facts)
+
+
+def test_reviewed_profile_is_self_report_not_new_project_facts():
+    from tests.evals.resume_experiment_scoring import annotation_payload, profile_evidence
+
+    _, _, original, _, _ = _inputs()
+    snapshot = {
+        "content": original.profile_content.model_dump(mode="json"),
+        "version_id": str(uuid4()),
+    }
+    profile = profile_evidence(snapshot)
+    assert profile["source_kind"] == "user_reported"
+    assert "projects" not in profile and "contact" not in profile and "display_name" not in profile
+    assert "canary@example.test" not in json.dumps(profile)
+    facts, annotation, _, _ = smoke_inputs()
+    case = SimpleNamespace(jd="要求:实现分页查询。")
+    payload = annotation_payload(case, facts, profile)
+    assert payload["facts"] == facts and payload["reviewed_profile"] == profile
+    value = annotation.model_dump(mode="json")
+    value["requirements"][0]["profile_item_ids"] = ["not_a_profile_item"]
+    with pytest.raises(AcceptanceError, match="unknown_profile_item"):
+        checked_annotation(value, case, facts, profile)

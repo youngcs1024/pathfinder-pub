@@ -129,3 +129,49 @@ async def test_authoritative_ledger_missing_attempt_is_not_reset(ledger):
     resumed = ExperimentRecorder(sessions, tenant, **kwargs)
     with pytest.raises(AcceptanceError, match="ledger_attempt_mismatch"):
         await resumed.initialize()
+
+
+async def test_factory_timeout_is_counted_and_stops_retry(ledger):
+    from app.llm.factory import LLMAccountingError, LLMFactory
+    from app.llm.invocations import LLMInvocationContext
+    from app.llm.ports import LOCKED_EMBEDDING_MODEL, ChatMessage, ProviderAdapterError
+
+    sessions, tenant, kwargs, recorder = ledger
+
+    class TimeoutChat:
+        provider = "qwen"
+        model = LOCKED_CHAT_MODEL
+        calls = 0
+
+        async def invoke(self, messages, tools, metadata, *, attempt):
+            self.calls += 1
+            raise ProviderAdapterError(category="provider_timeout", retryable=True)
+
+    class UnusedEmbedding:
+        provider = "qwen"
+        model = LOCKED_EMBEDDING_MODEL
+
+        async def embed(self, texts, metadata, *, attempt):
+            pytest.fail("no embedding requested")
+
+    adapter = TimeoutChat()
+    factory = LLMFactory(
+        recorder=recorder,
+        chat_adapter=adapter,
+        embedding_adapter=UnusedEmbedding(),
+        provider="qwen",
+    )
+    model = factory.create_chat_model(
+        LLMInvocationContext(tenant.workspace_id, tenant.actor_user_id)
+    )
+    with pytest.raises(LLMAccountingError):
+        await model.invoke(
+            (ChatMessage(role="user", content="Synthetic request"),),
+            (),
+            {"graph_node": "annotate", "prompt_version": "sha256:" + "a" * 64},
+        )
+    assert adapter.calls == 1
+    resumed = ExperimentRecorder(sessions, tenant, **kwargs)
+    await resumed.initialize()
+    measured = await resumed.measurement()
+    assert measured["attempts"] == measured["unknown_cost"] == measured["unknown_usage"] == 1

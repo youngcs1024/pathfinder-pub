@@ -21,7 +21,7 @@ from tests.evals.product_acceptance_environment import IMAGE, docker
 from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.quality_experiment_binding import ROOT, file_inventory, git, no_links
 from tests.evals.resume_experiment_contracts import MINIMUM, PLANNED, Inputs
-from tests.evals.resume_experiment_scoring import PROMPT_DIGESTS
+from tests.evals.resume_experiment_scoring import PROMPT_DIGESTS, profile_evidence
 
 
 def preserve(path, value):
@@ -111,7 +111,8 @@ def freeze(root, usage):
         "accounting_incomplete",
     )
     facts = read_private_json(root / "inputs" / inputs.facts_file)["facts"]
-    annotations = validate_reviews(root, inputs, facts)
+    profile = profile_evidence(read_private_json(root / "inputs" / inputs.profile_file))
+    annotations = validate_reviews(root, inputs, facts, profile)
     result = {
         "status": "PREPARATION_FROZEN",
         "input_digest": inputs.digest,
