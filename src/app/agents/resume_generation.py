@@ -362,7 +362,8 @@ class ResumeGenerationGraph:
                 analysis,
                 correction=(
                     "Some selected facts were invalid, planned, unreviewed, outside the "
-                    "project, changed an experiment condition, or had empty/out-of-range requirement "
+                    "project, changed an experiment condition, or had empty/out-of-range "
+                    "requirement "
                     "indexes. Use nonempty zero-based requirement_ordinals for supported bullets; "
                     "omit unrelated facts. Return only supported selections."
                 ),
