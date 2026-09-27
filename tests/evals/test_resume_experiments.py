@@ -262,3 +262,82 @@ async def test_replay_and_interrupted_stage_never_call_provider(tmp_path):
 def test_future_experiment_entrypoints_are_absent(tmp_path):
     with pytest.raises(SystemExit):
         main(["run-d", "--root", str(tmp_path)])
+
+
+def test_private_input_tampering_is_rejected_before_provider(tmp_path):
+    from tests.evals.quality_experiment_binding import file_inventory
+    from tests.evals.resume_experiments import load_inputs
+
+    tmp_path.chmod(0o700)
+    material = tmp_path / "inputs"
+    material.mkdir(mode=0o700)
+    source, _, original, _, _ = _inputs()
+    data = input_dict(tmp_path)
+    for case in data["cases"]:
+        for name, body in (
+            (case["raw_file"], "<html>synthetic</html>"),
+            (case["body_file"], case["jd"]),
+        ):
+            path = material / name
+            path.write_text(body)
+            path.chmod(0o600)
+    (material / "resume.tex").write_bytes(source)
+    (material / "resume.tex").chmod(0o600)
+    (material / "evidence.txt").write_text("verified fact\n")
+    (material / "evidence.txt").chmod(0o600)
+    publish(
+        material / "facts.json",
+        {
+            "facts": [
+                {
+                    "version_id": "fact_version",
+                    "review_status": "confirmed",
+                    "claim": "verified fact",
+                    "evidence": [
+                        {
+                            "path": "evidence.txt",
+                            "start_line": 1,
+                            "end_line": 1,
+                            "quote": "verified fact",
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    publish(
+        material / "profile.json", {"content": original.profile_content.model_dump(mode="json")}
+    )
+    data["files"] = file_inventory(material, [*data["files"], "evidence.txt"])
+    publish(tmp_path / "inputs.json", data)
+    assert load_inputs(tmp_path).digest
+    (material / "evidence.txt").write_text("changed\n")
+    with pytest.raises(AcceptanceError, match="inputs_changed"):
+        load_inputs(tmp_path)
+
+
+def test_agent_review_binds_original_annotation_and_every_requirement(tmp_path):
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_experiment_runtime import validate_reviews
+
+    tmp_path.chmod(0o700)
+    facts, annotation, _, _ = smoke_inputs()
+    case = SimpleNamespace(case_id="synthetic", jd="要求:实现分页查询。")
+    inputs = SimpleNamespace(cases=(case,), digest="binding")
+    value = annotation.model_dump(mode="json")
+    publish(tmp_path / "annotation-synthetic.json", value)
+    publish(
+        tmp_path / "review-synthetic.json",
+        {
+            "binding": "binding",
+            "annotation_digest": quality_identity_digest(value),
+            "review_kind": "AGENT_ASSESSED",
+            "approved": True,
+            "rationale": "reviewed source",
+            "reviewed_requirement_ids": ["pagination"],
+        },
+    )
+    assert "synthetic" in validate_reviews(tmp_path, inputs, facts)
+    inputs.digest = "changed"
+    with pytest.raises(AcceptanceError, match="binding"):
+        validate_reviews(tmp_path, inputs, facts)
