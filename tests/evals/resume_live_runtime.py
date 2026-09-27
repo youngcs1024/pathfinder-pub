@@ -44,16 +44,16 @@ from app.worker.dispatcher import RunExecutorDispatcher
 from app.worker.material_executor import MaterialRunExecutor
 from app.worker.runner import WorkerRunner
 from app.worker.settings import WorkerRuntimeSettings
-from tests.evals.product_acceptance_budget import admit, summarize
+from tests.evals.product_acceptance_budget import summarize
 from tests.evals.product_acceptance_contracts import publish, read_private_json, require
 from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.quality_pilot import credentials
 from tests.evals.resume_live_baseline import one_shot_live
+from tests.evals.resume_live_budget import LiveComparisonRecorder
 from tests.evals.resume_live_contracts import assessed_coverage, require_review, validate_rubric
 from tests.evals.resume_live_material import MATERIAL_PROMPT_VERSION, LiveMaterialModel
 from tests.evals.resume_live_recording import RecordingFactory
 from tests.evals.resume_quality_baseline import BaselineOutputError, common_input
-from tests.evals.resume_quality_budget import ComparisonRecorder
 from tests.evals.resume_quality_runtime import snapshot, usage_delta, worker
 
 
@@ -339,7 +339,7 @@ async def draft(rig, case):
         b1_status = "PARSE_FAILED"
     b1_usage = usage_delta(before, await rig.recorder.measurement())
     preserve(rig.root / f"{case.case_id}-b1-usage.json", b1_usage)
-    admit(await rig.recorder.usage(), rig.inputs.budget)
+    await rig.recorder.check_admission()
     before = await rig.recorder.measurement()
     require(await worker(rig, rig.factory).run_once(asyncio.Event()), "worker_idle")
     # Persist status even when the business run cannot publish a version.
@@ -374,7 +374,7 @@ async def retry_system(rig, case, stage):
         approved["ledger_digest"] == quality_identity_digest(await rig.recorder.measurement()),
         "retry_ledger_changed",
     )
-    admit(await rig.recorder.usage(), rig.inputs.budget)
+    await rig.recorder.check_admission()
     require(not (rig.root / f"{case.case_id}-system-0.json").exists(), "system_draft_exists")
     old_sid = UUID(read_private_json(rig.root / f"{case.case_id}-session.json")["session_id"])
     old = await rig.store.get_session(rig.tenant, old_sid)
@@ -465,7 +465,7 @@ async def revise(rig, case, ordinal, *, retry_stage=None):
         require(
             not (rig.root / f"{case.case_id}-system-{ordinal}.json").exists(), "round_published"
         )
-        admit(await rig.recorder.usage(), rig.inputs.budget)
+        await rig.recorder.check_admission()
     if ordinal == 2:
         lock_id = UUID(approved["lock_item_id"])
         await rig.revisions.command(
@@ -604,8 +604,8 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
         tenant = await TenantService(SqlAlchemyTenantResolver(sessions)).resolve_tenant(
             workspace_id=identity.workspace_id, actor_user_id=identity.user_id
         )
-        recorder = ComparisonRecorder(
-            sessions, tenant, provider="qwen", budget=inputs.budget, source_check=source_check
+        recorder = LiveComparisonRecorder(
+            sessions, tenant, root=root, inputs=inputs, source_check=source_check
         )
         if (root / "materials-recovery-started.json").exists() and stage == "materials":
             require((await recorder.usage())["attempts"] == 0, "nonempty_ledger_recovery_rejected")
@@ -617,7 +617,7 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
                 approved["ledger_digest"] == quality_identity_digest(await recorder.measurement()),
                 "recovery_ledger_changed",
             )
-            admit(await recorder.usage(), inputs.budget)
+            await recorder.check_admission()
         # Read-only/fact-review stages can still preserve reports after budget exhaustion.
         values = credentials(credentials_path)
         bundle = create_qwen_adapters(
@@ -664,7 +664,7 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
                     "retry_ledger_changed",
                 )
                 require(not (root / "materials-done.json").exists(), "materials_already_completed")
-                admit(await recorder.usage(), inputs.budget)
+                await recorder.check_admission()
                 rig.material_output = root / stage
                 rig.material_output.mkdir(mode=0o700)
             result = await materials(rig)

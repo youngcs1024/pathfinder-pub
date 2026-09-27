@@ -158,3 +158,95 @@ async def test_recreated_live_recorder_keeps_original_attempt_ledger(
             admit(await live.usage(), live.budget)
     finally:
         await engine.dispose()
+
+
+async def test_live_timeout_reservation_survives_database_recorder_restart(
+    migrated_database_url, tmp_path
+):
+    from decimal import Decimal
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.db.llm_invocations import SqlAlchemyInvocationRecorder
+    from app.db.provisioning import SqlAlchemyProvisioningStore
+    from app.db.tenancy import SqlAlchemyTenantResolver
+    from app.domain.provisioning import ProvisioningService
+    from app.domain.tenancy import TenantService
+    from app.llm.invocations import LOCKED_CHAT_MODEL, LLMInvocationAttempt, LLMInvocationOutcome
+    from tests.evals.product_acceptance_contracts import AcceptanceError, publish
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_live_budget import (
+        AUTH_FILE,
+        PIN_FILE,
+        LiveComparisonRecorder,
+        ledger_identity,
+    )
+
+    engine = create_database_engine(SecretStr(migrated_database_url))
+    try:
+        sessions = create_session_factory(engine)
+        actor = await ProvisioningService(
+            SqlAlchemyProvisioningStore(sessions)
+        ).provision_personal_workspace(f"r71-timeout-test-{uuid4()}")
+        tenant = await TenantService(SqlAlchemyTenantResolver(sessions)).resolve_tenant(
+            workspace_id=actor.workspace_id, actor_user_id=actor.user_id
+        )
+        inputs = SimpleNamespace(
+            digest="synthetic-binding",
+            allocation_id=uuid4(),
+            execution_root=str(tmp_path),
+            budget=ComparisonBudget(cost_admission_budget_cny=Decimal("2")),
+        )
+        recorder = LiveComparisonRecorder(sessions, tenant, root=tmp_path, inputs=inputs)
+        attempt = LLMInvocationAttempt(
+            invocation_id=uuid4(),
+            workspace_id=tenant.workspace_id,
+            actor_user_id=tenant.actor_user_id,
+            invocation_kind="chat",
+            provider="qwen",
+            model=LOCKED_CHAT_MODEL,
+            graph_node="revise",
+            prompt_version="sha256:" + "a" * 64,
+            request_hash="sha256:" + "b" * 64,
+        )
+        delegate = SqlAlchemyInvocationRecorder(sessions)
+        await delegate.prepare(attempt)
+        outcome = LLMInvocationOutcome(
+            status="failed", latency_ms=120000, error_category="provider_timeout"
+        )
+        await delegate.finalize(attempt, outcome)
+        with pytest.raises(AcceptanceError, match="unknown_usage_or_cost"):
+            await recorder.check_admission()
+        rows = await recorder.rows()
+        anchor = [ledger_identity(r) for r in rows]
+        auth = dict(
+            kind="r71_timeout_recovery_v1",
+            approved_by="user_explicit_r71_timeout_reservation",
+            authorization_digest=inputs.digest,
+            allocation_id=str(inputs.allocation_id),
+            execution_root=str(tmp_path),
+            workspace_id=str(tenant.workspace_id),
+            actor_user_id=str(tenant.actor_user_id),
+            budget=inputs.budget.model_dump(mode="json"),
+            reserve_per_timeout_cny="1",
+            future_timeouts_allowed=True,
+            ledger_anchor=anchor,
+        )
+        publish(tmp_path / AUTH_FILE, auth)
+        publish(tmp_path / PIN_FILE, {"authorization_file_digest": quality_identity_digest(auth)})
+        await recorder.check_admission()
+        resumed = LiveComparisonRecorder(sessions, tenant, root=tmp_path, inputs=inputs)
+        assert await resumed.measurement() == await recorder.measurement()
+        second = attempt.model_copy(update={"invocation_id": uuid4()})
+        await resumed.prepare(second)
+        await resumed.finalize(second, outcome)
+        latest = LiveComparisonRecorder(sessions, tenant, root=tmp_path, inputs=inputs)
+        measured = await latest.measurement()
+        assert measured["attempts"] == measured["unknown_cost"] == 2
+        assert measured["timeout_reservation"]["reserved_timeout_cost_cny"] == "2"
+        assert ledger_identity((await latest.rows())[0]) == anchor[0]
+        with pytest.raises(AcceptanceError, match="budget_exhausted"):
+            await latest.prepare(attempt.model_copy(update={"invocation_id": uuid4()}))
+        assert len(await latest.rows()) == 2
+    finally:
+        await engine.dispose()
