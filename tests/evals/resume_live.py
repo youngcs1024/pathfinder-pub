@@ -193,6 +193,17 @@ async def execute(root, stage, credentials_path):
                 **result,
             },
         )
+    if "-round" in stage and "-retry-" in stage:
+        base = stage.split("-retry-", 1)[0]
+        publish(
+            root / f"{base}-done.json",
+            {
+                "authorization_digest": inputs.digest,
+                "source_sha": source_sha,
+                "recovered_stage": stage,
+                **result,
+            },
+        )
     return result
 
 
@@ -236,7 +247,9 @@ def main(argv=None):
             args.stage in stages
             or re.fullmatch(r"materials-retry-[0-9]{3}", args.stage)
             or any(
-                re.fullmatch(re.escape(c.case_id) + r"-system-retry-[0-9]{3}", args.stage)
+                re.fullmatch(
+                    re.escape(c.case_id) + r"-(?:system|round[12])-retry-[0-9]{3}", args.stage
+                )
                 for c in inputs.cases
             ),
             "invalid_stage",

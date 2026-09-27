@@ -435,8 +435,8 @@ async def retry_system(rig, case, stage):
     }
 
 
-async def revise(rig, case, ordinal):
-    name = f"{case.case_id}-round{ordinal}"
+async def revise(rig, case, ordinal, *, retry_stage=None):
+    name = retry_stage or f"{case.case_id}-round{ordinal}"
     approved = review(rig, f"{name}-review.json", "revision")
     sid = UUID(read_private_json(rig.root / f"{case.case_id}-draft-done.json")["session_id"])
     previous = read_private_json(rig.root / f"{case.case_id}-system-{ordinal - 1}.json")
@@ -455,6 +455,17 @@ async def revise(rig, case, ordinal):
             assessed_coverage(rubric["requirements"], approved["initial_quality"][arm])
     detail = await rig.store.get_session(rig.tenant, sid)
     require(str(detail["current_version_id"]) == previous["version_id"], "revision_base_changed")
+    if retry_stage:
+        require(
+            approved["ledger_digest"] == quality_identity_digest(await rig.recorder.measurement()),
+            "retry_ledger_changed",
+        )
+        require(detail["run_status"] in {"completed", "failed"}, "revision_still_running")
+        require(not (rig.root / f"{case.case_id}-round{ordinal}-done.json").exists(), "round_done")
+        require(
+            not (rig.root / f"{case.case_id}-system-{ordinal}.json").exists(), "round_published"
+        )
+        admit(await rig.recorder.usage(), rig.inputs.budget)
     if ordinal == 2:
         lock_id = UUID(approved["lock_item_id"])
         await rig.revisions.command(
@@ -482,7 +493,16 @@ async def revise(rig, case, ordinal):
     revised = await snapshot(rig, sid)
     require(revised["version_id"] != previous["version_id"], "revision_not_published")
     save(rig.root / f"{case.case_id}-system-{ordinal}.json", revised)
+    failed_ids = set()
+    if retry_stage:
+        for path in rig.root.glob(f"{case.case_id}-round{ordinal}*session.json"):
+            run_id = read_private_json(path).get("run_id")
+            if run_id and str(run_id) != str(revised["run_id"]):
+                failed_ids.add(UUID(run_id))
     return {
+        "prior_failed_revision_usage": row_usage(
+            [row for row in await rig.recorder.rows() if row.run_id in failed_ids]
+        ),
         "version_id": revised["version_id"],
         "revision_usage": usage_delta(before, await rig.recorder.measurement()),
         "review_digest": quality_identity_digest(approved),
@@ -669,6 +689,11 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
                 "usage": await recorder.measurement(),
             }
             save(root / "report.json", result)
+        elif "-round" in stage and "-retry-" in stage:
+            base = stage.split("-retry-", 1)[0]
+            case_id, operation = base.rsplit("-", 1)
+            case = next(c for c in inputs.cases if c.case_id == case_id)
+            result = await revise(rig, case, int(operation[-1]), retry_stage=stage)
         elif "-system-retry-" in stage:
             case_id = stage.split("-system-retry-", 1)[0]
             case = next(c for c in inputs.cases if c.case_id == case_id)

@@ -380,3 +380,50 @@ async def test_delegated_fact_correction_uses_versioned_business_commands(tmp_pa
     assert [c["kind"] for c in calls] == ["material_fact_revise", "material_fact_review"]
     assert [c["expected_version"] for c in calls] == [1, 2]
     assert calls[-1]["attested"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mismatch", [True, False])
+async def test_revision_recovery_rejects_changed_ledger_or_active_run(tmp_path, mismatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_live_runtime import revise
+
+    version, sid = str(uuid4()), str(uuid4())
+    ledger = {"attempts": 3}
+    publish(tmp_path / "case-draft-done.json", {"session_id": sid})
+    publish(tmp_path / "case-system-1.json", {"version_id": version, "tex_sha256": "digest"})
+    publish(
+        tmp_path / "case-round2-retry-001-review.json",
+        {
+            "reviewer": "codex_agent_delegated",
+            "authorization_digest": "binding",
+            "kind": "revision",
+            "rationale": "synthetic recovery",
+            "base_version_id": version,
+            "tex_sha256": "digest",
+            "compile_review": True,
+            "ledger_digest": "wrong" if mismatch else quality_identity_digest(ledger),
+        },
+    )
+    store = SimpleNamespace(
+        get_session=AsyncMock(
+            return_value={
+                "current_version_id": version,
+                "run_status": "running",
+            }
+        )
+    )
+    rig = SimpleNamespace(
+        root=tmp_path,
+        inputs=SimpleNamespace(digest="binding"),
+        tenant=None,
+        store=store,
+        recorder=SimpleNamespace(measurement=AsyncMock(return_value=ledger)),
+    )
+    with pytest.raises(
+        AcceptanceError, match="retry_ledger_changed" if mismatch else "revision_still_running"
+    ):
+        await revise(rig, SimpleNamespace(case_id="case"), 2, retry_stage="case-round2-retry-001")

@@ -130,7 +130,8 @@ def test_unverified_metric_requires_environment_scope_and_basis() -> None:
 
 
 @pytest.mark.asyncio
-async def test_model_patch_repairs_once_then_keeps_original_on_invalid_scope() -> None:
+@pytest.mark.parametrize("fenced", [False, True])
+async def test_model_patch_repairs_once_then_keeps_original_on_invalid_scope(fenced) -> None:
     content = _content()
     assert content is not None
     fact_id, session_id, run_id, feedback_id = (uuid4() for _ in range(4))
@@ -172,8 +173,12 @@ async def test_model_patch_repairs_once_then_keeps_original_on_invalid_scope() -
     graph = ResumeRevisionGraph(
         model=ScriptedFakeChatModel(
             [
-                ChatModelResult(content=json.dumps(bad)),
-                ChatModelResult(content=json.dumps(bad)),
+                ChatModelResult(
+                    content=("```json\n" + json.dumps(bad) + "\n```") if fenced else json.dumps(bad)
+                ),
+                ChatModelResult(
+                    content=("```json\n" + json.dumps(bad) + "\n```") if fenced else json.dumps(bad)
+                ),
             ]
         ),
         spend_allowed=allowed,
