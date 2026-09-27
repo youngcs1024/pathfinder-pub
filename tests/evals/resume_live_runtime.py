@@ -673,6 +673,9 @@ async def run_stage(url, root, inputs, stage, credentials_path, *, source_check)
         elif stage == "profile":
             result = await profile_stage(rig)
         elif stage == "report":
+            # Closing evidence uses the same authorization and cumulative limits, without
+            # reserving a new call. Unfinished/non-timeout unknown rows cannot pass here.
+            await recorder.check_admission(after=True)
             cases = {
                 c.case_id: read_private_json(root / f"{c.case_id}-confirm-done.json")
                 for c in inputs.cases
