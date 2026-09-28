@@ -122,7 +122,11 @@ async def apply_block(rig, state):
             await model.invoke(
                 (ChatMessage(role="user", content="synthetic budget fixture"),),
                 (),
-                {"task": "d_budget_fixture"},
+                {
+                    "task": "d_budget_fixture",
+                    "graph_node": "d_budget_fixture",
+                    "prompt_version": "sha256:" + "d" * 64,
+                },
             )
 
 
@@ -281,17 +285,36 @@ async def check_result(rig, state, before, after):
             len(after[key]) == len(baseline[key]) + increment, "duplicate_or_missing_publication"
         )
         require(all(after[key].get(k) == v for k, v in baseline[key].items()), "history_changed")
-    require(after["completed_events"] == increment, "incorrect_completion_events")
+    budget_reply = (
+        blocking and state["case"]["fault"] == "budget" and state["case"]["mode"] == "revision"
+    )
+    require(
+        after["completed_events"] == (1 if budget_reply else increment),
+        "incorrect_completion_events",
+    )
     if blocking:
-        expected = "failed" if state["case"]["fault"] == "budget" else "cancelled"
+        expected = (
+            "completed"
+            if budget_reply
+            else "failed"
+            if state["case"]["fault"] == "budget"
+            else "cancelled"
+        )
         require(after["run_status"] == expected, "incorrect_block_status")
         require(after["feedback"] == baseline["feedback"], "blocked_feedback_changed")
         if state["case"]["fault"] == "budget":
-            require(
-                after["error_category"]
-                in ("generation_budget_exhausted", "invalid_revision_input"),
-                "incorrect_budget_failure",
-            )
+            if budget_reply:
+                require(
+                    after["result_outcome"] == "needs_input"
+                    and after["result_version_id"] is None
+                    and after["result_artifact_id"] is None,
+                    "incorrect_budget_rejection",
+                )
+            else:
+                require(
+                    after["error_category"] == "generation_budget_exhausted",
+                    "incorrect_budget_failure",
+                )
             require(len(before) == len(await ledger(rig.sessions, state)), "blocked_model_called")
     else:
         require(

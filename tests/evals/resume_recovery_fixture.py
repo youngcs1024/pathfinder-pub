@@ -89,6 +89,9 @@ async def snapshot(sessions, state):
             },
             "run_status": run.status,
             "error_category": run.error_category,
+            "result_outcome": (run.result_json or {}).get("payload", {}).get("outcome"),
+            "result_version_id": (run.result_json or {}).get("payload", {}).get("version_id"),
+            "result_artifact_id": (run.result_json or {}).get("payload", {}).get("artifact_id"),
             "job_status": job.status,
             "job_attempt": job.attempt,
         }

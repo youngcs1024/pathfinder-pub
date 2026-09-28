@@ -100,7 +100,12 @@ async def test_d_audit_preserves_original_allocation(
         fake = attempt(fake_tenant).model_copy(update={"provider": "fake"})
         delegate = SqlAlchemyInvocationRecorder(sessions)
         await delegate.prepare(fake)
-        await delegate.finalize(fake, known())
+        await delegate.finalize(
+            fake,
+            known().model_copy(
+                update={"pricing_version": None, "currency": None, "estimated_cost": None}
+            ),
+        )
         assert await paid_audit(sessions, tmp_path, inputs, frozen) == frozen["usage"]
         if new_paid_state != "unchanged":
             extra = attempt(tenant)
