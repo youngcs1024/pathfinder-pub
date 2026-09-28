@@ -35,9 +35,11 @@ from tests.unit.agents.test_resume_generation import _inputs, _requirements, _se
 pytestmark = pytest.mark.integration
 
 
-async def test_a_snapshot_three_arms_recovery_authorization(migrated_database_url, tmp_path):
+async def test_a_snapshot_three_arms_recovery_authorization(
+    migrated_database_url, tmp_path, monkeypatch
+):
     tmp_path.chmod(0o700)
-    directory = tmp_path / "a"
+    directory = tmp_path / "pilot"
     directory.mkdir(mode=0o700)
     material = tmp_path / "inputs"
     material.mkdir(mode=0o700)
@@ -198,36 +200,7 @@ async def test_a_snapshot_three_arms_recovery_authorization(migrated_database_ur
                 )
                 == 4
             )
-        assessment = {
-            "claims": [
-                {
-                    "section": "body",
-                    "quote": claim,
-                    "support": "full",
-                    "fact_version_ids": [str(fact_id)],
-                    "profile_item_ids": [],
-                    "experimental": False,
-                    "conditions_complete": True,
-                    "rationale": "Exact fact",
-                }
-            ],
-            "coverage": [{"requirement_id": "req", "status": "full", "rationale": "Exact support"}],
-        }
         rig.facts, rig.profile_evidence, rig.seed = [fact], {}, 42
-        rig.factory = LLMFactory(
-            recorder=recorder,
-            chat_adapter=ScriptedFakeChatModel(
-                [
-                    ChatModelResult(
-                        content=json.dumps(assessment),
-                        usage=ModelUsage(input_tokens=10, output_tokens=10),
-                    )
-                    for _ in range(3)
-                ]
-            ),
-            embedding_adapter=FakeEmbeddingModel(),
-            provider="fake",
-        )
         annotation = {
             "requirements": [
                 {
@@ -246,11 +219,98 @@ async def test_a_snapshot_three_arms_recovery_authorization(migrated_database_ur
             ]
         }
         case = SimpleNamespace(case_id="test", jd=inputs.job_text)
+        from tests.evals.resume_experiment_contracts import Annotation
+        from tests.evals.resume_experiment_scoring import blind_packets
+        from tests.evals.resume_initial_baselines import candidate_text
+        from tests.evals.resume_initial_scoring import packets_for
+        from tests.evals.test_resume_initial_scoring import synthetic_response
+
+        packets, mapping = blind_packets(
+            [
+                {
+                    "sample_id": s["sample_id"],
+                    "text": candidate_text(outputs[s["arm"]]["output"]["content"]),
+                }
+                for s in block
+            ],
+            case=case,
+            facts=[fact],
+            annotation=Annotation.model_validate_json(json.dumps(annotation)),
+            seed=43,
+            profile={},
+        )
+        scripts = []
+        for packet in packets:
+            sample = next(s for s in block if s["sample_id"] == mapping[packet["blind_id"]])
+            chunks, _ = packets_for(
+                outputs[sample["arm"]]["output"]["content"], [fact], {}, annotation, case.jd
+            )
+            scripts.extend(
+                ChatModelResult(
+                    content=json.dumps(synthetic_response(c)),
+                    usage=ModelUsage(input_tokens=10, output_tokens=10),
+                )
+                for c in chunks
+            )
+        rig.factory = LLMFactory(
+            recorder=recorder,
+            chat_adapter=ScriptedFakeChatModel(scripts),
+            embedding_adapter=FakeEmbeddingModel(),
+            provider="fake",
+        )
         await score_block(rig, directory, block, case, annotation)
         scored_usage = await recorder.measurement()
-        assert scored_usage["attempts"] == 7
+        assert scored_usage["attempts"] == 4 + len(scripts)
+        from tests.evals.product_acceptance_contracts import read_private_json
+
+        assert all(
+            read_private_json(directory / s["sample_id"] / "result.json")["score_status"]
+            == "ASSESSED"
+            for s in block
+        )
         await score_block(rig, directory, block, case, annotation)
         assert await recorder.measurement() == scored_usage
+        # Reuse actual published PG versions and ledger rows in another source directory.
+        import hashlib
+
+        from tests.evals import resume_initial_reuse
+        from tests.evals.resume_initial import usage_for
+
+        publish(
+            directory / "test-r1-session.json",
+            {"session_id": str(created.receipt.resource_id), "run_id": str(created.receipt.run_id)},
+        )
+        publish(directory / "test-r1-command.json", {"id": str(key)})
+        publish(directory / "annotations.json", {"test": annotation})
+        audit = {
+            "artifact_sha256": {
+                str(p.relative_to(directory)): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in directory.rglob("*.json")
+            }
+        }
+        monkeypatch.setattr(
+            resume_initial_reuse,
+            "verify_origin",
+            lambda *args: (tmp_path, "synthetic-fingerprint", audit),
+        )
+        target = tmp_path / "new-source"
+        target.mkdir(mode=0o700)
+        before_reuse = await recorder.measurement()
+        await resume_initial_reuse.reuse_pilot(
+            rig, tmp_path, target, "a" * 40, {"pilot": block}, usage_for
+        )
+        assert await recorder.measurement() == before_reuse
+        assert not list((target / "pilot").glob("*/result.json"))
+        await resume_initial_reuse.reuse_pilot(
+            rig, tmp_path, target, "a" * 40, {"pilot": block}, usage_for
+        )
+        assert await recorder.measurement() == before_reuse
+        for sample in block:
+            assert (
+                await generate_sample(rig, sample, inputs, target / "pilot" / sample["sample_id"])
+                == outputs[sample["arm"]]
+            )
+        assert await recorder.measurement() == before_reuse
         other = await provision.provision_personal_workspace(f"other-{uuid4()}")
         foreign = await tenancy.resolve_tenant(
             workspace_id=other.workspace_id, actor_user_id=other.user_id

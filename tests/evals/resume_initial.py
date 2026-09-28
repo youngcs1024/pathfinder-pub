@@ -29,6 +29,7 @@ from app.llm.invocations import LLMInvocationContext
 from app.llm.ports import ChatMessage
 from app.llm.qwen_adapters import create_qwen_adapters
 from app.resume.template_render import TemplateIdentity
+from tests.evals import resume_initial_scoring as scoring
 from tests.evals.product_acceptance_budget import summarize as summarize_usage
 from tests.evals.product_acceptance_contracts import publish, read_private_json, require
 from tests.evals.quality_dataset import quality_identity_digest
@@ -43,7 +44,6 @@ from tests.evals.resume_experiment_scoring import (
     PROMPT_DIGESTS,
     annotation_payload,
     blind_packets,
-    checked_assessment,
     profile_evidence,
     score_metrics,
 )
@@ -55,6 +55,7 @@ from tests.evals.resume_initial_baselines import PROMPTS, candidate_text, genera
 from tests.evals.resume_initial_contracts import VERSION, samples, summarize
 from tests.evals.resume_initial_fixture import seed
 from tests.evals.resume_initial_recording import JournalFactory
+from tests.evals.resume_initial_reuse import generation_fingerprint, reuse_pilot
 from tests.evals.resume_live_environment import ResumableDatabase
 from tests.evals.resume_quality_runtime import snapshot, worker
 from tests.evals.resume_recovery import preparation, source, validate_ci
@@ -105,6 +106,9 @@ def prerequisites(root):
 def config(root, inputs, frozen, identity, ci, d_evidence):
     return {
         "version": VERSION,
+        "scoring_version": scoring.VERSION,
+        "scoring_prompt": scoring.PROMPT_DIGEST,
+        "generation_fingerprint": generation_fingerprint(),
         "source": identity,
         "ci": ci,
         "input_digest": inputs.digest,
@@ -185,7 +189,23 @@ def report(root, *, pilot=False):
             Decimal(current_usage["known_cost_cny"]) - Decimal(before["known_cost_cny"])
         )
         phase_usage["includes_annotation_scoring_failures_and_retries"] = True
+    a_total = None
+    if current_usage is not None:
+        prior = [read_private_json(p) for p in sorted((root / "d").glob("*/report.json"))]
+        baseline = next(r["paid_usage"] for r in reversed(prior) if r["status"] == "PASS")
+        a_total = {
+            k: current_usage[k] - baseline[k]
+            for k in ("attempts", "input_tokens", "output_tokens", "unknown_cost", "unknown_usage")
+        }
+        a_total["known_cost_cny"] = str(
+            Decimal(current_usage["known_cost_cny"]) - Decimal(baseline["known_cost_cny"])
+        )
+        a_total["invocation_ids"] = sorted(
+            set(current_usage["invocation_ids"]) - set(baseline["invocation_ids"])
+        )
     summary.update(
+        a_total_usage=a_total,
+        scoring_version=manifest.get("scoring_version"),
         cumulative_usage=current_usage,
         phase_usage=phase_usage,
         source_sha=identity["source_sha"],
@@ -330,41 +350,64 @@ async def score_block(rig, phase, block, case, annotation):
     block_id = f"{case.case_id}-r{block[0]['repeat']}"
     preserve(phase / f"{block_id}-blind.json", {"mapping": mapping, "packets": packets})
     by_id = {mapping[p["blind_id"]]: p for p in packets}
-    for sample in block:
+    by_sample = {s["sample_id"]: s for s in block}
+    ordered = [by_sample[mapping[p["blind_id"]]] for p in packets]
+    ordered += [s for s in block if s["sample_id"] not in by_id]
+    for sample in ordered:
         path = phase / sample["sample_id"]
         if (path / "result.json").exists():
             continue
         generated = read_private_json(path / "generation.json")
         result = {**generated, "score_status": "NOT_APPLICABLE", "metrics": None}
         if sample["sample_id"] in by_id:
-            packet = by_id[sample["sample_id"]]
-            before = await rig.recorder.check_admission(after=True)
-            try:
-                value = await review_call(rig, path / "score", "score", packet)
-                assessed = checked_assessment(
-                    value,
-                    text=packet["candidate"],
-                    facts=rig.facts,
-                    annotation=rubric,
-                    profile=rig.profile_evidence,
+            score_path = path / scoring.VERSION
+
+            async def call(directory, payload, stage):
+                model = JournalFactory(rig.factory, directory, rig.recorder).create_chat_model(
+                    LLMInvocationContext(rig.tenant.workspace_id, rig.tenant.actor_user_id)
                 )
+                directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+                return await model.invoke(
+                    (
+                        ChatMessage(role="system", content=scoring.PROMPT),
+                        ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
+                    ),
+                    (),
+                    {
+                        "task": "resume_initial_review",
+                        "graph_node": f"score_{stage}",
+                        "prompt_version": scoring.PROMPT_DIGEST,
+                    },
+                )
+
+            assessed, outcomes = await scoring.assess(
+                generated["output"]["content"],
+                rig.facts,
+                rig.profile_evidence,
+                annotation,
+                case.jd,
+                score_path,
+                call,
+            )
+            result.update(
+                scoring_version=scoring.VERSION,
+                scoring_batches=outcomes,
+                score_status="ASSESSED" if assessed else "UNRESOLVED",
+            )
+            if assessed:
                 result.update(
-                    score_status="ASSESSED",
                     assessment=assessed.model_dump(mode="json"),
                     metrics=score_metrics(assessed, content_ok=True),
                 )
-            except Exception as exc:
-                await rig.recorder.check_admission(after=True)
-                require(
-                    bool(list((path / "score").glob("call-*-response.json"))), "uncertain_score"
-                )
-                result.update(score_status="UNRESOLVED", score_error=type(exc).__name__)
-            after = await rig.recorder.check_admission(after=True)
-            # Use response journal IDs on replay, not only the current process delta.
-            ids = set(after["invocation_ids"]) - set(before["invocation_ids"])
-            for response in (path / "score").glob("call-*-response.json"):
-                ids.update(read_private_json(response)["invocation_ids"])
-            result["score_usage"] = await usage_for(rig.recorder, sorted(ids))
+            all_ids = set()
+            result["score_stages"] = {}
+            for stage in scoring.STAGES:
+                ids = set()
+                for response in score_path.glob(f"batch-*/{stage}/call-*-response.json"):
+                    ids.update(read_private_json(response)["invocation_ids"])
+                result["score_stages"][stage] = await usage_for(rig.recorder, sorted(ids))
+                all_ids.update(ids)
+            result["score_usage"] = await usage_for(rig.recorder, sorted(all_ids))
         preserve(path / "result.json", result)
 
 
@@ -483,7 +526,7 @@ async def run_phase(rig, root, directory, inputs, frozen, *, pilot):
     return summary
 
 
-async def execute(root, *, action, credentials_path, ci_path):
+async def execute(root, *, action, credentials_path, ci_path, reuse_source=None):
     original, inputs, frozen, d_evidence = prerequisites(root)
     identity = source()
     directory = directory_for(root, identity)
@@ -494,6 +537,10 @@ async def execute(root, *, action, credentials_path, ci_path):
         ci = read_private_json(ci_path)
     validate_ci(ci, identity["source_sha"])
     manifest = config(root, inputs, frozen, identity, ci, d_evidence)
+    existing = directory / "manifest.json"
+    bound_reuse = read_private_json(existing).get("reuse_source") if existing.exists() else None
+    require(reuse_source is None or bound_reuse in (None, reuse_source), "reuse_binding_changed")
+    manifest["reuse_source"] = reuse_source or bound_reuse
     (root / "a").mkdir(mode=0o700, exist_ok=True)
     directory.mkdir(mode=0o700, exist_ok=True)
     preserve(directory / "manifest.json", manifest)
@@ -588,6 +635,10 @@ async def execute(root, *, action, credentials_path, ci_path):
                     ),
                     seed=inputs.blind_seed,
                 )
+                if action == "a-pilot" and manifest["reuse_source"]:
+                    await reuse_pilot(
+                        rig, root, directory, manifest["reuse_source"], manifest, usage_for
+                    )
                 return await run_phase(
                     rig, root, directory, inputs, frozen, pilot=action == "a-pilot"
                 )

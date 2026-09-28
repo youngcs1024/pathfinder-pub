@@ -233,6 +233,7 @@ def main(argv=None):
     parser.add_argument("--credentials", type=Path)
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--ci-evidence", type=Path)
+    parser.add_argument("--reuse-source", help="A generation source commit to verify and reuse")
     args = parser.parse_args(argv)
     try:
         root = no_links(args.root)
@@ -254,6 +255,7 @@ def main(argv=None):
                             action=args.action,
                             credentials_path=args.credentials,
                             ci_path=args.ci_evidence,
+                            reuse_source=args.reuse_source,
                         )
                     )
                 )

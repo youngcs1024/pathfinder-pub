@@ -6,7 +6,7 @@ from statistics import mean
 from tests.evals.product_acceptance_contracts import require
 from tests.evals.resume_experiment_scoring import ratio
 
-VERSION = "resume-initial-a-v1"
+VERSION = "resume-initial-a-v2"
 ARMS = ("one_shot", "selection", "pathfinder")
 
 
@@ -82,8 +82,18 @@ def summarize(planned, results, annotations):
             if s["arm"] == arm and s["sample_id"] in results
         ]
         groups[arm] = {"by_jd": cases, "cross_jd": {}, "cost": {}}
-        for stage, key in (("generation", "usage"), ("scoring", "score_usage")):
-            usages = [r[key] for r in arm_rows if key in r]
+        for stage, key in (
+            ("generation", "usage"),
+            ("scoring", "score_usage"),
+            ("initial", "initial"),
+            ("correction", "correction"),
+            ("review", "review"),
+        ):
+            usages = (
+                [r[key] for r in arm_rows if key in r]
+                if stage in ("generation", "scoring")
+                else [r["score_stages"][key] for r in arm_rows if key in r.get("score_stages", {})]
+            )
             groups[arm]["cost"][stage] = {
                 **{
                     k: sum(u.get(k, 0) for u in usages)
