@@ -222,6 +222,11 @@ def main(argv=None):
             "d-run",
             "d-resume",
             "d-report",
+            "a-pilot",
+            "a-freeze",
+            "a-run",
+            "a-resume",
+            "a-report",
         ),
     )
     parser.add_argument("--root", type=Path, required=True)
@@ -235,7 +240,41 @@ def main(argv=None):
         fd = os.open(root / "controller.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            if args.action.startswith("d-"):
+            if args.action.startswith("a-"):
+                from tests.evals import resume_initial
+
+                if args.action not in ("a-report", "a-freeze"):
+                    require(args.live and args.credentials is not None, "live_opt_in_required")
+                result = (
+                    resume_initial.report(root)
+                    if args.action == "a-report"
+                    else asyncio.run(
+                        resume_initial.execute(
+                            root,
+                            action=args.action,
+                            credentials_path=args.credentials,
+                            ci_path=args.ci_evidence,
+                        )
+                    )
+                )
+                print(
+                    json.dumps(
+                        {
+                            k: result[k]
+                            for k in (
+                                "status",
+                                "planned",
+                                "recorded",
+                                "missing",
+                                "unresolved",
+                                "next_step_allowed",
+                            )
+                            if k in result
+                        }
+                    )
+                )
+                return 0 if result["status"] == "PASS" else 1
+            elif args.action.startswith("d-"):
                 from tests.evals import resume_recovery
 
                 require(not args.live and args.credentials is None, "d_fake_only")
@@ -284,7 +323,13 @@ def main(argv=None):
             json.dumps(
                 {
                     "status": "PARTIAL",
-                    "error": "d_failed" if args.action.startswith("d-") else "preparation_failed",
+                    "error": (
+                        "a_failed"
+                        if args.action.startswith("a-")
+                        else "d_failed"
+                        if args.action.startswith("d-")
+                        else "preparation_failed"
+                    ),
                     "diagnostic_id": uuid4().hex,
                 }
             )
