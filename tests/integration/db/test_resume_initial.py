@@ -311,7 +311,7 @@ async def test_a_snapshot_three_arms_recovery_authorization(
                 == outputs[sample["arm"]]
             )
         assert await recorder.measurement() == before_reuse
-        # Preserve compatible paid claim batches; only coverage needs fresh calls.
+        # Preserve every compatible paid batch without any fresh calls.
         from tests.evals.resume_initial_scoring import VERSION as SCORE_VERSION
 
         coverage_script = []
@@ -343,7 +343,7 @@ async def test_a_snapshot_three_arms_recovery_authorization(
             {"phase": directory, "version": SCORE_VERSION},
         )
         after_score_reuse = await recorder.measurement()
-        assert after_score_reuse["attempts"] == before_reuse["attempts"] + len(coverage_script)
+        assert after_score_reuse["attempts"] == before_reuse["attempts"]
         for sample in block:
             saved = read_private_json(target / "pilot" / sample["sample_id"] / "result.json")
             assert saved["score_status"] == "ASSESSED"

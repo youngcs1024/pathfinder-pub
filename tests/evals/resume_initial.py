@@ -400,6 +400,7 @@ async def score_block(rig, phase, block, case, annotation, reuse_phase=None):
                     / "protocol.json"
                 ).exists()
                 else None,
+                reuse_coverage_digest=reuse_phase.get("coverage_prompt") if reuse_phase else None,
             )
             result.update(
                 scoring_version=scoring.VERSION,

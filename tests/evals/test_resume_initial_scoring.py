@@ -226,8 +226,8 @@ async def test_reuse_only_identical_successful_claim_batches(tmp_path):
     before = len(calls)
     new, outcomes = await assess(*values, tmp_path / "new", call, reuse_path=old)
     assert first == new
-    assert calls[before:] == ["coverage"]
-    assert all(r["reused"] == (r["kind"] == "claims") for r in outcomes)
+    assert calls[before:] == []
+    assert all(r["reused"] for r in outcomes)
     # A different prompt cannot reuse paid assessments even if the result parses.
     from unittest.mock import patch
 
@@ -244,3 +244,37 @@ async def test_reuse_only_identical_successful_claim_batches(tmp_path):
     with patch.object(scoring, "read_private_json", changed):
         with pytest.raises(AcceptanceError, match="reuse_score_prompt_changed"):
             await assess(*values, tmp_path / "changed", call, reuse_path=old)
+
+
+def test_conflicting_duplicate_spans_fail_before_stage_acceptance():
+    packets, mapping = packets_for(*fixture())
+    value = synthetic_response(packets[0])
+    claim = value["units"][0]["claims"][0]
+    value["units"][0]["claims"].append({**claim, "support": "unsupported"})
+    with pytest.raises(AcceptanceError, match="conflicting_claim_review"):
+        validate_batch(value, packets[0], mapping)
+
+
+async def test_cross_batch_conflict_gets_one_independent_review(tmp_path):
+    from tests.evals.resume_initial_scoring import reconcile_duplicates
+
+    values = fixture()
+    packets, mapping = packets_for(*values)
+    claims = validate_batch(synthetic_response(packets[0]), packets[0], mapping)["claims"]
+    conflicting = [*claims, {**claims[0], "support": "unsupported", "rationale": "Different"}]
+    calls = []
+
+    async def call(path, packet, stage):
+        calls.append(stage)
+        assert stage == "review" and "previous_response" not in packet
+        assert "Prior verdicts are withheld" in packet["review_instruction"]
+        return ChatModelResult(content=json.dumps(synthetic_response(packet)))
+
+    resolved, outcomes = await reconcile_duplicates(conflicting, packets, mapping, tmp_path, call)
+    assert resolved is not None and calls == ["review"]
+    assert outcomes[0]["status"] == "ASSESSED"
+    assert await reconcile_duplicates(conflicting, packets, mapping, tmp_path, call) == (
+        resolved,
+        outcomes,
+    )
+    assert calls == ["review"]

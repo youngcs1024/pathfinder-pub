@@ -167,5 +167,11 @@ def score_origin(root, source_sha, manifest):
     for key in ("input_digest", "preparation_digest", "d_evidence", "seed", "budget", "pilot"):
         require(old[key] == manifest[key], "reuse_configuration_changed")
     version = old["scoring_version"]
-    require(version in ("a-score-v2", "a-score-v3"), "reuse_score_version_unknown")
-    return {"phase": origin / "pilot", "version": version}
+    require(version in ("a-score-v2", "a-score-v3", "a-score-v4"), "reuse_score_version_unknown")
+    return {
+        "phase": origin / "pilot",
+        "version": version,
+        "coverage_prompt": old["scoring_prompt"].get("coverage")
+        if isinstance(old["scoring_prompt"], dict)
+        else None,
+    }
