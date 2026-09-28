@@ -154,6 +154,7 @@ def test_reuse_requires_matching_dependencies_and_audited_artifacts(tmp_path, mo
     root = tmp_path / "root"
     phase = root / "a" / source / "pilot"
     phase.mkdir(mode=0o700, parents=True)
+    phase.parent.chmod(0o700)
     manifest = {
         "source": {"source_sha": source},
         "ci": {},
