@@ -27,7 +27,7 @@ from app.llm.ports import ChatModelResult, ModelUsage
 from tests.evals.product_acceptance_contracts import AcceptanceError, publish
 from tests.evals.resume_experiment_budget import ExperimentRecorder
 from tests.evals.resume_experiment_contracts import ExperimentBudget
-from tests.evals.resume_initial import generate_sample
+from tests.evals.resume_initial import generate_sample, score_block
 from tests.evals.resume_initial_fixture import seed
 from tests.evals.test_resume_initial import proposal, selection
 from tests.unit.agents.test_resume_generation import _inputs, _requirements, _selection
@@ -141,6 +141,7 @@ async def test_a_snapshot_three_arms_recovery_authorization(migrated_database_ur
         assert inputs.facts[0].version_id == fact_id and inputs.facts[0].claim == claim
         assert inputs.profile_content == generation.profile_content
         outputs = {}
+        block = []
         for arm in ("one_shot", "selection", "pathfinder"):
             script = (
                 [ChatModelResult(content=json.dumps(proposal(inputs)))]
@@ -159,11 +160,21 @@ async def test_a_snapshot_three_arms_recovery_authorization(migrated_database_ur
                 embedding_adapter=FakeEmbeddingModel(),
                 provider="fake",
             )
-            sample = {"sample_id": f"test-{arm}", "arm": arm}
-            output = await generate_sample(rig, sample, inputs, directory / arm)
+            sample = {
+                "sample_id": f"test-r1-{arm}",
+                "arm": arm,
+                "case_id": "test",
+                "repeat": 1,
+                "c_start": arm != "selection",
+            }
+            block.append(sample)
+            output = await generate_sample(rig, sample, inputs, directory / sample["sample_id"])
             assert output["generation_status"] == "COMPLETE", output
             before = await recorder.measurement()
-            assert await generate_sample(rig, sample, inputs, directory / arm) == output
+            assert (
+                await generate_sample(rig, sample, inputs, directory / sample["sample_id"])
+                == output
+            )
             assert await recorder.measurement() == before
             outputs[arm] = output
         assert len({o["common_input_digest"] for o in outputs.values()}) == 1
@@ -187,6 +198,59 @@ async def test_a_snapshot_three_arms_recovery_authorization(migrated_database_ur
                 )
                 == 4
             )
+        assessment = {
+            "claims": [
+                {
+                    "section": "body",
+                    "quote": claim,
+                    "support": "full",
+                    "fact_version_ids": [str(fact_id)],
+                    "profile_item_ids": [],
+                    "experimental": False,
+                    "conditions_complete": True,
+                    "rationale": "Exact fact",
+                }
+            ],
+            "coverage": [{"requirement_id": "req", "status": "full", "rationale": "Exact support"}],
+        }
+        rig.facts, rig.profile_evidence, rig.seed = [fact], {}, 42
+        rig.factory = LLMFactory(
+            recorder=recorder,
+            chat_adapter=ScriptedFakeChatModel(
+                [
+                    ChatModelResult(
+                        content=json.dumps(assessment),
+                        usage=ModelUsage(input_tokens=10, output_tokens=10),
+                    )
+                    for _ in range(3)
+                ]
+            ),
+            embedding_adapter=FakeEmbeddingModel(),
+            provider="fake",
+        )
+        annotation = {
+            "requirements": [
+                {
+                    "requirement_id": "req",
+                    "quote": inputs.job_text,
+                    "start": 0,
+                    "end": len(inputs.job_text),
+                    "kind": "explicit",
+                    "applicable": True,
+                    "support": "full",
+                    "fact_version_ids": [str(fact_id)],
+                    "profile_item_ids": [],
+                    "necessary_conditions": [],
+                    "rationale": "Synthetic",
+                }
+            ]
+        }
+        case = SimpleNamespace(case_id="test", jd=inputs.job_text)
+        await score_block(rig, directory, block, case, annotation)
+        scored_usage = await recorder.measurement()
+        assert scored_usage["attempts"] == 7
+        await score_block(rig, directory, block, case, annotation)
+        assert await recorder.measurement() == scored_usage
         other = await provision.provision_personal_workspace(f"other-{uuid4()}")
         foreign = await tenancy.resolve_tenant(
             workspace_id=other.workspace_id, actor_user_id=other.user_id

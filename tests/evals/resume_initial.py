@@ -50,7 +50,7 @@ from tests.evals.resume_experiment_scoring import (
 from tests.evals.resume_experiment_scoring import (
     PROMPTS as REVIEW_PROMPTS,
 )
-from tests.evals.resume_experiments import preserve
+from tests.evals.resume_experiments import load_inputs, preserve
 from tests.evals.resume_initial_baselines import PROMPTS, candidate_text, generate, shared_input
 from tests.evals.resume_initial_contracts import VERSION, samples, summarize
 from tests.evals.resume_initial_fixture import seed
@@ -131,7 +131,13 @@ def report(root, *, pilot=False):
     require(manifest["source"] == identity, "a_source_changed")
     phase = directory / ("pilot" if pilot else "formal")
     planned = manifest["pilot" if pilot else "planned"]
-    annotations = read_private_json(phase / "annotations.json")
+    if (phase / "annotations.json").exists():
+        annotations = read_private_json(phase / "annotations.json")
+    elif not pilot:
+        frozen = read_private_json(root / "frozen.json")
+        annotations = {k: v["annotation"] for k, v in frozen["annotations"].items()}
+    else:
+        annotations = {s["case_id"]: {"requirements": []} for s in planned}
     results, digests = {}, {}
     for case in planned:
         path = phase / case["sample_id"] / "result.json"
@@ -140,6 +146,10 @@ def report(root, *, pilot=False):
             require(row["sample"] == case, "sample_changed")
             results[case["sample_id"]] = row
             digests[case["sample_id"]] = hashlib.sha256(path.read_bytes()).hexdigest()
+        elif (path.parent / "generation.json").exists():
+            row = read_private_json(path.parent / "generation.json")
+            require(row["sample"] == case, "sample_changed")
+            results[case["sample_id"]] = {**row, "score_status": "UNRESOLVED", "incomplete": True}
     summary = summarize(planned, results, annotations)
     audit = phase / "audit.json"
     if not audit.exists():
@@ -152,7 +162,32 @@ def report(root, *, pilot=False):
                 "unsafe_a_artifact",
             )
             require(hashlib.sha256(path.read_bytes()).hexdigest() == digest, "a_artifact_changed")
+    current_usage = read_private_json(audit)["usage"] if audit.exists() else None
+    if current_usage is None:
+        partials = sorted(directory.glob("partial-*.json"), key=lambda p: p.stat().st_mtime_ns)
+        if partials:
+            current_usage = read_private_json(partials[-1]).get("usage")
+    phase_usage = None
+    if current_usage is not None and (phase / "started.json").exists():
+        before = read_private_json(phase / "started.json")["usage"]
+        phase_usage = {
+            k: current_usage[k] - before[k]
+            for k in (
+                "attempts",
+                "input_tokens",
+                "output_tokens",
+                "unknown_cost",
+                "unknown_usage",
+                "unfinished",
+            )
+        }
+        phase_usage["known_cost_cny"] = str(
+            Decimal(current_usage["known_cost_cny"]) - Decimal(before["known_cost_cny"])
+        )
+        phase_usage["includes_annotation_scoring_failures_and_retries"] = True
     summary.update(
+        cumulative_usage=current_usage,
+        phase_usage=phase_usage,
         source_sha=identity["source_sha"],
         ci_evidence=manifest["ci"],
         pilot=pilot,
@@ -336,6 +371,8 @@ async def score_block(rig, phase, block, case, annotation):
 async def run_phase(rig, root, directory, inputs, frozen, *, pilot):
     phase = directory / ("pilot" if pilot else "formal")
     phase.mkdir(mode=0o700, exist_ok=True)
+    if not (phase / "started.json").exists():
+        preserve(phase / "started.json", {"usage": await rig.recorder.check_admission(after=True)})
     if (phase / "audit.json").exists():
         return report(root, pilot=pilot)
     cases = cases_for(root, inputs, pilot)
@@ -427,7 +464,8 @@ async def execute(root, *, action, credentials_path, ci_path):
         ci = read_private_json(ci_path)
     validate_ci(ci, identity["source_sha"])
     manifest = config(root, inputs, frozen, identity, ci, d_evidence)
-    directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+    (root / "a").mkdir(mode=0o700, exist_ok=True)
+    directory.mkdir(mode=0o700, exist_ok=True)
     preserve(directory / "manifest.json", manifest)
     require(
         (root / "database-owner.json").exists() and (root / "ledger-binding.json").exists(),
@@ -450,6 +488,7 @@ async def execute(root, *, action, credentials_path, ci_path):
 
                 def source_check():
                     require(source() == identity, "a_source_changed")
+                    require(load_inputs(root).digest == inputs.digest, "a_inputs_changed")
 
                 recorder = ExperimentRecorder(
                     sessions,

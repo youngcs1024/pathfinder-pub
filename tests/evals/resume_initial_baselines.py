@@ -173,7 +173,7 @@ def candidate_text(content):
         lines.extend((p.title.text, p.period.text, p.summary.text, *p.technologies))
         lines.extend(b.text for b in p.bullets)
     for s in value.skills:
-        lines.extend((s.label.text, *s.items))
+        lines.extend((s.label, *s.items))
     text = "\n".join(lines)
     check_model_input_privacy(value, text)
     return text

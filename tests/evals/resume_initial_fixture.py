@@ -104,7 +104,16 @@ async def seed(sessions, tenant, root, directory):
                 snapshot,
                 import_id=iid,
                 source_id=sid,
-                source_revision=identity,
+                source_revision=next(
+                    (
+                        e["source_revision"]
+                        for f in facts
+                        if f["version_id"] in project["fact_version_ids"]
+                        for e in f["evidence"]
+                        if "source_revision" in e
+                    ),
+                    identity,
+                ),
                 manifest_digest=digest,
                 cache_digest=digest,
                 inventory_json={"frozen_source": identity},

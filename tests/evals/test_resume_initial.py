@@ -199,3 +199,30 @@ async def test_journal_replays_without_new_call_and_refuses_uncertain(tmp_path):
     with pytest.raises(AcceptanceError, match="uncertain"):
         await JournalModel(model, uncertain, recorder).invoke(*args)
     assert len(model.calls) == 1
+
+
+def test_report_cost_includes_failures_and_separates_scoring():
+    planned = samples(["job"])
+    annotations = {"job": {"requirements": []}}
+    results = {
+        planned[0]["sample_id"]: {
+            "generation_status": "FAILED",
+            "score_status": "NOT_APPLICABLE",
+            "usage": {"attempts": 2, "known_cost_cny": "0.12", "input_tokens": 10},
+            "elapsed_seconds": 3,
+        }
+    }
+    report = summarize(planned, results, annotations)
+    cost = report["groups"][planned[0]["arm"]]["cost"]
+    assert cost["generation"]["known_cost_cny"] == "0.12"
+    assert cost["generation"]["attempts"] == 2
+    assert cost["scoring"]["attempts"] == 0
+    assert report["status"] == "PARTIAL"
+
+
+def test_visible_scoring_text_handles_reviewed_skills_without_identity():
+    _, _, inputs, _, _ = _inputs()
+    text = candidate_text(inputs.profile_content.model_dump(mode="json"))
+    for skill in inputs.profile_content.skills:
+        assert skill.label in text
+    assert "canary@example.test" not in text

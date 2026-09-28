@@ -1,5 +1,6 @@
 """Fixed A denominators and equal-JD summaries, independent of observed success."""
 
+from decimal import Decimal
 from statistics import mean
 
 from tests.evals.product_acceptance_contracts import require
@@ -75,7 +76,35 @@ def summarize(planned, results, annotations):
                 ),
                 "metrics": metrics,
             }
-        groups[arm] = {"by_jd": cases, "cross_jd": {}}
+        arm_rows = [
+            results[s["sample_id"]]
+            for s in planned
+            if s["arm"] == arm and s["sample_id"] in results
+        ]
+        groups[arm] = {"by_jd": cases, "cross_jd": {}, "cost": {}}
+        for stage, key in (("generation", "usage"), ("scoring", "score_usage")):
+            usages = [r[key] for r in arm_rows if key in r]
+            groups[arm]["cost"][stage] = {
+                **{
+                    k: sum(u.get(k, 0) for u in usages)
+                    for k in (
+                        "attempts",
+                        "input_tokens",
+                        "output_tokens",
+                        "latency_ms",
+                        "unknown_cost",
+                        "unknown_usage",
+                    )
+                },
+                "known_cost_cny": str(
+                    sum((Decimal(u["known_cost_cny"]) for u in usages), Decimal(0))
+                ),
+                "cost_status": "ESTIMATED",
+                "includes_failed_samples": True,
+            }
+        groups[arm]["generation_elapsed_seconds"] = sum(
+            r.get("elapsed_seconds", 0) for r in arm_rows
+        )
         for metric in ("fact_support", "profile_fact_support", "coverage", "condition_omission"):
             vals = [
                 v["metrics"][metric]["mean"]
