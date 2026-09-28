@@ -226,3 +226,41 @@ def test_visible_scoring_text_handles_reviewed_skills_without_identity():
     for skill in inputs.profile_content.skills:
         assert skill.label in text
     assert "canary@example.test" not in text
+
+
+def test_pilot_review_preserves_invalid_proposal_and_requires_explicit_references():
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_experiment_runtime import smoke_inputs
+    from tests.evals.resume_initial import pilot_review
+
+    facts, annotation, _packets, _mapping = smoke_inputs()
+    case = type("Case", (), {"jd": "Python development"})()
+    # Use the exact frozen quote as the synthetic JD; valid locations are explicit.
+    final = annotation.model_dump(mode="json")
+    quote = final["requirements"][0]["quote"]
+    case.jd = quote
+    final["requirements"][0].update(start=0, end=len(quote))
+    proposal = json.loads(json.dumps(final))
+    proposal["requirements"][0]["fact_version_ids"] = [str(uuid4())]
+    review = {
+        "binding": "bound",
+        "proposal_digest": quality_identity_digest(proposal),
+        "review_kind": "AGENT_ASSESSED",
+        "approved": True,
+        "rationale": "Verified exact evidence",
+        "final_annotation": final,
+        "reviewed_requirement_ids": [r["requirement_id"] for r in final["requirements"]],
+    }
+    accepted = pilot_review(review, proposal, binding="bound", case=case, facts=facts, profile={})
+    assert accepted == final and proposal != final
+    with pytest.raises(AcceptanceError, match="binding"):
+        pilot_review(review, proposal, binding="different", case=case, facts=facts, profile={})
+    with pytest.raises(AcceptanceError, match="unknown_fact"):
+        pilot_review(
+            {**review, "final_annotation": proposal},
+            proposal,
+            binding="bound",
+            case=case,
+            facts=facts,
+            profile={},
+        )

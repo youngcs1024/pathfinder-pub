@@ -368,6 +368,23 @@ async def score_block(rig, phase, block, case, annotation):
         preserve(path / "result.json", result)
 
 
+def pilot_review(review, proposal, *, binding, case, facts, profile):
+    require(
+        review["binding"] == binding
+        and review["proposal_digest"] == quality_identity_digest(proposal)
+        and review["review_kind"] == "AGENT_ASSESSED"
+        and review["approved"] is True
+        and bool(review["rationale"]),
+        "pilot_review_binding_changed",
+    )
+    result = checked_annotation(review["final_annotation"], case, facts, profile)
+    require(
+        set(review["reviewed_requirement_ids"]) == {r.requirement_id for r in result.requirements},
+        "pilot_review_incomplete",
+    )
+    return result.model_dump(mode="json")
+
+
 async def run_phase(rig, root, directory, inputs, frozen, *, pilot):
     phase = directory / ("pilot" if pilot else "formal")
     phase.mkdir(mode=0o700, exist_ok=True)
@@ -376,20 +393,33 @@ async def run_phase(rig, root, directory, inputs, frozen, *, pilot):
     if (phase / "audit.json").exists():
         return report(root, pilot=pilot)
     cases = cases_for(root, inputs, pilot)
-    annotations = {}
+    annotations, pending_reviews = {}, []
+    cache = root / "a" / "pilot-annotations"
+    if pilot:
+        cache.mkdir(mode=0o700, exist_ok=True)
     for case in cases:
         if pilot:
+            path = cache / case.case_id
             value = await review_call(
-                rig,
-                phase / f"annotation-{case.case_id}",
-                "annotate",
-                annotation_payload(case, rig.facts, rig.profile_evidence),
+                rig, path, "annotate", annotation_payload(case, rig.facts, rig.profile_evidence)
             )
-            annotations[case.case_id] = checked_annotation(
-                locate_annotation(value, case), case, rig.facts, rig.profile_evidence
-            ).model_dump(mode="json")
+            proposal = locate_annotation(value, case)
+            preserve(path / "proposal.json", proposal)
+            review_path = path / "review.json"
+            if not review_path.exists():
+                pending_reviews.append(case.case_id)
+                continue
+            annotations[case.case_id] = pilot_review(
+                read_private_json(review_path),
+                proposal,
+                binding=inputs.digest,
+                case=case,
+                facts=rig.facts,
+                profile=rig.profile_evidence,
+            )
         else:
             annotations[case.case_id] = frozen["annotations"][case.case_id]["annotation"]
+    require(not pending_reviews, "pilot_annotations_require_agent_review")
     preserve(phase / "annotations.json", annotations)
     planned = samples([c.case_id for c in cases], pilot=pilot)
     for start in range(0, len(planned), 3):
