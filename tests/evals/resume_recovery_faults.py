@@ -17,7 +17,13 @@ import psycopg
 from pydantic import SecretStr
 from sqlalchemy import func, select, text, update
 
-from app.db.models import LLMInvocation, ResumeFeedback, ResumeSession, WorkspaceMembership
+from app.db.models import (
+    LLMInvocation,
+    ResumeFeedback,
+    ResumeSession,
+    ResumeVersion,
+    WorkspaceMembership,
+)
 from app.db.session import create_database_engine, create_session_factory
 from app.domain.errors import DomainNotFoundError, DomainUnavailableError
 from app.domain.jobs import ClaimedJob
@@ -286,6 +292,18 @@ async def check_result(rig, state, before, after):
             require(
                 after["feedback"][state["feedback_id"]] in after["versions"], "feedback_not_applied"
             )
+    if not blocking:
+        new_ids = set(after["versions"]) - set(baseline["versions"])
+        require(len(new_ids) == 1, "new_version_identity_invalid")
+        async with rig.sessions() as db:
+            version = await db.get(ResumeVersion, UUID(next(iter(new_ids))))
+            bullets = [b["text"] for p in version.content_json["projects"] for b in p["bullets"]]
+            expected_text = (
+                state["patch"]["text"]
+                if state["case"]["mode"] == "revision"
+                else state["fact_text"]
+            )
+            require(expected_text in bullets, "published_content_incorrect")
     if state["case"]["fault"] == "revoked":
         try:
             await replay(rig, state)
@@ -340,15 +358,50 @@ async def run_case(url, sessions, root, state):
         clock.offset = timedelta(seconds=65)
     runner = worker(rig, factory(rig, script(state)))
     runner._clock = clock
+    old = saved_job(read_private_json(root / "claim.json"))
+    original_prepare = runner._store.prepare_claimed_job
+
+    async def prepare_reclaimed(**kwargs):
+        prepared = await original_prepare(**kwargs)
+        require(kwargs["job"].owner_token != old.owner_token, "owner_token_reused")
+        require(
+            not await runner._store.complete(job=old, result=None, now=clock()),
+            "old_owner_committed_during_new_lease",
+        )
+        if not (root / "old-owner-rejected.json").exists():
+            publish(
+                root / "old-owner-rejected.json",
+                {"old_owner": str(old.owner_token), "new_owner": str(kwargs["job"].owner_token)},
+            )
+        return prepared
+
+    runner._store.prepare_claimed_job = prepare_reclaimed
     start = marker["monotonic"] if case["kind"] == "real" else monotonic()
     terminal = {"completed", "failed", "cancelled"}
     while intermediate["run_status"] not in terminal and monotonic() - start <= WINDOW_SECONDS:
         await runner.run_once(asyncio.Event())
         intermediate = await snapshot(sessions, state)
         if intermediate["run_status"] not in terminal:
-            await asyncio.sleep(0.5)
+            if case["kind"] == "real":
+                await asyncio.sleep(0.5)
+            else:
+                clock.offset += timedelta(seconds=1)
+                await asyncio.sleep(0)
+                if (
+                    clock() - datetime.fromisoformat(marker["utc"])
+                ).total_seconds() > WINDOW_SECONDS:
+                    break
     elapsed = monotonic() - start
-    timed_out = elapsed > WINDOW_SECONDS
+    logical_elapsed = (clock() - datetime.fromisoformat(marker["utc"])).total_seconds()
+    terminal_receipt = root / "terminal-observation.json"
+    if terminal_receipt.exists():
+        saved = read_private_json(terminal_receipt)
+        require(saved["snapshot"] == intermediate, "terminal_observation_changed")
+        elapsed = saved["recovery_seconds"]
+        logical_elapsed = saved.get("logical_seconds", elapsed)
+    timed_out = elapsed > WINDOW_SECONDS or (
+        case["kind"] != "real" and logical_elapsed > WINDOW_SECONDS
+    )
     if timed_out:
         return dict(
             case=case,
@@ -361,8 +414,23 @@ async def run_case(url, sessions, root, state):
             error="recovery_timeout",
             observation=intermediate,
         )
+    observation_path = root / "terminal-observation.json"
+    if observation_path.exists():
+        observation = read_private_json(observation_path)
+        require(observation["snapshot"] == intermediate, "terminal_observation_changed")
+        elapsed = observation["recovery_seconds"]
+    else:
+        publish(
+            observation_path,
+            {
+                "snapshot": intermediate,
+                "recovery_seconds": elapsed,
+                "logical_seconds": logical_elapsed,
+            },
+        )
     await check_result(rig, state, before, intermediate)
-    old = saved_job(read_private_json(root / "claim.json"))
+    if case["kind"] != "blocking" and case["fault"] != "after_commit":
+        require((root / "old-owner-rejected.json").exists(), "old_owner_not_checked_during_reclaim")
     require(
         not await runner._store.heartbeat(
             job=old, now=clock(), lease_duration=timedelta(seconds=30)

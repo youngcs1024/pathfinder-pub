@@ -47,7 +47,7 @@ def restore(sessions, state):
     return SimpleNamespace(
         sessions=sessions,
         tenant=TenantContext(
-            UUID(state["workspace_id"]), UUID(state["actor_id"]), WorkspaceRole.OWNER
+            UUID(state["workspace_id"]), UUID(state["actor_id"]), WorkspaceRole(state["role"])
         ),
         store=SqlAlchemyResumeGenerationStore(sessions),
         revisions=SqlAlchemyResumeRevisionStore(sessions),
@@ -124,12 +124,14 @@ async def prepare(sessions, root, case):
         "case": case,
         "workspace_id": str(tenant.workspace_id),
         "actor_id": str(tenant.actor_user_id),
+        "role": tenant.role.value,
         "session_id": str(created.receipt.resource_id),
         "run_id": str(created.receipt.run_id),
-        "request": rig.request.model_dump(mode="json"),
+        "request": rig.request.model_dump(mode="json", exclude_unset=True),
         "create_key": str(key),
         "project_item_id": str(rig.project_item_id),
         "fact_id": str(rig.fact_ids[0]),
+        "fact_text": dataset.facts[0],
     }
     # Initial revision draft is setup, not a measured fault attempt.
     if case["mode"] == "revision":
