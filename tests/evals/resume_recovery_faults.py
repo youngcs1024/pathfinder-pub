@@ -133,6 +133,7 @@ async def inject(url, sessions, root, state):
     fault, kind = state["case"]["fault"], state["case"]["kind"]
     blocking = kind == "blocking"
     original_claim, original_complete = jobs.claim_due_job, jobs.complete
+    original_prepare = jobs.prepare_claimed_job
     publisher = (
         jobs._revision_publisher
         if state["case"]["mode"] == "revision"
@@ -170,10 +171,18 @@ async def inject(url, sessions, root, state):
         publish(root / "claim.json", json.loads(json.dumps(asdict(job), default=str)))
         if fault == "after_claim":
             await barrier()
-        if blocking and (fault == "budget" or state["case"]["ordinal"] % 2 == 0):
+        if blocking and fault != "budget" and state["case"]["ordinal"] % 2 == 0:
             await apply_block(rig, state)
             await barrier()
         return job
+
+    async def prepare_claimed(**kwargs):
+        prepared = await original_prepare(**kwargs)
+        if fault == "budget":
+            require(prepared.disposition == "execute", "budget_fixture_not_authorized")
+            await apply_block(rig, state)
+            await barrier()
+        return prepared
 
     async def complete(**kwargs):
         if fault == "before_publish":
@@ -221,6 +230,7 @@ async def inject(url, sessions, root, state):
         return result
 
     jobs.claim_due_job, jobs.complete, publisher.publish = claim, complete, publication
+    jobs.prepare_claimed_job = prepare_claimed
     try:
         await runner.run_once(asyncio.Event())
     except InjectedExit:
