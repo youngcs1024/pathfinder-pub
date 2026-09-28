@@ -211,11 +211,23 @@ def report(root):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "action", choices=("prepare", "execute", "resume", "freeze", "report", "rebind")
+        "action",
+        choices=(
+            "prepare",
+            "execute",
+            "resume",
+            "freeze",
+            "report",
+            "rebind",
+            "d-run",
+            "d-resume",
+            "d-report",
+        ),
     )
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--credentials", type=Path)
     parser.add_argument("--live", action="store_true")
+    parser.add_argument("--ci-evidence", type=Path)
     args = parser.parse_args(argv)
     try:
         root = no_links(args.root)
@@ -223,7 +235,22 @@ def main(argv=None):
         fd = os.open(root / "controller.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            if args.action == "prepare":
+            if args.action.startswith("d-"):
+                from tests.evals import resume_recovery
+
+                require(not args.live and args.credentials is None, "d_fake_only")
+                result = (
+                    resume_recovery.report(root)
+                    if args.action == "d-report"
+                    else asyncio.run(
+                        resume_recovery.execute(
+                            root, resume=args.action == "d-resume", ci_path=args.ci_evidence
+                        )
+                    )
+                )
+                print(json.dumps(result))
+                return 0 if result["status"] == "PASS" else 1
+            elif args.action == "prepare":
                 prepare(root)
             elif args.action == "rebind":
                 rebind_source(root)
@@ -255,7 +282,11 @@ def main(argv=None):
         # Never emit source bodies, DSNs, credentials, or exception payloads.
         print(
             json.dumps(
-                {"status": "PARTIAL", "error": "preparation_failed", "diagnostic_id": uuid4().hex}
+                {
+                    "status": "PARTIAL",
+                    "error": "d_failed" if args.action.startswith("d-") else "preparation_failed",
+                    "diagnostic_id": uuid4().hex,
+                }
             )
         )
         return 1
