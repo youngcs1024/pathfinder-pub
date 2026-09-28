@@ -40,6 +40,14 @@ def generation_fingerprint(ref="HEAD"):
         function = next(
             n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == name
         )
+        # Scoring arguments can evolve without changing generation control flow.
+        for node in ast.walk(function):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "score_block"
+            ):
+                node.args, node.keywords = [], []
         digests[name] = quality_identity_digest(ast.dump(function, include_attributes=False))
     return quality_identity_digest(digests)
 
@@ -145,3 +153,19 @@ async def reuse_pilot(rig, root, directory, source_sha, manifest, usage_for):
             "usage_at_reuse": initial_usage,
         },
     )
+
+
+def score_origin(root, source_sha, manifest):
+    require(
+        len(source_sha) == 40 and all(c in "0123456789abcdef" for c in source_sha),
+        "invalid_reuse_source",
+    )
+    origin = root / "a" / source_sha
+    old = read_private_json(origin / "manifest.json")
+    require(old["source"]["source_sha"] == source_sha, "reuse_source_changed")
+    validate_ci(old["ci"], source_sha)
+    for key in ("input_digest", "preparation_digest", "d_evidence", "seed", "budget", "pilot"):
+        require(old[key] == manifest[key], "reuse_configuration_changed")
+    version = old["scoring_version"]
+    require(version in ("a-score-v2", "a-score-v3"), "reuse_score_version_unknown")
+    return {"phase": origin / "pilot", "version": version}

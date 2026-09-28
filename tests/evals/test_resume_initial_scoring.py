@@ -187,3 +187,60 @@ def test_reuse_requires_matching_dependencies_and_audited_artifacts(tmp_path, mo
     (phase / "sample/generation.json").write_text("{}")
     with pytest.raises(AcceptanceError, match="reuse_artifact_changed"):
         reuse.verify_origin(root, source, manifest)
+
+
+def test_coverage_ids_are_explicit_enum():
+    from tests.evals.resume_initial_scoring import COVERAGE_PROMPT
+
+    packets, mapping = packets_for(*fixture())
+    packet = packets[-1]
+    assert packet["output_schema"]["$defs"]["RequirementReview"]["properties"]["requirement"][
+        "enum"
+    ] == ["R0"]
+    assert "NEVER its quote" in COVERAGE_PROMPT
+    value = synthetic_response(packet)
+    value["coverage"][0]["requirement"] = packet["items"][0]["quote"]
+    with pytest.raises(AcceptanceError, match="coverage_denominator"):
+        validate_batch(value, packet, mapping)
+
+
+async def test_reuse_only_identical_successful_claim_batches(tmp_path):
+    from tests.evals.product_acceptance_contracts import publish
+    from tests.evals.resume_initial_scoring import PROMPT_DIGEST
+
+    calls = []
+
+    async def call(path, payload, stage):
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        result = ChatModelResult(content=json.dumps(synthetic_response(payload)))
+        publish(
+            path / "call-00-response.json",
+            {"response": result.model_dump(mode="json"), "invocation_ids": ["synthetic"]},
+        )
+        calls.append(payload["kind"])
+        return result
+
+    values = fixture()
+    old = tmp_path / "old"
+    first, _ = await assess(*values, old, call)
+    before = len(calls)
+    new, outcomes = await assess(*values, tmp_path / "new", call, reuse_path=old)
+    assert first == new
+    assert calls[before:] == ["coverage"]
+    assert all(r["reused"] == (r["kind"] == "claims") for r in outcomes)
+    # A different prompt cannot reuse paid assessments even if the result parses.
+    from unittest.mock import patch
+
+    from tests.evals import resume_initial_scoring as scoring
+
+    original = scoring.read_private_json
+
+    def changed(path):
+        value = original(path)
+        if path == old / "protocol.json":
+            value = {**value, "prompt": PROMPT_DIGEST + "changed"}
+        return value
+
+    with patch.object(scoring, "read_private_json", changed):
+        with pytest.raises(AcceptanceError, match="reuse_score_prompt_changed"):
+            await assess(*values, tmp_path / "changed", call, reuse_path=old)

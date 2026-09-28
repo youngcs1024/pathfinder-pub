@@ -311,6 +311,52 @@ async def test_a_snapshot_three_arms_recovery_authorization(
                 == outputs[sample["arm"]]
             )
         assert await recorder.measurement() == before_reuse
+        # Preserve compatible paid claim batches; only coverage needs fresh calls.
+        from tests.evals.resume_initial_scoring import VERSION as SCORE_VERSION
+
+        coverage_script = []
+        for packet in packets:
+            sample = next(s for s in block if s["sample_id"] == mapping[packet["blind_id"]])
+            chunks, _ = packets_for(
+                outputs[sample["arm"]]["output"]["content"], [fact], {}, annotation, case.jd
+            )
+            coverage_script.extend(
+                ChatModelResult(
+                    content=json.dumps(synthetic_response(c)),
+                    usage=ModelUsage(input_tokens=10, output_tokens=10),
+                )
+                for c in chunks
+                if c["kind"] == "coverage"
+            )
+        rig.factory = LLMFactory(
+            recorder=recorder,
+            chat_adapter=ScriptedFakeChatModel(coverage_script),
+            embedding_adapter=FakeEmbeddingModel(),
+            provider="fake",
+        )
+        await score_block(
+            rig,
+            target / "pilot",
+            block,
+            case,
+            annotation,
+            {"phase": directory, "version": SCORE_VERSION},
+        )
+        after_score_reuse = await recorder.measurement()
+        assert after_score_reuse["attempts"] == before_reuse["attempts"] + len(coverage_script)
+        for sample in block:
+            saved = read_private_json(target / "pilot" / sample["sample_id"] / "result.json")
+            assert saved["score_status"] == "ASSESSED"
+            assert any(b["reused"] for b in saved["scoring_batches"])
+        await score_block(
+            rig,
+            target / "pilot",
+            block,
+            case,
+            annotation,
+            {"phase": directory, "version": SCORE_VERSION},
+        )
+        assert await recorder.measurement() == after_score_reuse
         other = await provision.provision_personal_workspace(f"other-{uuid4()}")
         foreign = await tenancy.resolve_tenant(
             workspace_id=other.workspace_id, actor_user_id=other.user_id

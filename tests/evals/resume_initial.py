@@ -55,7 +55,7 @@ from tests.evals.resume_initial_baselines import PROMPTS, candidate_text, genera
 from tests.evals.resume_initial_contracts import VERSION, samples, summarize
 from tests.evals.resume_initial_fixture import seed
 from tests.evals.resume_initial_recording import JournalFactory
-from tests.evals.resume_initial_reuse import generation_fingerprint, reuse_pilot
+from tests.evals.resume_initial_reuse import generation_fingerprint, reuse_pilot, score_origin
 from tests.evals.resume_live_environment import ResumableDatabase
 from tests.evals.resume_quality_runtime import snapshot, worker
 from tests.evals.resume_recovery import preparation, source, validate_ci
@@ -107,7 +107,10 @@ def config(root, inputs, frozen, identity, ci, d_evidence):
     return {
         "version": VERSION,
         "scoring_version": scoring.VERSION,
-        "scoring_prompt": scoring.PROMPT_DIGEST,
+        "scoring_prompt": {
+            "claims": scoring.PROMPT_DIGEST,
+            "coverage": scoring.COVERAGE_PROMPT_DIGEST,
+        },
         "generation_fingerprint": generation_fingerprint(),
         "source": identity,
         "ci": ci,
@@ -325,7 +328,7 @@ async def review_call(rig, path, task, payload):
     return normalize_json(response.content or "")
 
 
-async def score_block(rig, phase, block, case, annotation):
+async def score_block(rig, phase, block, case, annotation, reuse_phase=None):
     candidates = []
     for sample in block:
         generated = read_private_json(phase / sample["sample_id"] / "generation.json")
@@ -369,14 +372,14 @@ async def score_block(rig, phase, block, case, annotation):
                 directory.mkdir(mode=0o700, parents=True, exist_ok=True)
                 return await model.invoke(
                     (
-                        ChatMessage(role="system", content=scoring.PROMPT),
+                        ChatMessage(role="system", content=scoring.prompt_for(payload)),
                         ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
                     ),
                     (),
                     {
                         "task": "resume_initial_review",
                         "graph_node": f"score_{stage}",
-                        "prompt_version": scoring.PROMPT_DIGEST,
+                        "prompt_version": quality_identity_digest(scoring.prompt_for(payload)),
                     },
                 )
 
@@ -388,6 +391,15 @@ async def score_block(rig, phase, block, case, annotation):
                 case.jd,
                 score_path,
                 call,
+                reuse_path=(reuse_phase["phase"] / sample["sample_id"] / reuse_phase["version"])
+                if reuse_phase
+                and (
+                    reuse_phase["phase"]
+                    / sample["sample_id"]
+                    / reuse_phase["version"]
+                    / "protocol.json"
+                ).exists()
+                else None,
             )
             result.update(
                 scoring_version=scoring.VERSION,
@@ -499,7 +511,14 @@ async def run_phase(rig, root, directory, inputs, frozen, *, pilot):
         )
         for sample in block:
             await generate_sample(rig, sample, generation_inputs, phase / sample["sample_id"])
-        await score_block(rig, phase, block, case, annotations[case.case_id])
+        await score_block(
+            rig,
+            phase,
+            block,
+            case,
+            annotations[case.case_id],
+            getattr(rig, "score_reuse_phase", None) if pilot else None,
+        )
         print(
             json.dumps(
                 {
@@ -526,7 +545,9 @@ async def run_phase(rig, root, directory, inputs, frozen, *, pilot):
     return summary
 
 
-async def execute(root, *, action, credentials_path, ci_path, reuse_source=None):
+async def execute(
+    root, *, action, credentials_path, ci_path, reuse_source=None, reuse_score_source=None
+):
     original, inputs, frozen, d_evidence = prerequisites(root)
     identity = source()
     directory = directory_for(root, identity)
@@ -541,6 +562,14 @@ async def execute(root, *, action, credentials_path, ci_path, reuse_source=None)
     bound_reuse = read_private_json(existing).get("reuse_source") if existing.exists() else None
     require(reuse_source is None or bound_reuse in (None, reuse_source), "reuse_binding_changed")
     manifest["reuse_source"] = reuse_source or bound_reuse
+    bound_score = (
+        read_private_json(existing).get("reuse_score_source") if existing.exists() else None
+    )
+    require(
+        reuse_score_source is None or bound_score in (None, reuse_score_source),
+        "reuse_score_binding_changed",
+    )
+    manifest["reuse_score_source"] = reuse_score_source or bound_score
     (root / "a").mkdir(mode=0o700, exist_ok=True)
     directory.mkdir(mode=0o700, exist_ok=True)
     preserve(directory / "manifest.json", manifest)
@@ -633,6 +662,9 @@ async def execute(root, *, action, credentials_path, ci_path, reuse_source=None)
                     profile_evidence=profile_evidence(
                         read_private_json(root / "inputs/profile.json")
                     ),
+                    score_reuse_phase=score_origin(root, manifest["reuse_score_source"], manifest)
+                    if manifest["reuse_score_source"]
+                    else None,
                     seed=inputs.blind_seed,
                 )
                 if action == "a-pilot" and manifest["reuse_source"]:
