@@ -59,7 +59,7 @@ def fixture():
     annotation = {
         "requirements": [
             {
-                "requirement_id": "requirement-long",
+                "requirement_id": "requirement_long",
                 "quote": "Python",
                 "start": 0,
                 "end": 6,

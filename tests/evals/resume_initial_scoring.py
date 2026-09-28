@@ -98,7 +98,11 @@ def packets_for(content, facts, profile, annotation, jd):
     p_reverse = {v: k for k, v in profile_map.items()}
     evidence = {
         "facts": [
-            {"id": k, **{n: f[n] for n in ("claim", "kind", "conditions")}}
+            {
+                "id": k,
+                **{n: f[n] for n in ("claim", "kind", "conditions")},
+                "evidence": f.get("evidence", []),
+            }
             for k, f in zip(fact_map, facts, strict=True)
         ],
         "profile": [
