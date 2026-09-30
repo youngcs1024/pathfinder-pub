@@ -24,17 +24,17 @@ from app.db.session import create_database_engine, create_session_factory
 from app.db.tenancy import SqlAlchemyTenantResolver
 from app.domain.resume_generation import GenerationBudgetV1, JobInputV1, SessionCreateV1
 from app.domain.tenancy import TenantService
-from app.llm.factory import LLMFactory
+from app.llm.factory import LLMFactory, LLMRetryPolicy
 from app.llm.invocations import LLMInvocationContext
 from app.llm.ports import ChatMessage
 from app.llm.qwen_adapters import create_qwen_adapters
 from app.resume.template_render import TemplateIdentity
 from tests.evals import resume_initial_scoring as scoring
+from tests.evals import resume_initial_unit_review as unit_review
 from tests.evals.product_acceptance_budget import summarize as summarize_usage
 from tests.evals.product_acceptance_contracts import publish, read_private_json, require
 from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.quality_pilot import credentials
-from tests.evals.resume_experiment_budget import ExperimentRecorder
 from tests.evals.resume_experiment_contracts import (
     checked_annotation,
     locate_annotation,
@@ -54,8 +54,15 @@ from tests.evals.resume_experiments import load_inputs, preserve
 from tests.evals.resume_initial_baselines import PROMPTS, candidate_text, generate, shared_input
 from tests.evals.resume_initial_contracts import VERSION, samples, summarize
 from tests.evals.resume_initial_fixture import seed
+from tests.evals.resume_initial_reconciliation import ARecorder, reconcile_legacy, scoring_call
 from tests.evals.resume_initial_recording import JournalFactory
-from tests.evals.resume_initial_reuse import generation_fingerprint, reuse_pilot, score_origin
+from tests.evals.resume_initial_reuse import (
+    generation_fingerprint,
+    reuse_formal,
+    reuse_pilot,
+    score_origin,
+    verify_formal_origin,
+)
 from tests.evals.resume_live_environment import ResumableDatabase
 from tests.evals.resume_quality_runtime import snapshot, worker
 from tests.evals.resume_recovery import preparation, source, validate_ci
@@ -110,7 +117,9 @@ def config(root, inputs, frozen, identity, ci, d_evidence):
         "scoring_prompt": {
             "claims": scoring.PROMPT_DIGEST,
             "coverage": scoring.COVERAGE_PROMPT_DIGEST,
+            "unit_recovery": unit_review.PROMPT_DIGEST,
         },
+        "scoring_transport": {"deadline_seconds": 300, "max_attempts": 1},
         "generation_fingerprint": generation_fingerprint(),
         "source": identity,
         "ci": ci,
@@ -366,10 +375,22 @@ async def score_block(rig, phase, block, case, annotation, reuse_phase=None):
             score_path = path / scoring.VERSION
 
             async def call(directory, payload, stage):
+                from tests.evals.resume_initial_reconciliation import ARecorder
+
+                if isinstance(rig.recorder, ARecorder):
+                    return await scoring_call(
+                        rig.scoring_factory,
+                        rig.recorder,
+                        LLMInvocationContext(rig.tenant.workspace_id, rig.tenant.actor_user_id),
+                        directory,
+                        payload,
+                        stage,
+                        scoring.prompt_for(payload),
+                    )
+                directory.mkdir(mode=0o700, parents=True, exist_ok=True)
                 model = JournalFactory(rig.factory, directory, rig.recorder).create_chat_model(
                     LLMInvocationContext(rig.tenant.workspace_id, rig.tenant.actor_user_id)
                 )
-                directory.mkdir(mode=0o700, parents=True, exist_ok=True)
                 return await model.invoke(
                     (
                         ChatMessage(role="system", content=scoring.prompt_for(payload)),
@@ -408,16 +429,26 @@ async def score_block(rig, phase, block, case, annotation, reuse_phase=None):
                 score_status="ASSESSED" if assessed else "UNRESOLVED",
             )
             if assessed:
+                result["semantic_unresolved"] = sum(
+                    c.support == "unresolved" for c in assessed.claims
+                ) + sum(c.status == "unresolved" for c in assessed.coverage)
+                if result["semantic_unresolved"]:
+                    result["score_status"] = "UNRESOLVED"
                 result.update(
                     assessment=assessed.model_dump(mode="json"),
                     metrics=score_metrics(assessed, content_ok=True),
                 )
             all_ids = set()
             result["score_stages"] = {}
-            for stage in scoring.STAGES:
+            for stage in (*scoring.STAGES, "unit", "unit_correction", "timeout_retry"):
                 ids = set()
-                for response in score_path.glob(f"batch-*/{stage}/call-*-response.json"):
-                    ids.update(read_private_json(response)["invocation_ids"])
+                for response in score_path.rglob("call-*.json"):
+                    if not response.name.endswith(("-response.json", "-terminal.json")):
+                        continue
+                    is_retry = response.name.startswith("call-01")
+                    bucket = "timeout_retry" if is_retry else response.parent.name
+                    if bucket == stage:
+                        ids.update(read_private_json(response).get("invocation_ids", []))
                 result["score_stages"][stage] = await usage_for(rig.recorder, sorted(ids))
                 all_ids.update(ids)
             result["score_usage"] = await usage_for(rig.recorder, sorted(all_ids))
@@ -518,7 +549,9 @@ async def run_phase(rig, root, directory, inputs, frozen, *, pilot):
             block,
             case,
             annotations[case.case_id],
-            getattr(rig, "score_reuse_phase", None) if pilot else None,
+            getattr(rig, "score_reuse_phase", None)
+            if pilot
+            else getattr(rig, "formal_score_reuse", None),
         )
         print(
             json.dumps(
@@ -547,7 +580,14 @@ async def run_phase(rig, root, directory, inputs, frozen, *, pilot):
 
 
 async def execute(
-    root, *, action, credentials_path, ci_path, reuse_source=None, reuse_score_source=None
+    root,
+    *,
+    action,
+    credentials_path,
+    ci_path,
+    reuse_source=None,
+    reuse_score_source=None,
+    reuse_formal_source=None,
 ):
     original, inputs, frozen, d_evidence = prerequisites(root)
     identity = source()
@@ -555,7 +595,7 @@ async def execute(
     if (directory / "manifest.json").exists():
         ci = read_private_json(directory / "manifest.json")["ci"]
     else:
-        require(action == "a-pilot" and ci_path is not None, "a_pilot_required")
+        require(action in ("a-pilot", "a-reconcile") and ci_path is not None, "a_pilot_required")
         ci = read_private_json(ci_path)
     validate_ci(ci, identity["source_sha"])
     manifest = config(root, inputs, frozen, identity, ci, d_evidence)
@@ -571,6 +611,26 @@ async def execute(
         "reuse_score_binding_changed",
     )
     manifest["reuse_score_source"] = reuse_score_source or bound_score
+    bound_formal = (
+        read_private_json(existing).get("reuse_formal_source") if existing.exists() else None
+    )
+    require(
+        reuse_formal_source is None or bound_formal in (None, reuse_formal_source),
+        "reuse_formal_binding_changed",
+    )
+    manifest["reuse_formal_source"] = reuse_formal_source or bound_formal
+    if manifest["reuse_formal_source"]:
+        formal_source = manifest["reuse_formal_source"]
+        require(
+            len(formal_source) == 40 and all(c in "0123456789abcdef" for c in formal_source),
+            "invalid_reuse_source",
+        )
+        evidence_path = root / "a" / formal_source / "formal/audit.json"
+        if not evidence_path.exists():
+            evidence_path = root / "a" / formal_source / "closeout-partial-v4.json"
+        manifest["reuse_formal_evidence_digest"] = quality_identity_digest(
+            read_private_json(evidence_path)
+        )
     (root / "a").mkdir(mode=0o700, exist_ok=True)
     directory.mkdir(mode=0o700, exist_ok=True)
     preserve(directory / "manifest.json", manifest)
@@ -597,7 +657,7 @@ async def execute(
                     require(source() == identity, "a_source_changed")
                     require(load_inputs(root).digest == inputs.digest, "a_inputs_changed")
 
-                recorder = ExperimentRecorder(
+                recorder = ARecorder(
                     sessions,
                     tenant,
                     root=root,
@@ -608,8 +668,22 @@ async def execute(
                     source_check=source_check,
                 )
                 await recorder.initialize()
+                if action == "a-reconcile":
+                    require(manifest["reuse_formal_source"], "formal_source_required")
+                    origin, _ = verify_formal_origin(
+                        root, manifest["reuse_formal_source"], manifest
+                    )
+                    value = await reconcile_legacy(recorder, origin)
+                    preserve(directory / "reconciliation.json", value)
+                    return value
                 await recorder.check_admission(after=True)
                 if action == "a-freeze":
+                    if manifest["reuse_formal_source"]:
+                        require(
+                            read_private_json(directory / "recovery-validation.json")["status"]
+                            == "PASS",
+                            "formal_recovery_unverified",
+                        )
                     pilot = report(root, pilot=True)
                     require(pilot["status"] == "PASS", "pilot_incomplete")
                     for arm in ("one_shot", "selection", "pathfinder"):
@@ -659,6 +733,9 @@ async def execute(
                     source_bytes=raw,
                     recorder=recorder,
                     factory=factory,
+                    scoring_factory=replace(
+                        factory, retry_policy=LLMRetryPolicy(max_attempts=1, deadline_seconds=300)
+                    ),
                     facts=read_private_json(root / "inputs/facts.json")["facts"],
                     profile_evidence=profile_evidence(
                         read_private_json(root / "inputs/profile.json")
@@ -672,11 +749,46 @@ async def execute(
                     await reuse_pilot(
                         rig, root, directory, manifest["reuse_source"], manifest, usage_for
                     )
+                if manifest["reuse_formal_source"]:
+                    rig.formal_score_reuse = await reuse_formal(
+                        rig, root, directory, manifest["reuse_formal_source"], manifest, usage_for
+                    )
+                if action == "a-recover":
+                    require(report(root, pilot=True)["status"] == "PASS", "pilot_incomplete")
+                    planned = manifest["planned"]
+                    for offset in range(0, len(planned), 3):
+                        block = planned[offset : offset + 3]
+                        if not all(
+                            (directory / "formal" / s["sample_id"] / "generation.json").exists()
+                            for s in block
+                        ):
+                            continue
+                        case = next(c for c in inputs.cases if c.case_id == block[0]["case_id"])
+                        await score_block(
+                            rig,
+                            directory / "formal",
+                            block,
+                            case,
+                            frozen["annotations"][case.case_id]["annotation"],
+                            rig.formal_score_reuse,
+                        )
+                    rows = [
+                        read_private_json(p) for p in (directory / "formal").glob("*/result.json")
+                    ]
+                    value = {
+                        "status": "PASS"
+                        if all(r["score_status"] != "UNRESOLVED" for r in rows)
+                        else "PARTIAL",
+                        "recorded": len(rows),
+                        "usage": await recorder.check_admission(after=True),
+                    }
+                    preserve(directory / "recovery-validation.json", value)
+                    return value
                 return await run_phase(
                     rig, root, directory, inputs, frozen, pilot=action == "a-pilot"
                 )
             except BaseException:
-                usage = await recorder.measurement() if recorder is not None else None
+                usage = await recorder.failure_measurement() if recorder is not None else None
                 publish(
                     directory / f"partial-{uuid4().hex}.json",
                     {"status": "PARTIAL", "usage": usage, "action": action},

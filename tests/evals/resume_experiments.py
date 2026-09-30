@@ -227,6 +227,8 @@ def main(argv=None):
             "a-run",
             "a-resume",
             "a-report",
+            "a-reconcile",
+            "a-recover",
         ),
     )
     parser.add_argument("--root", type=Path, required=True)
@@ -236,6 +238,9 @@ def main(argv=None):
     parser.add_argument("--reuse-source", help="A generation source commit to verify and reuse")
     parser.add_argument(
         "--reuse-score-source", help="A source with compatible completed claim batches"
+    )
+    parser.add_argument(
+        "--reuse-formal-source", help="Verified formal A generation and score source"
     )
     args = parser.parse_args(argv)
     try:
@@ -247,7 +252,7 @@ def main(argv=None):
             if args.action.startswith("a-"):
                 from tests.evals import resume_initial
 
-                if args.action not in ("a-report", "a-freeze"):
+                if args.action not in ("a-report", "a-freeze", "a-reconcile"):
                     require(args.live and args.credentials is not None, "live_opt_in_required")
                 result = (
                     resume_initial.report(root)
@@ -260,6 +265,7 @@ def main(argv=None):
                             ci_path=args.ci_evidence,
                             reuse_source=args.reuse_source,
                             reuse_score_source=args.reuse_score_source,
+                            reuse_formal_source=args.reuse_formal_source,
                         )
                     )
                 )

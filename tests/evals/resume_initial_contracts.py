@@ -88,6 +88,9 @@ def summarize(planned, results, annotations):
             ("initial", "initial"),
             ("correction", "correction"),
             ("review", "review"),
+            ("unit", "unit"),
+            ("unit_correction", "unit_correction"),
+            ("timeout_retry", "timeout_retry"),
         ):
             usages = (
                 [r[key] for r in arm_rows if key in r]

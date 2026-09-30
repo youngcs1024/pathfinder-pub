@@ -137,7 +137,8 @@ async def test_bounded_recovery_and_replay(tmp_path, valid_stage):
     assessment, outcomes = await assess(*values, tmp_path / "score", call)
     batches = len(packets_for(*values)[0])
     multiplier = {"initial": 1, "correction": 2, "review": 3, None: 3}[valid_stage]
-    assert len(calls) == batches * multiplier
+    extra = sum(len(p["items"]) * 2 for p in packets_for(*values)[0]) if valid_stage is None else 0
+    assert len(calls) == batches * multiplier + extra
     assert (assessment is not None) == (valid_stage is not None)
     before = len(calls)
     repeated = await assess(*values, tmp_path / "score", call)

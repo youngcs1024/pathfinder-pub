@@ -357,6 +357,43 @@ async def test_a_snapshot_three_arms_recovery_authorization(
             {"phase": directory, "version": SCORE_VERSION},
         )
         assert await recorder.measurement() == after_score_reuse
+        # A partial formal phase can reuse audited artifacts and real PG identities.
+        formal = tmp_path / "formal"
+        formal.mkdir(mode=0o700)
+        for old_path in directory.rglob("*.json"):
+            new_path = formal / old_path.relative_to(directory)
+            new_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            publish(new_path, read_private_json(old_path))
+        inventory = {
+            "formal/" + str(p.relative_to(formal)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in formal.rglob("*.json")
+        }
+        monkeypatch.setattr(
+            resume_initial_reuse, "verify_formal_origin", lambda *args: (tmp_path, inventory)
+        )
+        monkeypatch.setattr(
+            resume_initial_reuse,
+            "score_origin",
+            lambda *args: {"phase": formal, "version": SCORE_VERSION},
+        )
+        formal_target = tmp_path / "formal-target"
+        formal_target.mkdir(mode=0o700)
+        score_source = await resume_initial_reuse.reuse_formal(
+            rig, tmp_path, formal_target, "a" * 40, {"planned": block}, usage_for
+        )
+        await score_block(rig, formal_target / "formal", block, case, annotation, score_source)
+        assert await recorder.measurement() == after_score_reuse
+        assert all(
+            read_private_json(formal_target / "formal" / s["sample_id"] / "result.json")[
+                "score_status"
+            ]
+            == "ASSESSED"
+            for s in block
+        )
+        await resume_initial_reuse.reuse_formal(
+            rig, tmp_path, formal_target, "a" * 40, {"planned": block}, usage_for
+        )
+        assert await recorder.measurement() == after_score_reuse
         other = await provision.provision_personal_workspace(f"other-{uuid4()}")
         foreign = await tenancy.resolve_tenant(
             workspace_id=other.workspace_id, actor_user_id=other.user_id

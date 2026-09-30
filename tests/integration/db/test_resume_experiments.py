@@ -239,3 +239,105 @@ async def test_reserved_timeout_survives_restart_and_new_unknown_stops(ledger, n
     assert value["attempts"] == value["unknown_cost"] == 2
     assert value["reserved_unknown_attempts"] == 1
     assert read_private_json(root / f"accounted-{first.invocation_id}.json") == original
+
+
+@pytest.mark.parametrize("last_node", ["score_review", "write_draft"])
+async def test_a_timeout_two_reservations_bound_to_score_calls(ledger, last_node):
+    from tests.evals.resume_experiments import preserve
+    from tests.evals.resume_initial_reconciliation import ARecorder
+
+    sessions, tenant, kwargs, _ = ledger
+    kwargs["inputs"].budget = ExperimentBudget()
+    recorder = ARecorder(sessions, tenant, **kwargs)
+    await recorder.initialize()
+    recorder.enable_policy()
+    for index in range(3):
+        row = attempt(tenant).model_copy(
+            update={"graph_node": "score_initial" if index < 2 else last_node}
+        )
+        path = kwargs["root"] / "a" / "synthetic" / f"stage-{index}" / "call-00-started.json"
+        path.parent.mkdir(mode=0o700, parents=True)
+        preserve(
+            path, {"identity": f"synthetic-{index}", "before": await recorder.check_admission()}
+        )
+        recorder.active_score_call = (
+            (path, f"synthetic-{index}") if row.graph_node.startswith("score_") else None
+        )
+        await recorder.prepare(row)
+        outcome = LLMInvocationOutcome(
+            status="failed", latency_ms=1, error_category="provider_timeout"
+        )
+        if index == 2:
+            with pytest.raises(AcceptanceError, match=r"a_timeout_limit|unknown_usage_or_cost"):
+                await recorder.finalize(row, outcome)
+        else:
+            await recorder.finalize(row, outcome)
+            usage = await recorder.check_admission(after=True)
+            assert usage["unknown_cost"] == usage["a_reserved_unknown_attempts"] == index + 1
+            assert usage["unfinished"] == 0
+            rebuilt = ARecorder(sessions, tenant, **kwargs)
+            await rebuilt.initialize()
+            assert await rebuilt.check_admission(after=True) == usage
+    assert len(await recorder.rows()) == 3
+    assert len(list((kwargs["root"] / "a-score-timeouts").glob("*.json"))) == 2
+
+
+async def test_a_score_timeout_retry_and_completed_replay(ledger):
+    from app.llm.factory import LLMFactory, LLMRetryPolicy
+    from app.llm.invocations import LLMInvocationContext
+    from app.llm.ports import LOCKED_EMBEDDING_MODEL, ChatModelResult, ProviderAdapterError
+    from tests.evals.resume_initial_reconciliation import ARecorder, scoring_call
+
+    sessions, tenant, kwargs, _ = ledger
+    kwargs["inputs"].budget = ExperimentBudget()
+    recorder = ARecorder(sessions, tenant, **kwargs)
+    await recorder.initialize()
+    recorder.enable_policy()
+
+    class Chat:
+        provider = "qwen"
+        model = LOCKED_CHAT_MODEL
+        calls = 0
+
+        async def invoke(self, messages, tools, metadata, *, attempt):
+            self.calls += 1
+            assert 290 < attempt.timeout_seconds <= 300
+            if self.calls == 1:
+                raise ProviderAdapterError(category="provider_timeout", retryable=True)
+            return ChatModelResult(
+                content='{"ok":true}',
+                provider="qwen",
+                model=LOCKED_CHAT_MODEL,
+                usage=ModelUsage(input_tokens=10, output_tokens=2),
+            )
+
+    class Embedding:
+        provider = "qwen"
+        model = LOCKED_EMBEDDING_MODEL
+
+        async def embed(self, texts, metadata, *, attempt):
+            pytest.fail("unexpected embedding")
+
+    adapter = Chat()
+    factory = LLMFactory(
+        recorder=recorder,
+        chat_adapter=adapter,
+        embedding_adapter=Embedding(),
+        provider="qwen",
+        retry_policy=LLMRetryPolicy(max_attempts=1, deadline_seconds=300),
+    )
+    context = LLMInvocationContext(tenant.workspace_id, tenant.actor_user_id)
+    path = kwargs["root"] / "a" / "synthetic" / "score"
+    result = await scoring_call(
+        factory, recorder, context, path, {"synthetic": True}, "initial", "synthetic prompt"
+    )
+    before = await recorder.measurement()
+    assert result.content == '{"ok":true}' and adapter.calls == 2
+    assert before["unknown_cost"] == before["unknown_usage"] == 1
+    assert (
+        await scoring_call(
+            factory, recorder, context, path, {"synthetic": True}, "initial", "synthetic prompt"
+        )
+        == result
+    )
+    assert await recorder.measurement() == before and adapter.calls == 2
