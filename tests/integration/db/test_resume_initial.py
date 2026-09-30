@@ -295,6 +295,11 @@ async def test_a_snapshot_three_arms_recovery_authorization(
         )
         target = tmp_path / "new-source"
         target.mkdir(mode=0o700)
+        monkeypatch.setattr(
+            resume_initial_reuse,
+            "generation_lock_evidence",
+            lambda ref="HEAD": {"sha256": "synthetic-lock", "compatible_sha256": "synthetic-lock"},
+        )
         before_reuse = await recorder.measurement()
         await resume_initial_reuse.reuse_pilot(
             rig, tmp_path, target, "a" * 40, {"pilot": block}, usage_for
