@@ -18,6 +18,27 @@ def git(*args):
     return subprocess.check_output(["git", *args])
 
 
+# Explicitly authorized auth-only security upgrade. Exact whole-lock digests keep
+# every other package and all lock metadata protected; no general dependency bypass.
+PYJWT_LOCK_COMPATIBILITY = {
+    "46792d0e0554a696cbb39461d85b2cbd9cccbc4525aae1ab0cf07e63c79fca4e": "2.13.0",
+    "cdae3d0317206e403e5d4cd671247f949deb96f42f4a9463ca0530eec75d3391": "2.14.0",
+}
+
+
+def compatible_lock_digest(digest):
+    return next(iter(PYJWT_LOCK_COMPATIBILITY)) if digest in PYJWT_LOCK_COMPATIBILITY else digest
+
+
+def generation_lock_evidence(ref="HEAD"):
+    digest = hashlib.sha256(git("show", f"{ref}:uv.lock")).hexdigest()
+    return {
+        "sha256": digest,
+        "compatible_sha256": compatible_lock_digest(digest),
+        "auth_only_pyjwt_version": PYJWT_LOCK_COMPATIBILITY.get(digest),
+    }
+
+
 def generation_fingerprint(ref="HEAD"):
     paths = git("ls-tree", "-r", "--name-only", ref).decode().splitlines()
     included = [
@@ -35,6 +56,7 @@ def generation_fingerprint(ref="HEAD"):
         )
     ]
     digests = {p: hashlib.sha256(git("show", f"{ref}:{p}")).hexdigest() for p in included}
+    digests["uv.lock"] = compatible_lock_digest(digests["uv.lock"])
     tree = ast.parse(git("show", f"{ref}:tests/evals/resume_initial.py").decode())
     for name in ("generate_sample", "run_phase"):
         function = next(
@@ -149,6 +171,8 @@ async def reuse_pilot(rig, root, directory, source_sha, manifest, usage_for):
             "source_sha": source_sha,
             "origin": str(origin),
             "generation_fingerprint": fingerprint,
+            "source_lock": generation_lock_evidence(source_sha),
+            "current_lock": generation_lock_evidence(),
             "artifact_sha256": copied,
             "usage_at_reuse": initial_usage,
         },

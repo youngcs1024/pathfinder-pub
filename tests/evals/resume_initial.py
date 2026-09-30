@@ -58,6 +58,7 @@ from tests.evals.resume_initial_reconciliation import ARecorder, reconcile_legac
 from tests.evals.resume_initial_recording import JournalFactory
 from tests.evals.resume_initial_reuse import (
     generation_fingerprint,
+    generation_lock_evidence,
     reuse_formal,
     reuse_pilot,
     score_origin,
@@ -121,6 +122,7 @@ def config(root, inputs, frozen, identity, ci, d_evidence):
         },
         "scoring_transport": {"deadline_seconds": 300, "max_attempts": 1},
         "generation_fingerprint": generation_fingerprint(),
+        "generation_lock": generation_lock_evidence(),
         "source": identity,
         "ci": ci,
         "input_digest": inputs.digest,

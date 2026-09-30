@@ -279,3 +279,21 @@ async def test_cross_batch_conflict_gets_one_independent_review(tmp_path):
         outcomes,
     )
     assert calls == ["review"]
+
+
+def test_auth_security_lock_exception_is_exact_and_generation_stays_protected(monkeypatch):
+    from tests.evals import resume_initial_reuse as reuse
+
+    old, new = reuse.PYJWT_LOCK_COMPATIBILITY
+    assert reuse.compatible_lock_digest(old) == reuse.compatible_lock_digest(new)
+    assert reuse.compatible_lock_digest("different-lock") == "different-lock"
+    original = reuse.git
+    before = reuse.generation_fingerprint()
+
+    def altered(*args):
+        if args[0] == "show" and args[1].endswith(":uv.lock"):
+            return original(*args) + b"\n# Other change\n"
+        return original(*args)
+
+    monkeypatch.setattr(reuse, "git", altered)
+    assert reuse.generation_fingerprint() != before
