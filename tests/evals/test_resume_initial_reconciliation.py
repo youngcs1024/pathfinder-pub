@@ -131,3 +131,64 @@ async def test_reconciliation_rejects_ambiguous_or_mismatched_request(tmp_path):
         await reconcile_started(
             SimpleNamespace(audit=audit), started, messages, {"graph_node": "score_review"}
         )
+
+
+@pytest.mark.parametrize("mutation", ["none", "run", "tenant", "ledger", "journal", "response"])
+def test_generation_interruption_exact_binding(tmp_path, mutation):
+    from tests.evals.product_acceptance_contracts import publish, read_private_json
+    from tests.evals.quality_dataset import quality_identity_digest
+    from tests.evals.resume_initial_interruption import AUTHORIZATION, validate_authorization
+    from tests.evals.resume_live_budget import ledger_identity
+
+    tmp_path.chmod(0o700)
+    row = SimpleNamespace(
+        id=uuid4(),
+        workspace_id=uuid4(),
+        actor_user_id=uuid4(),
+        run_id=uuid4(),
+        provider="qwen",
+        invocation_kind="chat",
+        model="synthetic",
+        graph_node="analyze_job",
+        request_hash="synthetic",
+        status="started",
+        error_category=None,
+        token_usage=None,
+        estimated_cost=None,
+        pricing_version=None,
+        currency=None,
+        latency_ms=None,
+    )
+    binding = {"workspace_id": str(row.workspace_id), "actor_user_id": str(row.actor_user_id)}
+    path = tmp_path / "a" / ("a" * 40) / "formal/test-r1-pathfinder/call-00-started.json"
+    path.parent.mkdir(mode=0o700, parents=True)
+    publish(path, {"identity": "exact", "before": {"invocation_ids": []}})
+    value = {
+        "policy": "single_interrupted_generation_no_replay_v1",
+        "binding": binding,
+        "authorization": "Synthetic approval",
+        "reserved_cost_cny": "10.4623104",
+        "invocation_id": str(row.id),
+        "ledger": ledger_identity(row),
+        "run_id": str(row.run_id),
+        "source_sha": "a" * 40,
+        "sample_id": "test-r1-pathfinder",
+        "started_path": str(path.relative_to(tmp_path)),
+        "started_digest": quality_identity_digest(read_private_json(path)),
+    }
+    if mutation == "run":
+        value["run_id"] = str(uuid4())
+    elif mutation == "tenant":
+        value["binding"] = {**binding, "workspace_id": str(uuid4())}
+    elif mutation == "ledger":
+        row.request_hash = "changed"
+    elif mutation == "journal":
+        value["started_digest"] = "changed"
+    elif mutation == "response":
+        publish(path.with_name("call-00-response.json"), {"content": "known"})
+    publish(tmp_path / AUTHORIZATION, value)
+    if mutation == "none":
+        assert validate_authorization(tmp_path, binding, [row]) == value
+    else:
+        with pytest.raises(AcceptanceError, match="interruption_"):
+            validate_authorization(tmp_path, binding, [row])

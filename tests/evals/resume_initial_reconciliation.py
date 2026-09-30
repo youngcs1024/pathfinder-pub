@@ -151,7 +151,9 @@ class ARecorder(ExperimentRecorder):
         usage["reserved_cost_cny"] = str(Decimal(usage["reserved_cost_cny"]) + extra)
         usage["budget_occupied_cny"] = str(Decimal(usage["budget_occupied_cny"]) + extra)
         usage["remaining_admission_cny"] = str(Decimal(usage["remaining_admission_cny"]) - extra)
-        return usage
+        from tests.evals.resume_initial_interruption import reservation
+
+        return reservation(self.root, self.binding, rows, usage)
 
     async def failure_measurement(self):
         # Diagnostic only: never used by admission. Keep the hard two-timeout rejection.
@@ -188,6 +190,7 @@ class ARecorder(ExperimentRecorder):
         usage = await self.measurement()
         # Reuse the original fail-closed budget arithmetic after separating validated A exceptions.
         checked = dict(usage)
+        checked["unfinished"] -= usage.get("reserved_unfinished_attempts", 0)
         count = usage.get("a_reserved_unknown_attempts", 0)
         checked["unknown_cost"] -= count
         checked["unknown_usage"] -= count

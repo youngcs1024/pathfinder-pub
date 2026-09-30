@@ -116,7 +116,10 @@ def summarize(planned, results, annotations):
                 "includes_failed_samples": True,
             }
         groups[arm]["generation_elapsed_seconds"] = sum(
-            r.get("elapsed_seconds", 0) for r in arm_rows
+            r.get("elapsed_seconds") or 0 for r in arm_rows
+        )
+        groups[arm]["generation_elapsed_unknown"] = sum(
+            r.get("elapsed_seconds") is None for r in arm_rows
         )
         for metric in ("fact_support", "profile_fact_support", "coverage", "condition_omission"):
             vals = [

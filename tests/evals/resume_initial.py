@@ -671,8 +671,13 @@ async def execute(
                 await recorder.initialize()
                 if action == "a-reconcile":
                     require(manifest["reuse_formal_source"], "formal_source_required")
-                    origin, _ = verify_formal_origin(
+                    origin, inventory = verify_formal_origin(
                         root, manifest["reuse_formal_source"], manifest
+                    )
+                    from tests.evals.resume_initial_interruption import reconcile
+
+                    await reconcile(
+                        recorder, sessions, tenant, origin, directory, inventory, usage_for
                     )
                     value = await reconcile_legacy(recorder, origin)
                     preserve(directory / "reconciliation.json", value)
