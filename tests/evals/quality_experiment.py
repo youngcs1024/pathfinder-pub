@@ -27,6 +27,12 @@ ACCEPTED = "evals/baselines/quality/e410-agent-v1.json"
 SOURCE_SHA = "6ee09703fd19dd3f68813bb40f2b314fba512995"
 ACCEPTED_DIGEST = "sha256:d3c29c48b9f168ce47d9a9f413efebbb1996654811ba403c62dc77cc5f72bb19"
 LOCK_DIGEST = "sha256:46792d0e0554a696cbb39461d85b2cbd9cccbc4525aae1ab0cf07e63c79fca4e"
+# The frozen historical identity stays unchanged. Only this explicitly reviewed
+# auth-only PyJWT security update is accepted for offline registration checks;
+# actual execution still binds source trees and dependencies separately.
+OFFLINE_COMPATIBLE_LOCK_DIGESTS = frozenset(
+    (LOCK_DIGEST, "sha256:cdae3d0317206e403e5d4cd671247f949deb96f42f4a9463ca0530eec75d3391")
+)
 CAPACITY_EVIDENCE = {
     "capacity_e56_v1": "sha256:8fbfe72fd6a1a2f116b12a8fe17c6187ca90de10b819d52cf4a8811d681f384a",
     "queue_e57_v1": "sha256:7a24d0cfa066e25bc18c4a72c863c0aacabd231ed286c7ecbd80ef6d7d2280ae",
@@ -268,7 +274,8 @@ def validate_experiment_plan(plan: QualityExperimentPlanV1, *, root: Path = ROOT
             or plan.identity.accepted_digest != ACCEPTED_DIGEST
             or quality_digest(raw) != ACCEPTED_DIGEST
             or plan.identity.lock_digest != LOCK_DIGEST
-            or quality_digest((root / "uv.lock").read_bytes()) != LOCK_DIGEST
+            or quality_digest((root / "uv.lock").read_bytes())
+            not in OFFLINE_COMPATIBLE_LOCK_DIGESTS
             or plan.capacity_evidence != CAPACITY_EVIDENCE
         ):
             raise ExperimentPlanError("experiment_source_mismatch")

@@ -292,3 +292,13 @@ def test_cli_failures_never_echo_private_content(raw, tmp_path, capsys, monkeypa
     assert set(json.loads(output.out)) == {"category"}
     assert CANARY not in output.out + output.err
     assert not output.err
+
+
+def test_security_upgrade_keeps_historical_registration_identity():
+    from tests.evals.quality_dataset import quality_digest
+    from tests.evals.quality_experiment import LOCK_DIGEST, OFFLINE_COMPATIBLE_LOCK_DIGESTS
+
+    plan = load_experiment_plan(PLAN)
+    assert plan.identity.lock_digest == LOCK_DIGEST
+    assert quality_digest((ROOT / "uv.lock").read_bytes()) in OFFLINE_COMPATIBLE_LOCK_DIGESTS
+    assert len(OFFLINE_COMPATIBLE_LOCK_DIGESTS) == 2
