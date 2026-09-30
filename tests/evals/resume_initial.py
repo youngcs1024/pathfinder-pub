@@ -52,11 +52,12 @@ from tests.evals.resume_experiment_scoring import (
 )
 from tests.evals.resume_experiments import load_inputs, preserve
 from tests.evals.resume_initial_baselines import PROMPTS, candidate_text, generate, shared_input
-from tests.evals.resume_initial_contracts import VERSION, samples, summarize
+from tests.evals.resume_initial_contracts import VERSION, recovery_readiness, samples, summarize
 from tests.evals.resume_initial_fixture import seed
 from tests.evals.resume_initial_reconciliation import ARecorder, reconcile_legacy, scoring_call
 from tests.evals.resume_initial_recording import JournalFactory
 from tests.evals.resume_initial_reuse import (
+    formal_evidence_path,
     generation_fingerprint,
     generation_lock_evidence,
     reuse_formal,
@@ -627,9 +628,7 @@ async def execute(
             len(formal_source) == 40 and all(c in "0123456789abcdef" for c in formal_source),
             "invalid_reuse_source",
         )
-        evidence_path = root / "a" / formal_source / "formal/audit.json"
-        if not evidence_path.exists():
-            evidence_path = root / "a" / formal_source / "closeout-partial-v4.json"
+        evidence_path = formal_evidence_path(root / "a" / formal_source)
         manifest["reuse_formal_evidence_digest"] = quality_identity_digest(
             read_private_json(evidence_path)
         )
@@ -778,10 +777,16 @@ async def execute(
                         read_private_json(p) for p in (directory / "formal").glob("*/result.json")
                     ]
                     value = {
-                        "status": "PASS"
-                        if all(r["score_status"] != "UNRESOLVED" for r in rows)
-                        else "PARTIAL",
-                        "recorded": len(rows),
+                        **recovery_readiness(
+                            rows,
+                            [
+                                s["sample_id"]
+                                for s in planned
+                                if (
+                                    directory / "formal" / s["sample_id"] / "generation.json"
+                                ).exists()
+                            ],
+                        ),
                         "usage": await recorder.check_admission(after=True),
                     }
                     preserve(directory / "recovery-validation.json", value)

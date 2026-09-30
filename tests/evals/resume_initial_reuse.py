@@ -204,7 +204,23 @@ def score_origin(root, source_sha, manifest):
     }
 
 
-def verify_formal_origin(root, source_sha, manifest):
+def formal_evidence_path(origin):
+    for name in ("formal/audit.json", "closeout-recovery-v5.json", "closeout-partial-v4.json"):
+        path = origin / name
+        if path.exists():
+            return path
+    require(False, "reuse_evidence_missing")
+
+
+def compatible_scores(old, manifest):
+    return all(
+        key in old and key in manifest and old[key] == manifest[key]
+        for key in ("scoring_version", "scoring_prompt", "scoring_transport")
+    )
+
+
+def verify_formal_origin(root, source_sha, manifest, ancestors=()):
+    require(source_sha not in ancestors and len(ancestors) < 16, "reuse_lineage_cycle")
     require(
         len(source_sha) == 40 and all(c in "0123456789abcdef" for c in source_sha),
         "invalid_reuse_source",
@@ -233,15 +249,25 @@ def verify_formal_origin(root, source_sha, manifest):
         generation_fingerprint(source_sha) == generation_fingerprint(),
         "reuse_generation_code_changed",
     )
-    frozen = read_private_json(origin / "frozen.json")
-    require(frozen["manifest_digest"] == quality_identity_digest(old), "reuse_freeze_changed")
+    if (origin / "frozen.json").exists():
+        frozen = read_private_json(origin / "frozen.json")
+        require(frozen["manifest_digest"] == quality_identity_digest(old), "reuse_freeze_changed")
+    else:
+        # A recovery may finish with terminal unresolved scores before a new freeze.
+        # Its generated samples must still trace to the original frozen formal source.
+        parent = old.get("reuse_formal_source")
+        require(bool(parent), "reuse_freeze_missing")
+        verify_formal_origin(root, parent, old, (*ancestors, source_sha))
+        recovery = read_private_json(origin / "recovery-validation.json")
+        require(recovery["status"] in ("PASS", "PARTIAL"), "reuse_recovery_incomplete")
+        require(recovery["usage"]["unfinished"] == 0, "reuse_recovery_unfinished")
     if (origin / "formal/audit.json").exists():
         inventory = {
             "formal/" + k: v
             for k, v in read_private_json(origin / "formal/audit.json")["artifact_sha256"].items()
         }
     else:
-        closeout = read_private_json(origin / "closeout-partial-v4.json")
+        closeout = read_private_json(formal_evidence_path(origin))
         require(closeout["source_sha"] == source_sha, "reuse_closeout_changed")
         inventory = closeout["artifact_sha256"]
     evidence = (
@@ -269,6 +295,7 @@ async def reuse_formal(rig, root, directory, source_sha, manifest, usage_for):
     target.mkdir(mode=0o700, exist_ok=True)
     before = await rig.recorder.check_admission(after=True)
     copied = {}
+    same_scores = compatible_scores(read_private_json(origin / "manifest.json"), manifest)
     for sample in manifest["planned"]:
         sid = sample["sample_id"]
         name = f"formal/{sid}/generation.json"
@@ -306,10 +333,28 @@ async def reuse_formal(rig, root, directory, source_sha, manifest, usage_for):
                 ),
                 "reuse_business_changed",
             )
+        result_name = f"formal/{sid}/result.json"
+        if same_scores and result_name in inventory:
+            saved = read_private_json(origin / result_name)
+            require(saved["sample"] == sample, "reuse_score_sample_changed")
+            require(
+                saved["scoring_version"] == manifest["scoring_version"]
+                if generated["output"]
+                else saved["score_status"] == "NOT_APPLICABLE",
+                "reuse_score_version_changed",
+            )
+            require(all(saved[k] == v for k, v in generated.items()), "reuse_generation_changed")
+            if "score_usage" in saved:
+                require(
+                    await usage_for(rig.recorder, saved["score_usage"]["invocation_ids"])
+                    == saved["score_usage"],
+                    "reuse_score_ledger_changed",
+                )
         for entry in inventory:
             parts = Path(entry).parts
             if (
-                len(parts) == 3 and parts[:2] == ("formal", sid) and parts[2] != "result.json"
+                parts[:2] == ("formal", sid)
+                and (same_scores or (len(parts) == 3 and parts[2] != "result.json"))
             ) or entry in (
                 business_name,
                 f"formal/{block}-command.json",

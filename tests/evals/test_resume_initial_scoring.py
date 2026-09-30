@@ -297,3 +297,37 @@ def test_auth_security_lock_exception_is_exact_and_generation_stays_protected(mo
 
     monkeypatch.setattr(reuse, "git", altered)
     assert reuse.generation_fingerprint() != before
+
+
+def test_recovery_can_continue_terminal_unresolved_without_claiming_quality_pass():
+    from tests.evals.resume_initial_contracts import recovery_readiness
+
+    rows = [{"sample": {"sample_id": "a"}, "score_status": "UNRESOLVED"}]
+    value = recovery_readiness(rows, ["a"])
+    assert value["status"] == "PASS" and value["quality_status"] == "PARTIAL"
+    assert value["scoring_unresolved"] == 1
+    with pytest.raises(AcceptanceError, match="recovery_result_missing"):
+        recovery_readiness(rows, ["a", "b"])
+    with pytest.raises(AcceptanceError, match="recovery_result_missing"):
+        recovery_readiness(rows * 2, ["a"])
+
+
+def test_completed_score_reuse_requires_exact_protocol_and_transport():
+    from tests.evals.resume_initial_reuse import compatible_scores
+
+    value = {
+        "scoring_version": "a-score-v5",
+        "scoring_prompt": {"unit": "exact"},
+        "scoring_transport": {"deadline_seconds": 300, "max_attempts": 1},
+    }
+    assert compatible_scores(value, dict(value))
+    assert not compatible_scores({}, {})
+    for key in value:
+        assert not compatible_scores(value, {**value, key: "changed"})
+
+
+def test_formal_reuse_rejects_partial_lineage_cycles(tmp_path):
+    from tests.evals.resume_initial_reuse import verify_formal_origin
+
+    with pytest.raises(AcceptanceError, match="reuse_lineage_cycle"):
+        verify_formal_origin(tmp_path, "a" * 40, {}, ("a" * 40,))

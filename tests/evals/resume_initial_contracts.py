@@ -155,3 +155,20 @@ def summarize(planned, results, annotations):
             if not any(r["applicable"] and r["support"] == "full" for r in v["requirements"])
         ],
     }
+
+
+def recovery_readiness(rows, expected_ids):
+    ids = [r["sample"]["sample_id"] for r in rows]
+    require(len(ids) == len(set(ids)) and set(ids) == set(expected_ids), "recovery_result_missing")
+    require(
+        all(r["score_status"] in ("ASSESSED", "UNRESOLVED", "NOT_APPLICABLE") for r in rows),
+        "recovery_result_not_terminal",
+    )
+    unresolved = sum(r["score_status"] == "UNRESOLVED" for r in rows)
+    return {
+        "status": "PASS",
+        "recorded": len(rows),
+        "scoring_unresolved": unresolved,
+        "quality_status": "PARTIAL" if unresolved else "PASS",
+        "continuation_policy": "terminal_scoring_failures_retained_20260930",
+    }

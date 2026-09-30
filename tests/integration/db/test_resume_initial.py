@@ -381,10 +381,17 @@ async def test_a_snapshot_three_arms_recovery_authorization(
             "score_origin",
             lambda *args: {"phase": formal, "version": SCORE_VERSION},
         )
+        score_manifest = {
+            "planned": block,
+            "scoring_version": SCORE_VERSION,
+            "scoring_prompt": {"claims": "synthetic"},
+            "scoring_transport": {"deadline_seconds": 300, "max_attempts": 1},
+        }
+        publish(tmp_path / "manifest.json", score_manifest)
         formal_target = tmp_path / "formal-target"
         formal_target.mkdir(mode=0o700)
         score_source = await resume_initial_reuse.reuse_formal(
-            rig, tmp_path, formal_target, "a" * 40, {"planned": block}, usage_for
+            rig, tmp_path, formal_target, "a" * 40, score_manifest, usage_for
         )
         await score_block(rig, formal_target / "formal", block, case, annotation, score_source)
         assert await recorder.measurement() == after_score_reuse
@@ -396,7 +403,26 @@ async def test_a_snapshot_three_arms_recovery_authorization(
             for s in block
         )
         await resume_initial_reuse.reuse_formal(
-            rig, tmp_path, formal_target, "a" * 40, {"planned": block}, usage_for
+            rig, tmp_path, formal_target, "a" * 40, score_manifest, usage_for
+        )
+        assert await recorder.measurement() == after_score_reuse
+        # A terminal unresolved score is retained exactly, never paid for again.
+        unresolved_path = formal / block[0]["sample_id"] / "result.json"
+        unresolved = read_private_json(unresolved_path)
+        unresolved["score_status"] = "UNRESOLVED"
+        unresolved_path.write_text(json.dumps(unresolved))
+        inventory["formal/" + str(unresolved_path.relative_to(formal))] = hashlib.sha256(
+            unresolved_path.read_bytes()
+        ).hexdigest()
+        terminal_target = tmp_path / "terminal-target"
+        terminal_target.mkdir(mode=0o700)
+        await resume_initial_reuse.reuse_formal(
+            rig, tmp_path, terminal_target, "a" * 40, score_manifest, usage_for
+        )
+        await score_block(rig, terminal_target / "formal", block, case, annotation, score_source)
+        assert (
+            read_private_json(terminal_target / "formal" / block[0]["sample_id"] / "result.json")
+            == unresolved
         )
         assert await recorder.measurement() == after_score_reuse
         other = await provision.provision_personal_workspace(f"other-{uuid4()}")
