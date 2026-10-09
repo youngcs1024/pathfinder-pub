@@ -26,8 +26,22 @@ PYJWT_LOCK_COMPATIBILITY = {
 }
 
 
+# 2026-10-09 explicitly approved security maintenance. Reviewed wheel changes do
+# not affect A's local graph, HTTPX provider transport, prompts or renderer.
+# Whole-lock identity limits this exception to these exact four package updates.
+SECURITY_LOCK_COMPATIBILITY = {
+    "3f95d8444efbb99bca12e6c8b3ea3958137ee462bd8a5ea02195503d0536e532": {
+        "langgraph-sdk": "0.4.4",
+        "mako": "1.4.2",
+        "pyjwt": "2.15.0",
+        "urllib3": "2.8.0",
+    },
+}
+
+
 def compatible_lock_digest(digest):
-    return next(iter(PYJWT_LOCK_COMPATIBILITY)) if digest in PYJWT_LOCK_COMPATIBILITY else digest
+    approved = digest in PYJWT_LOCK_COMPATIBILITY or digest in SECURITY_LOCK_COMPATIBILITY
+    return next(iter(PYJWT_LOCK_COMPATIBILITY)) if approved else digest
 
 
 def generation_lock_evidence(ref="HEAD"):
@@ -36,6 +50,11 @@ def generation_lock_evidence(ref="HEAD"):
         "sha256": digest,
         "compatible_sha256": compatible_lock_digest(digest),
         "auth_only_pyjwt_version": PYJWT_LOCK_COMPATIBILITY.get(digest),
+        **(
+            {"security_upgrade_versions": SECURITY_LOCK_COMPATIBILITY[digest]}
+            if digest in SECURITY_LOCK_COMPATIBILITY
+            else {}
+        ),
     }
 
 

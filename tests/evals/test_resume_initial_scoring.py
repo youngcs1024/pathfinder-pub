@@ -331,3 +331,28 @@ def test_formal_reuse_rejects_partial_lineage_cycles(tmp_path):
 
     with pytest.raises(AcceptanceError, match="reuse_lineage_cycle"):
         verify_formal_origin(tmp_path, "a" * 40, {}, ("a" * 40,))
+
+
+def test_reviewed_security_lock_preserves_provenance_without_general_bypass(monkeypatch):
+    import hashlib
+    from pathlib import Path
+
+    from tests.evals import resume_initial_reuse as reuse
+
+    raw = Path("uv.lock").read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    versions = reuse.SECURITY_LOCK_COMPATIBILITY[digest]
+    assert versions == {
+        "langgraph-sdk": "0.4.4",
+        "mako": "1.4.2",
+        "pyjwt": "2.15.0",
+        "urllib3": "2.8.0",
+    }
+    assert reuse.compatible_lock_digest(digest) == next(iter(reuse.PYJWT_LOCK_COMPATIBILITY))
+    monkeypatch.setattr(reuse, "git", lambda *args: raw)
+    evidence = reuse.generation_lock_evidence()
+    assert evidence["sha256"] == digest
+    assert evidence["security_upgrade_versions"] == versions
+    assert evidence["auth_only_pyjwt_version"] is None
+    changed = hashlib.sha256(raw + b"\n# Unreviewed change\n").hexdigest()
+    assert reuse.compatible_lock_digest(changed) == changed

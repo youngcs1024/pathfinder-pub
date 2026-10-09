@@ -104,7 +104,7 @@ def test_security_fix_is_exact_and_shared():
     assert "AS python-base" in body
     assert "FROM python-base AS builder" in body
     assert "FROM python-base AS runtime" in body
-    assert "--only-upgrade libpcre2-8-0=10.42-1+deb12u1" in body
+    assert "--only-upgrade libpcre2-8-0=10.42-1+deb12u2" in body
     assert "dpkg-query -W" in body
     assert "type=tmpfs,target=/var/lib/apt/lists" in body
     assert "apt-get upgrade" not in body

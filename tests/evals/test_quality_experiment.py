@@ -301,4 +301,4 @@ def test_security_upgrade_keeps_historical_registration_identity():
     plan = load_experiment_plan(PLAN)
     assert plan.identity.lock_digest == LOCK_DIGEST
     assert quality_digest((ROOT / "uv.lock").read_bytes()) in OFFLINE_COMPATIBLE_LOCK_DIGESTS
-    assert len(OFFLINE_COMPATIBLE_LOCK_DIGESTS) == 2
+    assert len(OFFLINE_COMPATIBLE_LOCK_DIGESTS) == 3

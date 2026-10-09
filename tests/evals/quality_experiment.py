@@ -28,10 +28,14 @@ SOURCE_SHA = "6ee09703fd19dd3f68813bb40f2b314fba512995"
 ACCEPTED_DIGEST = "sha256:d3c29c48b9f168ce47d9a9f413efebbb1996654811ba403c62dc77cc5f72bb19"
 LOCK_DIGEST = "sha256:46792d0e0554a696cbb39461d85b2cbd9cccbc4525aae1ab0cf07e63c79fca4e"
 # The frozen historical identity stays unchanged. Only this explicitly reviewed
-# auth-only PyJWT security update is accepted for offline registration checks;
+# PyJWT and 2026-10-09 security updates are accepted for offline registration checks;
 # actual execution still binds source trees and dependencies separately.
 OFFLINE_COMPATIBLE_LOCK_DIGESTS = frozenset(
-    (LOCK_DIGEST, "sha256:cdae3d0317206e403e5d4cd671247f949deb96f42f4a9463ca0530eec75d3391")
+    (
+        LOCK_DIGEST,
+        "sha256:cdae3d0317206e403e5d4cd671247f949deb96f42f4a9463ca0530eec75d3391",
+        "sha256:3f95d8444efbb99bca12e6c8b3ea3958137ee462bd8a5ea02195503d0536e532",
+    )
 )
 CAPACITY_EVIDENCE = {
     "capacity_e56_v1": "sha256:8fbfe72fd6a1a2f116b12a8fe17c6187ca90de10b819d52cf4a8811d681f384a",
