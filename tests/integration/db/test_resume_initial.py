@@ -35,9 +35,7 @@ from tests.unit.agents.test_resume_generation import _inputs, _requirements, _se
 pytestmark = pytest.mark.integration
 
 
-async def test_a_snapshot_three_arms_recovery_authorization(
-    migrated_database_url, tmp_path, monkeypatch
-):
+def snapshot_material(tmp_path):
     tmp_path.chmod(0o700)
     directory = tmp_path / "pilot"
     directory.mkdir(mode=0o700)
@@ -88,6 +86,15 @@ async def test_a_snapshot_three_arms_recovery_authorization(
     )
     (material / "resume.tex").write_bytes(raw)
     (material / "fact.txt").write_text(claim)
+    return directory, raw, identity, generation, item_id, fact_id, pid, claim, fact, profile
+
+
+async def test_a_snapshot_three_arms_recovery_authorization(
+    migrated_database_url, tmp_path, monkeypatch
+):
+    directory, raw, identity, generation, item_id, fact_id, pid, claim, fact, profile = (
+        snapshot_material(tmp_path)
+    )
     engine = create_database_engine(SecretStr(migrated_database_url))
     try:
         sessions = create_session_factory(engine)

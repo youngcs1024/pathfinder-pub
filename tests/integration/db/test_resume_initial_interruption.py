@@ -2,28 +2,78 @@
 
 import hashlib
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import update
 
+from app.db.jobs import SqlAlchemyWorkerJobStore
 from app.db.models import RunJob
+from app.db.provisioning import SqlAlchemyProvisioningStore
+from app.db.resume_generation import SqlAlchemyResumeGenerationStore
+from app.db.session import create_database_engine, create_session_factory
+from app.db.tenancy import SqlAlchemyTenantResolver
+from app.domain.provisioning import ProvisioningService
+from app.domain.resume_generation import GenerationBudgetV1, JobInputV1, SessionCreateV1
+from app.domain.tenancy import TenantService
 from tests.evals.product_acceptance_contracts import AcceptanceError, read_private_json
 from tests.evals.quality_dataset import quality_identity_digest
 from tests.evals.resume_experiment_contracts import ExperimentBudget
 from tests.evals.resume_experiments import preserve
 from tests.evals.resume_initial import usage_for
+from tests.evals.resume_initial_fixture import seed
 from tests.evals.resume_initial_interruption import AUTHORIZATION, reconcile
 from tests.evals.resume_initial_reconciliation import ARecorder
 from tests.evals.resume_live_budget import ledger_identity
 from tests.integration.db.test_resume_experiments import attempt
-from tests.integration.db.test_resume_fault_matrix import claim, rig  # noqa: F401
+from tests.integration.db.test_resume_fault_matrix import claim
+from tests.integration.db.test_resume_initial import snapshot_material
 
 pytestmark = pytest.mark.integration
 
 
-async def test_exact_interruption_settlement_and_replay_guard(rig, tmp_path):  # noqa: F811
+@pytest.fixture
+async def rig(migrated_database_url, tmp_path):
+    directory, _, _, generation, _, _, pid, _, _, _ = snapshot_material(tmp_path)
+    engine = create_database_engine(SecretStr(migrated_database_url))
+    try:
+        sessions = create_session_factory(engine)
+        owner = await ProvisioningService(
+            SqlAlchemyProvisioningStore(sessions)
+        ).provision_personal_workspace(f"a-interruption-{uuid4()}")
+        tenant = await TenantService(SqlAlchemyTenantResolver(sessions)).resolve_tenant(
+            workspace_id=owner.workspace_id, actor_user_id=owner.user_id
+        )
+        fixture = await seed(sessions, tenant, tmp_path, directory)
+        store = SqlAlchemyResumeGenerationStore(sessions)
+        created = await store.create(
+            tenant,
+            SessionCreateV1(
+                profile_version_id=UUID(fixture["profile_version_id"]),
+                preference_version=1,
+                project_ids=(pid,),
+                job=JobInputV1(source="paste", text=generation.job_text),
+                budget=GenerationBudgetV1(
+                    max_model_calls=6, max_tool_calls=0, max_cost_cny=Decimal("1")
+                ),
+            ),
+            uuid4(),
+        )
+        yield SimpleNamespace(
+            sessions=sessions,
+            tenant=tenant,
+            store=store,
+            session_id=created.receipt.resource_id,
+            jobs=SqlAlchemyWorkerJobStore(sessions, lambda attempt: timedelta(0)),
+        )
+    finally:
+        await engine.dispose()
+
+
+async def test_exact_interruption_settlement_and_replay_guard(rig, tmp_path):
     tmp_path.chmod(0o700)
     root = tmp_path / "experiment"
     root.mkdir(mode=0o700)
@@ -31,6 +81,7 @@ async def test_exact_interruption_settlement_and_replay_guard(rig, tmp_path):  #
     recorder = ARecorder(
         rig.sessions, rig.tenant, root=root, inputs=inputs, database_identity="synthetic"
     )
+    assert await recorder.rows() == []
     await recorder.initialize()
     recorder.enable_policy()
     job = await claim(rig)
@@ -40,8 +91,8 @@ async def test_exact_interruption_settlement_and_replay_guard(rig, tmp_path):  #
     origin = root / "a" / ("a" * 40)
     directory = root / "a" / ("b" * 40)
     path = origin / "formal/test-r1-pathfinder"
-    path.mkdir(mode=0o700, parents=True)
-    directory.mkdir(mode=0o700)
+    for folder in (origin.parent, origin, path.parent, path, directory):
+        folder.mkdir(mode=0o700)
     before = await recorder.check_admission()
     preserve(path / "call-00-started.json", {"identity": "synthetic", "before": before})
     sample = {
@@ -102,3 +153,24 @@ async def test_exact_interruption_settlement_and_replay_guard(rig, tmp_path):  #
     await recorder.prepare(attempt(rig.tenant))
     with pytest.raises(AcceptanceError, match="unfinished_accounting"):
         await recorder.check_admission()
+
+
+async def test_unbound_nonempty_ledger_remains_rejected(rig, tmp_path):
+    from app.db.llm_invocations import SqlAlchemyInvocationRecorder
+
+    root = tmp_path / "unbound"
+    root.mkdir(mode=0o700)
+    await SqlAlchemyInvocationRecorder(rig.sessions).prepare(attempt(rig.tenant))
+    recorder = ARecorder(
+        rig.sessions,
+        rig.tenant,
+        root=root,
+        inputs=SimpleNamespace(
+            allocation_id=uuid4(), digest="synthetic", budget=ExperimentBudget()
+        ),
+        database_identity="synthetic",
+    )
+    with pytest.raises(AcceptanceError, match="unbound_ledger_not_empty"):
+        await recorder.initialize()
+    assert len(await recorder.rows()) == 1
+    assert not (root / "ledger-binding.json").exists()
