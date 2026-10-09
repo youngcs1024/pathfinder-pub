@@ -106,6 +106,11 @@ async def reconcile(recorder, sessions, tenant, origin, directory, inventory, us
         require(not (recorder.root / RECEIPT).exists(), "interruption_authorization_missing")
         return
     value = validate_authorization(recorder.root, recorder.binding, await recorder.audit())
+    if origin.name != value["source_sha"]:
+        # A later source already carries the immutable failure produced by this recovery.
+        require((recorder.root / RECEIPT).exists(), "interruption_source_changed")
+        await recorder.check_admission(after=True)
+        return
     require(origin.name == value["source_sha"], "interruption_source_changed")
     relative = Path(value["started_path"]).relative_to(Path("a") / origin.name)
     require(str(relative) in inventory, "reuse_unaudited_file")

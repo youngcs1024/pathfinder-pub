@@ -174,3 +174,54 @@ async def test_unbound_nonempty_ledger_remains_rejected(rig, tmp_path):
         await recorder.initialize()
     assert len(await recorder.rows()) == 1
     assert not (root / "ledger-binding.json").exists()
+
+
+async def test_authorized_terminal_estimates_resume_without_rewriting_ledger(rig, tmp_path):
+    from app.llm.invocations import LLMInvocationOutcome
+    from tests.evals.resume_initial_estimates import POLICY_FILE
+
+    root = tmp_path / "estimated-experiment"
+    root.mkdir(mode=0o700)
+    inputs = SimpleNamespace(
+        allocation_id=uuid4(), digest="estimate-test", budget=ExperimentBudget(attempt_cap=2)
+    )
+    kwargs = dict(root=root, inputs=inputs, database_identity="synthetic")
+    recorder = ARecorder(rig.sessions, rig.tenant, **kwargs)
+    await recorder.initialize()
+    recorder.enable_policy()
+    first = attempt(rig.tenant).model_copy(update={"graph_node": "selection"})
+    await recorder.prepare(first)
+    outcome = LLMInvocationOutcome(
+        status="failed", latency_ms=10, error_category="provider_unavailable"
+    )
+    with pytest.raises(AcceptanceError, match="unknown_usage_or_cost"):
+        await recorder.finalize(first, outcome)
+    preserve(
+        root / POLICY_FILE,
+        {
+            "version": "a_terminal_unknown_estimate_v1",
+            "binding": recorder.binding,
+            "authorization": "Synthetic explicit authorization",
+            "estimated_cost_cny": "1",
+            "historical_invocation_ids": [str(first.invocation_id)],
+            "eligible_existing_ids": [str(first.invocation_id)],
+        },
+    )
+    resumed = ARecorder(rig.sessions, rig.tenant, **kwargs)
+    await resumed.initialize()
+    measured = await resumed.check_admission()
+    assert measured["attempts"] == 1 and measured["estimated_unknown_cost_cny"] == "1"
+    second = attempt(rig.tenant).model_copy(update={"graph_node": "selection"})
+    await resumed.prepare(second)
+    await resumed.finalize(second, outcome)
+    measured = await resumed.check_admission(after=True)
+    assert measured["unknown_cost"] == measured["unknown_usage"] == 2
+    assert measured["known_cost_cny"] == "0"
+    assert measured["estimated_unknown_cost_cny"] == "2"
+    assert await resumed.check_admission(after=True) == measured
+    with pytest.raises(AcceptanceError, match="budget_exhausted"):
+        await resumed.prepare(attempt(rig.tenant))
+    assert len(await resumed.rows()) == 2
+    assert all(
+        row.estimated_cost is None and row.token_usage is None for row in await resumed.rows()
+    )

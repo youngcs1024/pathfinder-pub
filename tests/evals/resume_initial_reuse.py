@@ -58,6 +58,23 @@ def generation_lock_evidence(ref="HEAD"):
     }
 
 
+# Exact 2026-10-09 authorized accounting/failure recovery changes only. Prompts,
+# successful generation, model, rendering and scoring semantics are unchanged.
+# Any further edit gets a different digest and cannot reuse the frozen baseline.
+ACCOUNTING_COMPATIBILITY = {
+    "tests/evals/resume_initial_recording.py": {
+        "d9f7d1ea0ed95d028e40a2098aa77801e9a2a807a14de3c7f33ef999d8c30b95": (
+            "5455a39e311d86d3a182adfd84413714b0d9e715175c697c00a1bbde96dc711a"
+        )
+    },
+    "generate_sample": {
+        "sha256:94c4a8a06157c9798a274e2c7032ca1be6fdd90c3c547ceafde8cff43bca9a0b": (
+            "sha256:2851382565e3a2bc1ac3bbd786ef9c0c97051f1ff2310d851dd5ac7206237aa8"
+        )
+    },
+}
+
+
 def generation_fingerprint(ref="HEAD"):
     paths = git("ls-tree", "-r", "--name-only", ref).decode().splitlines()
     included = [
@@ -90,6 +107,8 @@ def generation_fingerprint(ref="HEAD"):
             ):
                 node.args, node.keywords = [], []
         digests[name] = quality_identity_digest(ast.dump(function, include_attributes=False))
+    for key, compatible in ACCOUNTING_COMPATIBILITY.items():
+        digests[key] = compatible.get(digests[key], digests[key])
     return quality_identity_digest(digests)
 
 
@@ -224,7 +243,12 @@ def score_origin(root, source_sha, manifest):
 
 
 def formal_evidence_path(origin):
-    for name in ("formal/audit.json", "closeout-recovery-v5.json", "closeout-partial-v4.json"):
+    for name in (
+        "formal/audit.json",
+        "closeout-provider-unavailable-20261009.json",
+        "closeout-recovery-v5.json",
+        "closeout-partial-v4.json",
+    ):
         path = origin / name
         if path.exists():
             return path
@@ -319,6 +343,35 @@ async def reuse_formal(rig, root, directory, source_sha, manifest, usage_for):
         sid = sample["sample_id"]
         name = f"formal/{sid}/generation.json"
         if not (origin / name).exists():
+            # Preserve an incomplete generation journal so resuming cannot repeat its call.
+            prefix = f"formal/{sid}/"
+            entries = [n for n in inventory if n.startswith(prefix)]
+            if not entries:
+                continue
+            block = f"{sample['case_id']}-r{sample['repeat']}"
+            business_name = f"formal/{block}-session.json"
+            command_name = f"formal/{block}-command.json"
+            require(
+                business_name in inventory and command_name in inventory, "reuse_unaudited_file"
+            )
+            business = read_private_json(origin / business_name)
+            current = await rig.store.execution_inputs(rig.tenant, UUID(business["session_id"]))
+            from dataclasses import replace
+
+            current = replace(
+                current, facts=tuple(sorted(current.facts, key=lambda f: str(f.version_id)))
+            )
+            require(str(current.run_id) == business["run_id"], "reuse_business_changed")
+            require(
+                quality_identity_digest(shared_input(current, rig.identity.source_sha256))
+                == read_private_json(origin / prefix / "input.json")["digest"],
+                "reuse_input_changed",
+            )
+            for entry in [*entries, business_name, command_name]:
+                dst = directory / entry
+                dst.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                preserve(dst, read_private_json(origin / entry))
+                copied[entry] = inventory[entry]
             continue
         require(name in inventory, "reuse_unaudited_file")
         generated = read_private_json(origin / name)

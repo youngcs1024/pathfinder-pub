@@ -96,6 +96,9 @@ class ARecorder(ExperimentRecorder):
         usage = await super().measurement()
         if not self.policy_enabled():
             return usage
+        from tests.evals.resume_initial_estimates import policy
+
+        estimate_policy = policy(self.root, self.binding)
         rows = await self.rows()
         receipts = self.root / "a-score-timeouts"
         eligible = []
@@ -126,6 +129,8 @@ class ARecorder(ExperimentRecorder):
                 quality_identity_digest(read_private_json(started_path)) == saved["started_digest"],
                 "a_timeout_start_changed",
             )
+            if estimate_policy and not (receipts / f"{row.id}.json").exists():
+                continue
             eligible.append((row, saved))
         require(len(eligible) <= POLICY["maximum_new_timeouts"], "a_timeout_limit")
         expected = {}
@@ -151,9 +156,12 @@ class ARecorder(ExperimentRecorder):
         usage["reserved_cost_cny"] = str(Decimal(usage["reserved_cost_cny"]) + extra)
         usage["budget_occupied_cny"] = str(Decimal(usage["budget_occupied_cny"]) + extra)
         usage["remaining_admission_cny"] = str(Decimal(usage["remaining_admission_cny"]) - extra)
+        from tests.evals.resume_initial_estimates import apply_estimates
         from tests.evals.resume_initial_interruption import reservation
 
-        return reservation(self.root, self.binding, rows, usage)
+        return apply_estimates(
+            self.root, self.binding, rows, reservation(self.root, self.binding, rows, usage)
+        )
 
     async def failure_measurement(self):
         # Diagnostic only: never used by admission. Keep the hard two-timeout rejection.
@@ -198,6 +206,12 @@ class ARecorder(ExperimentRecorder):
         extra = CHAT_HEADROOM_CNY * count
         checked["reserved_cost_cny"] = str(Decimal(usage["reserved_cost_cny"]) - extra)
         checked["known_cost_cny"] = str(Decimal(usage["known_cost_cny"]) + extra)
+        checked["unknown_cost"] -= usage.get("estimated_unknown_cost_count", 0)
+        checked["unknown_usage"] -= usage.get("estimated_unknown_usage_count", 0)
+        checked["known_cost_cny"] = str(
+            Decimal(checked["known_cost_cny"])
+            + Decimal(usage.get("estimated_unknown_cost_cny", "0"))
+        )
         admit(checked, self.budget, after=after, kind=kind)
         return usage
 
@@ -217,16 +231,26 @@ async def reconcile_started(recorder, path, messages, metadata, expected_id=None
     ]
     require(len(candidates) == 1, "score_reconciliation_ambiguous")
     row = candidates[0]
-    require(
-        row.status == "failed"
-        and row.error_category == "provider_timeout"
-        and row.token_usage is None
-        and row.estimated_cost is None,
-        "score_reconciliation_not_timeout",
-    )
+    from tests.evals.resume_initial_estimates import estimated_failure
+
     recorder.link_call(row, path, identity)
     usage = await recorder.check_admission(after=True)
-    require(str(row.id) in usage.get("a_score_timeouts", {}), "score_timeout_not_reserved")
+    require(
+        row.status == "failed"
+        and (
+            (
+                row.error_category == "provider_timeout"
+                and row.token_usage is None
+                and row.estimated_cost is None
+            )
+            or estimated_failure(usage, row.id)
+        ),
+        "score_reconciliation_not_timeout",
+    )
+    require(
+        str(row.id) in usage.get("a_score_timeouts", {}) or estimated_failure(usage, row.id),
+        "score_timeout_not_reserved",
+    )
     return str(row.id)
 
 
@@ -256,7 +280,7 @@ async def scoring_call(factory, recorder, context, directory, payload, stage, pr
             saved_terminal = read_private_json(terminal) if terminal.exists() else None
             if saved_terminal is not None:
                 require(
-                    saved_terminal["status"] == "reserved_timeout"
+                    saved_terminal["status"] in ("reserved_timeout", "estimated_unknown")
                     and saved_terminal["identity"] == identity
                     and len(saved_terminal["invocation_ids"]) == 1,
                     "score_terminal_changed",
@@ -271,7 +295,7 @@ async def scoring_call(factory, recorder, context, directory, payload, stage, pr
             preserve(
                 terminal,
                 {
-                    "status": "reserved_timeout",
+                    "status": saved_terminal["status"] if saved_terminal else "reserved_timeout",
                     "identity": identity,
                     "invocation_ids": [invocation_id],
                     "stage": stage,
@@ -288,16 +312,22 @@ async def scoring_call(factory, recorder, context, directory, payload, stage, pr
         except BaseException as exc:
             rows = await recorder.audit()
             ids = sorted(str(r.id) for r in rows if str(r.id) not in before["invocation_ids"])
-            if isinstance(exc, LLMProviderError) and exc.category == "provider_timeout":
+            from tests.evals.resume_initial_estimates import estimated_failure
+
+            after = await recorder.check_admission(after=True)
+            estimated = len(ids) == 1 and estimated_failure(after, ids[0])
+            if isinstance(exc, LLMProviderError) and (
+                exc.category == "provider_timeout" or estimated
+            ):
                 after = await recorder.check_admission(after=True)
                 require(
-                    len(ids) == 1 and ids[0] in after.get("a_score_timeouts", {}),
+                    len(ids) == 1 and (ids[0] in after.get("a_score_timeouts", {}) or estimated),
                     "score_failure_requires_reconciliation",
                 )
                 preserve(
                     terminal,
                     {
-                        "status": "reserved_timeout",
+                        "status": "estimated_unknown" if estimated else "reserved_timeout",
                         "identity": identity,
                         "invocation_ids": ids,
                         "stage": stage,

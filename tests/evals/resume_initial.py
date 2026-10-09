@@ -302,7 +302,13 @@ async def generate_sample(rig, sample, inputs, path):
         except Exception as exc:
             await rig.recorder.check_admission(after=True)
             # Only a persisted completed response can become an ordinary failed sample.
-            require(bool(list(path.glob("call-*-response.json"))), "missing_model_response")
+            from tests.evals.resume_initial_recording import EstimatedGenerationFailure
+
+            require(
+                isinstance(exc, EstimatedGenerationFailure)
+                or bool(list(path.glob("call-*-response.json"))),
+                "missing_model_response",
+            )
             error = type(exc).__name__
     after = await rig.recorder.check_admission(after=True)
     ids = sorted(set(after["invocation_ids"]) - set(before["invocation_ids"]))
